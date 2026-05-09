@@ -83,3 +83,12 @@ The project is not yet scaffolded, so there are no `npm` scripts to document. On
 - `npx vitest -t "test name"` — single test by name
 
 When scaffolding, model the layout on PRZ's directory structure ([src/app](file:///Users/evan/dev/prz/src/app), [src/lib](file:///Users/evan/dev/prz/src/lib), [src-tauri](file:///Users/evan/dev/prz/src-tauri)) but plan for the additional directories implied by §14's migration table (`src/lib/github/`, `src/lib/storage/`, `src/hooks/`, `src/components/`, `src/test/`).
+
+## Development
+
+When making changes:
+- add tests to cover new functionality
+- unit tests for business logic and components
+- functional tests for end to end flows
+- all tests, existing and new, need to pass
+- make sure code is formatted and passes lint check

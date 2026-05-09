@@ -1,0 +1,134 @@
+/* Beet — design tokens + base styles
+   Light/dark via [data-theme]. Accent via [data-accent]. Density via [data-density].
+   All colors in oklch so swapping accent hue keeps chroma/lightness coherent. */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&family=Geist+Mono:wght@400;450;500;600&display=swap');
+
+:root {
+  /* Brand */
+  --beet:      oklch(0.52 0.16 355);
+  --beet-fg:   #fff;
+  --beet-soft: oklch(0.95 0.035 355);
+  --leaf:      oklch(0.58 0.13 145);
+
+  /* Light theme (warm neutrals) */
+  --bg:           oklch(0.985 0.003 60);
+  --bg-elev:      oklch(1 0 0);
+  --panel:        oklch(0.97 0.005 60);
+  --panel-2:      oklch(0.945 0.005 60);
+  --hover:        oklch(0.935 0.006 60);
+  --text:         oklch(0.22 0.008 60);
+  --text-muted:   oklch(0.5 0.006 60);
+  --text-faint:   oklch(0.66 0.006 60);
+  --border:       oklch(0.915 0.004 60);
+  --border-strong:oklch(0.85 0.004 60);
+
+  --success: oklch(0.6 0.13 145);
+  --success-soft: oklch(0.95 0.04 145);
+  --warn:    oklch(0.72 0.14 75);
+  --warn-soft: oklch(0.96 0.05 75);
+  --danger:  oklch(0.58 0.18 25);
+  --danger-soft: oklch(0.95 0.04 25);
+  --info:    oklch(0.6 0.12 240);
+  --info-soft: oklch(0.95 0.04 240);
+
+  --radius-sm: 5px;
+  --radius:    7px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  --font-ui:   'Geist', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, 'SF Mono', monospace;
+
+  --shadow-sm: 0 1px 2px rgba(20,15,10,.06);
+  --shadow:    0 2px 8px rgba(20,15,10,.08), 0 1px 2px rgba(20,15,10,.04);
+  --shadow-lg: 0 18px 48px rgba(20,15,10,.18), 0 2px 8px rgba(20,15,10,.06);
+
+  --row-pad-y: 10px;
+}
+
+[data-theme="dark"] {
+  --bg:           oklch(0.165 0.005 60);
+  --bg-elev:      oklch(0.20 0.005 60);
+  --panel:        oklch(0.225 0.005 60);
+  --panel-2:      oklch(0.265 0.005 60);
+  --hover:        oklch(0.28 0.005 60);
+  --text:         oklch(0.95 0.005 60);
+  --text-muted:   oklch(0.66 0.006 60);
+  --text-faint:   oklch(0.5 0.006 60);
+  --border:       oklch(0.30 0.005 60);
+  --border-strong:oklch(0.38 0.005 60);
+
+  --beet:      oklch(0.72 0.16 355);
+  --beet-soft: oklch(0.32 0.08 355);
+  --leaf:      oklch(0.7 0.13 145);
+
+  --success: oklch(0.7 0.15 145);
+  --success-soft: oklch(0.32 0.07 145);
+  --warn:    oklch(0.78 0.15 75);
+  --warn-soft: oklch(0.34 0.08 75);
+  --danger:  oklch(0.72 0.17 25);
+  --danger-soft: oklch(0.34 0.08 25);
+  --info:    oklch(0.72 0.14 240);
+  --info-soft: oklch(0.32 0.07 240);
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
+  --shadow:    0 2px 8px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.25);
+  --shadow-lg: 0 18px 48px rgba(0,0,0,.55), 0 2px 8px rgba(0,0,0,.35);
+}
+
+/* Accent — keeps beet as the "interesting" default but lets users see the
+   design with a different hue. Chroma/L locked, hue varies. */
+[data-accent="beet"]   { --accent: var(--beet);                 --accent-soft: var(--beet-soft); --accent-fg: var(--beet-fg); }
+[data-accent="ocean"]  { --accent: oklch(0.55 0.14 240);        --accent-soft: oklch(0.95 0.04 240); --accent-fg: #fff; }
+[data-accent="forest"] { --accent: oklch(0.5 0.13 145);         --accent-soft: oklch(0.95 0.04 145); --accent-fg: #fff; }
+[data-accent="ink"]    { --accent: oklch(0.32 0.025 270);       --accent-soft: oklch(0.94 0.01 270); --accent-fg: #fff; }
+[data-theme="dark"][data-accent="ocean"]  { --accent: oklch(0.72 0.14 240); --accent-soft: oklch(0.32 0.08 240); }
+[data-theme="dark"][data-accent="forest"] { --accent: oklch(0.7 0.13 145);  --accent-soft: oklch(0.32 0.07 145); }
+[data-theme="dark"][data-accent="ink"]    { --accent: oklch(0.78 0.012 270); --accent-soft: oklch(0.32 0.005 270); --accent-fg: #1a1714; }
+
+/* Density */
+[data-density="comfy"]   { --row-pad-y: 12px; }
+[data-density="compact"] { --row-pad-y: 7px;  }
+
+/* Reset / base inside artboards (scope so we don't fight design-canvas chrome) */
+.beet, .beet * { box-sizing: border-box; }
+.beet {
+  font-family: var(--font-ui);
+  font-feature-settings: "ss01", "cv11";
+  color: var(--text);
+  background: var(--bg);
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
+}
+.beet button { font: inherit; color: inherit; background: transparent; border: 0; padding: 0; cursor: pointer; }
+.beet input, .beet select, .beet textarea { font: inherit; color: inherit; }
+.beet :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.mono { font-family: var(--font-mono); font-feature-settings: "zero", "ss03"; letter-spacing: 0; }
+
+/* Subtle scrollbars — match the comfortable density theme */
+.beet ::-webkit-scrollbar { width: 8px; height: 8px; }
+.beet ::-webkit-scrollbar-track { background: transparent; }
+.beet ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
+.beet ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); border: 2px solid transparent; background-clip: content-box; }
+
+/* Polling spinner — single ring */
+@keyframes beet-spin { to { transform: rotate(360deg); } }
+@keyframes beet-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes beet-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes beet-toast-in {
+  from { transform: translateY(-8px) scale(0.96); opacity: 0; }
+  to   { transform: translateY(0) scale(1);       opacity: 1; }
+}
+@keyframes beet-toast-out {
+  to { transform: translateY(-8px) scale(0.96); opacity: 0; }
+}
+@keyframes beet-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
