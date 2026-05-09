@@ -251,7 +251,9 @@ V1 is polling-only. Each query has its own interval and caches its
 
 **Repo scan cap.** Action Jackson's 200-repo cap carries forward. Beet narrows
 this further by default to **repos the user has pushed to in the last 30 days**
-plus any **explicitly pinned** repos (see §8).
+plus any **explicitly pinned** repos (see §8). The 30-day window is
+**user-configurable in Settings** (§11): 7 / 30 / 90 days. Pinned repos are
+always scanned regardless of this setting.
 
 **Adaptive polling.**
 - When the main window is hidden, intervals × 2.
@@ -461,9 +463,13 @@ checks, associated runs, quick actions). Reuses Action Jackson's `RunCard`,
 - Task URL regex (carries forward from PRZ).
 - Per-notification toggles (the 5 from §10).
 - Polling interval (default 60 s; can be set 15 s – 600 s).
+- Repo scan window (7 / 30 / 90 days; default 30 — see §7).
+- Auto-launch on login toggle (`tauri-plugin-autostart`).
 - Mute & Pin management.
 - Show approved PRs (showAll toggle).
 - Theme (auto/light/dark).
+- Density (compact / comfy).
+- Show priority score on rows (toggle; on by default).
 - Rate limit display (read-only).
 
 ---

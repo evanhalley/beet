@@ -6,7 +6,7 @@
    Width 360, height 480 — per spec. Rounded corners + macOS vibrancy feel.
 */
 
-function TrayPopover({ variant = "v1", onOpenWindow, onNotify, paused, onTogglePause, refreshing, onRefresh, accent }) {
+function TrayPopover({ variant = "v1", onOpenWindow, onNotify, paused, onTogglePause, refreshing, onRefresh, accent, updateReady }) {
   const [collapsed, setCollapsed] = React.useState({ recent: true });
   const [hovered, setHovered] = React.useState(null);
   const t = variant;
@@ -53,6 +53,23 @@ function TrayPopover({ variant = "v1", onOpenWindow, onNotify, paused, onToggleP
 
       {/* Scroll body */}
       <div style={{ flex: 1, overflowY: "auto" }}>
+        {updateReady && (
+          <div style={{
+            display:"flex", alignItems:"center", gap: 8,
+            padding: "8px 12px",
+            background: "linear-gradient(180deg, var(--accent-soft), transparent)",
+            borderBottom: "1px solid var(--border)",
+            fontSize: 12,
+          }}>
+            <span style={{ display:"inline-flex", color:"var(--accent)" }}>{I.refresh()}</span>
+            <span style={{ color: "var(--text)", fontWeight: 500 }}>Update ready</span>
+            <span style={{ flex: 1 }}/>
+            <button style={{
+              padding: "3px 8px", borderRadius: 6, fontWeight: 500, fontSize: 11.5,
+              background: "var(--accent)", color: "var(--accent-fg)",
+            }}>Restart to update</button>
+          </div>
+        )}
         <Section
           variant={t} icon="🔴" title="Needs Action" count={MOCK.needs.length}
           collapsed={collapsed.needs} onToggle={() => setCollapsed(c => ({...c, needs: !c.needs}))}
@@ -189,9 +206,11 @@ function NeedsRow({ item, variant, hovered, onHover, onLeave }) {
       <UnreadDot unread={item.unread}/>
       <div style={{ minWidth: 0 }}>
         <div style={{ display:"flex", alignItems:"center", gap: 6, marginBottom: 2 }}>
+          {isPinned(item.repo) && <PinGlyph/>}
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>{item.repo}</span>
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>#{item.num}</span>
           <ReasonBadge reason={item.reason}/>
+          {item.taskUrls && <TaskChips ids={item.taskUrls}/>}
         </div>
         <div style={{
           fontWeight: 500, color: "var(--text)",
@@ -219,10 +238,12 @@ function ReviewRow({ item, variant, hovered, onHover, onLeave }) {
       <Avatar login={item.author} size={20}/>
       <div style={{ minWidth: 0 }}>
         <div style={{ display:"flex", alignItems:"center", gap: 6, marginBottom: 2 }}>
+          {isPinned(item.repo) && <PinGlyph/>}
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>{item.repo}</span>
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>#{item.num}</span>
           {item.team && <Pill tone="accent" soft>team</Pill>}
           {item.draft && <Pill tone="neutral" soft>draft</Pill>}
+          {item.taskUrls && <TaskChips ids={item.taskUrls} max={2}/>}
         </div>
         <div style={{
           fontWeight: item.unread ? 600 : 500,
@@ -252,9 +273,11 @@ function InflightRow({ item, variant, hovered, onHover, onLeave }) {
       <UnreadDot unread={false}/>
       <div style={{ minWidth: 0 }}>
         <div style={{ display:"flex", alignItems:"center", gap: 6, marginBottom: 2 }}>
+          {isPinned(item.repo) && <PinGlyph/>}
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>{item.repo}</span>
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>#{item.num}</span>
           <Lifecycle state={item.state} mqPos={item.mqPos}/>
+          {item.taskUrls && <TaskChips ids={item.taskUrls} max={2}/>}
         </div>
         <div style={{
           color: "var(--text)",

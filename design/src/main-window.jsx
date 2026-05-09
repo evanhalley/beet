@@ -4,18 +4,19 @@
      "v2": lanes — horizontal kanban-ish lanes per section + detail rail
 */
 
-function MainWindow({ variant = "v1", selectedId, onSelect, paused, refreshing, onRefresh, onTogglePause }) {
+function MainWindow({ variant = "v1", selectedId, onSelect, paused, refreshing, onRefresh, onTogglePause, updateReady, onSettings, settingsOpen }) {
   const lists = {
     needs: MOCK.needs, reviews: MOCK.reviews, inflight: MOCK.inflight, runs: MOCK.runs, recent: MOCK.recent,
   };
   const allItems = [...lists.needs, ...lists.reviews, ...lists.inflight];
   const sel = allItems.find(x => x.id === selectedId) || lists.needs[0];
 
-  if (variant === "v2") return <MainWindowLanes selectedId={selectedId || sel.id} onSelect={onSelect} paused={paused} refreshing={refreshing} onRefresh={onRefresh} onTogglePause={onTogglePause}/>;
+  if (variant === "v2") return <MainWindowLanes selectedId={selectedId || sel.id} onSelect={onSelect} paused={paused} refreshing={refreshing} onRefresh={onRefresh} onTogglePause={onTogglePause} updateReady={updateReady} onSettings={onSettings}/>;
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg)", borderRadius: 12, overflow: "hidden", boxShadow: "0 0 0 0.5px var(--border-strong), var(--shadow-lg)" }}>
-      <TitleBar refreshing={refreshing} paused={paused} onRefresh={onRefresh} onTogglePause={onTogglePause}/>
+      <TitleBar refreshing={refreshing} paused={paused} onRefresh={onRefresh} onTogglePause={onTogglePause} onSettings={onSettings} settingsOpen={settingsOpen}/>
+      {updateReady && <UpdateBanner/>}
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "200px 1fr 380px", minHeight: 0 }}>
         <Sidebar/>
         <div style={{ borderLeft: "1px solid var(--border)", borderRight: "1px solid var(--border)", overflow: "auto", background: "var(--bg)" }}>
@@ -31,7 +32,29 @@ function MainWindow({ variant = "v1", selectedId, onSelect, paused, refreshing, 
   );
 }
 
-function TitleBar({ refreshing, paused, onRefresh, onTogglePause }) {
+function UpdateBanner() {
+  return (
+    <div style={{
+      display:"flex", alignItems:"center", gap: 10,
+      padding: "7px 14px",
+      background: "linear-gradient(90deg, var(--accent-soft), transparent 80%)",
+      borderBottom: "1px solid var(--border)",
+      fontSize: 12,
+    }}>
+      <span style={{ display:"inline-flex", color:"var(--accent)" }}>{I.refresh()}</span>
+      <span style={{ color: "var(--text)", fontWeight: 500 }}>An update is ready to install.</span>
+      <span style={{ color: "var(--text-muted)" }}>Beet restarts in place — your tray and queries pick up where they left off.</span>
+      <span style={{ flex: 1 }}/>
+      <button style={{ padding: "3px 8px", borderRadius: 6, fontWeight: 500, fontSize: 11.5, color: "var(--text-muted)" }}>Later</button>
+      <button style={{
+        padding: "4px 10px", borderRadius: 6, fontWeight: 500, fontSize: 11.5,
+        background: "var(--accent)", color: "var(--accent-fg)",
+      }}>Restart now</button>
+    </div>
+  );
+}
+
+function TitleBar({ refreshing, paused, onRefresh, onTogglePause, onSettings, settingsOpen }) {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
@@ -61,7 +84,7 @@ function TitleBar({ refreshing, paused, onRefresh, onTogglePause }) {
       <PollingDot spinning={refreshing} paused={paused}/>
       <button style={iconBtn} onClick={onRefresh}>{I.refresh()}</button>
       <button style={iconBtn} onClick={onTogglePause}>{paused ? I.play() : <span style={{ display:"inline-flex", gap:1 }}><span style={{width:2,height:9,background:"currentColor"}}/><span style={{width:2,height:9,background:"currentColor"}}/></span>}</button>
-      <button style={iconBtn}>{I.settings()}</button>
+      <button style={{ ...iconBtn, background: settingsOpen ? "var(--accent-soft)" : "transparent", color: settingsOpen ? "var(--accent)" : "var(--text-muted)" }} onClick={onSettings}>{I.settings()}</button>
     </div>
   );
 }
@@ -194,6 +217,7 @@ function ListItem({ item, type, active, onClick }) {
       <UnreadDot unread={item.unread}/>
       <div style={{ minWidth: 0 }}>
         <div style={{ display:"flex", alignItems:"center", gap: 6, marginBottom: 3 }}>
+          {isPinned(item.repo) && <PinGlyph/>}
           <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>{item.repo}</span>
           {item.num && <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>#{item.num}</span>}
           {item.runNum && <span className="mono" style={{ color: "var(--text-faint)", fontSize: 11 }}>#{item.runNum}</span>}
@@ -202,6 +226,7 @@ function ListItem({ item, type, active, onClick }) {
           {type === "review"  && item.team && <Pill tone="accent">team</Pill>}
           {type === "review"  && item.draft && <Pill tone="neutral">draft</Pill>}
           {type === "run"     && <RunStatus status={item.status} conclusion={item.conclusion}/>}
+          {item.taskUrls && <TaskChips ids={item.taskUrls}/>}
         </div>
         <div style={{
           fontWeight: item.unread ? 600 : 500,
@@ -343,13 +368,14 @@ function Block({ title, children }) {
 }
 
 // ─────────── V2: Lanes layout ───────────
-function MainWindowLanes({ selectedId, onSelect, paused, refreshing, onRefresh, onTogglePause }) {
+function MainWindowLanes({ selectedId, onSelect, paused, refreshing, onRefresh, onTogglePause, updateReady, onSettings }) {
   const all = [...MOCK.needs, ...MOCK.reviews, ...MOCK.inflight];
   const sel = all.find(x => x.id === selectedId) || MOCK.needs[0];
 
   return (
     <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "var(--bg)", borderRadius: 12, overflow: "hidden", boxShadow: "0 0 0 0.5px var(--border-strong), var(--shadow-lg)" }}>
-      <TitleBar refreshing={refreshing} paused={paused} onRefresh={onRefresh} onTogglePause={onTogglePause}/>
+      <TitleBar refreshing={refreshing} paused={paused} onRefresh={onRefresh} onTogglePause={onTogglePause} onSettings={onSettings}/>
+      {updateReady && <UpdateBanner/>}
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 380px", minHeight: 0 }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 1, background: "var(--border)", overflow: "hidden" }}>
           <Lane title="Needs Action" icon="🔴" tone="danger">
@@ -402,6 +428,7 @@ function CardRow({ item, kind, active, onClick }) {
       display: "flex", flexDirection: "column", gap: 6,
     }}>
       <div style={{ display:"flex", alignItems:"center", gap: 6, fontSize: 11 }}>
+        {isPinned(item.repo) && <PinGlyph/>}
         <span className="mono" style={{ color: "var(--text-faint)" }}>{item.repo}</span>
         {item.num && <span className="mono" style={{ color: "var(--text-faint)" }}>#{item.num}</span>}
         <span style={{ flex: 1 }}/>

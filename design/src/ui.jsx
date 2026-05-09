@@ -173,4 +173,46 @@ function RunStatus({ status, conclusion }) {
   return <Pill tone="neutral">{conclusion || status}</Pill>;
 }
 
-Object.assign(window, { I, BeetMark, Pill, CheckDot, DiffStat, Avatar, PollingDot, ScoreBar, ReasonBadge, Lifecycle, RunStatus });
+// ─────────── task chips ───────────
+// Renders matched task-URL ids (PROJ-123 etc) as compact clickable chips.
+// Caps at `max` and shows a +N overflow chip — keeps row density honest.
+function TaskChips({ ids, max = 3 }) {
+  if (!ids || !ids.length) return null;
+  const shown = ids.slice(0, max);
+  const extra = ids.length - shown.length;
+  return (
+    <span style={{ display:"inline-flex", gap: 3, flexWrap:"nowrap" }}>
+      {shown.map((id) => (
+        <span key={id} className="mono" style={{
+          fontSize: 10, fontWeight: 500, lineHeight: 1.4,
+          padding: "0 5px", borderRadius: 3,
+          color: "var(--info)",
+          background: "var(--info-soft)",
+          border: "0.5px solid transparent",
+          letterSpacing: 0,
+        }}>{id}</span>
+      ))}
+      {extra > 0 && (
+        <span className="mono" style={{
+          fontSize: 10, fontWeight: 500, lineHeight: 1.4,
+          padding: "0 5px", borderRadius: 3,
+          color: "var(--text-faint)", background: "var(--panel-2)",
+        }}>+{extra}</span>
+      )}
+    </span>
+  );
+}
+
+// ─────────── pinned glyph ───────────
+function PinGlyph({ size = 10 }) {
+  return (
+    <span title="Pinned repo" style={{ display:"inline-flex", color:"var(--accent)", flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 16 16" fill="currentColor">
+        <path d="M9 1.5l5.5 5.5-1.6.8-1.4 3.2-3.6-3.6-2.6 1.3.7-1.4-3.4-3.4z"/>
+      </svg>
+    </span>
+  );
+}
+function isPinned(repo) { return MOCK.pinned && MOCK.pinned.has(repo); }
+
+Object.assign(window, { I, BeetMark, Pill, CheckDot, DiffStat, Avatar, PollingDot, ScoreBar, ReasonBadge, Lifecycle, RunStatus, TaskChips, PinGlyph, isPinned });

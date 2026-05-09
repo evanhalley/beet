@@ -23,6 +23,7 @@ const MOCK = {
       checks: { state: "success", failing: [] },
       activity: { mentions: 0, replies: 0 },
       branch: "fix-auth-race",
+      taskUrls: ["PROJ-1842"],
       unread: true,
     },
     {
@@ -41,6 +42,7 @@ const MOCK = {
       checks: { state: "failure", failing: ["integration-tests", "lint"] },
       activity: { mentions: 0, replies: 1 },
       branch: "billing-retry",
+      taskUrls: ["PROJ-1799", "PROJ-1812", "OPS-44", "OPS-45"],
       unread: true,
     },
     {
@@ -63,15 +65,15 @@ const MOCK = {
   ],
 
   reviews: [
-    { id:"pr:acme/platform#501", repo:"acme/platform", num:501, title:"Refactor auth provider to support OIDC", author:"rina", team:true, score:11, additions:240, deletions:88, age:"2h", checks:{state:"pending"}, draft:false, unread:true },
+    { id:"pr:acme/platform#501", repo:"acme/platform", num:501, title:"Refactor auth provider to support OIDC", author:"rina", team:true, score:11, additions:240, deletions:88, age:"2h", checks:{state:"pending"}, draft:false, unread:true, taskUrls:["PLAT-301"] },
     { id:"pr:acme/gateway#498",  repo:"acme/gateway",  num:498, title:"Add request timeout middleware to gateway", author:"kai",  team:true, score:8,  additions:120, deletions:18,  age:"5h", checks:{state:"success"}, draft:false, unread:true },
     { id:"pr:acme/search#492",   repo:"acme/search",   num:492, title:"Search index v2 — Tantivy backend",        author:"mo",   team:false, score:7,  additions:540, deletions:220, age:"1d", checks:{state:"success"}, draft:false, unread:false },
-    { id:"pr:acme/api#476",      repo:"acme/api",      num:476, title:"Cleanup deprecated /v1 routes",            author:"leo",  team:true, score:5,  additions:12,  deletions:380, age:"3d", checks:{state:"success"}, draft:false, unread:false },
+    { id:"pr:acme/api#476",      repo:"acme/api",      num:476, title:"Cleanup deprecated /v1 routes",            author:"leo",  team:true, score:5,  additions:12,  deletions:380, age:"3d", checks:{state:"success"}, draft:false, unread:false, taskUrls:["API-882"] },
     { id:"pr:foo/bar#84",        repo:"foo/bar",       num:84,  title:"wip: experimental rate limiter",           author:"sam",  team:false, score:2,  additions:60,  deletions:4,   age:"5d", checks:{state:"neutral"}, draft:true,  unread:false },
   ],
 
   inflight: [
-    { id:"pr:acme/api#412", repo:"acme/api", num:412, title:"Fix race condition in auth token refresh", state:"merge_queue", mqPos:2, age:"3m", additions:84, deletions:22, checks:{state:"success"} },
+    { id:"pr:acme/api#412", repo:"acme/api", num:412, title:"Fix race condition in auth token refresh", state:"merge_queue", mqPos:2, age:"3m", additions:84, deletions:22, checks:{state:"success"}, taskUrls:["PROJ-1842"] },
     { id:"pr:acme/api#405", repo:"acme/api", num:405, title:"Bump deps (weekly)", state:"in_review", age:"2h", additions:1248, deletions:1180, checks:{state:"success"} },
     { id:"pr:acme/web#221", repo:"acme/web", num:221, title:"Adopt the new design tokens",  state:"open", age:"1d", additions:320, deletions:218, checks:{state:"pending"} },
   ],
@@ -138,6 +140,9 @@ const PR_DETAIL = {
     ],
   },
 };
+
+// Pinned repos — surfaces as a glyph on rows of these repos.
+MOCK.pinned = new Set(["acme/api", "acme/platform"]);
 
 window.MOCK = MOCK;
 window.PR_DETAIL = PR_DETAIL;
