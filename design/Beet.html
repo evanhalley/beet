@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Beet · GitHub triage app</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="src/styles.css">
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  /* mac-menubar mock chrome — used as decoration around the tray popover */
+  .mb-bar {
+    height: 26px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0.35));
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+    border-bottom: 0.5px solid rgba(0,0,0,0.12);
+    display: flex; align-items: center; gap: 18px;
+    padding: 0 14px;
+    font: 13px -apple-system, BlinkMacSystemFont, "SF Pro", system-ui, sans-serif;
+    color: #1a1714;
+  }
+  .mb-bar .apple { font-size: 16px; line-height: 1; }
+  .mb-bar .app  { font-weight: 600; }
+  .mb-bar .menu { color: rgba(26,23,20,.78); }
+  .mb-bar .right { margin-left: auto; display:flex; align-items:center; gap: 14px; color: rgba(26,23,20,.85); }
+  .wallpaper {
+    background: radial-gradient(1200px 800px at 30% 20%, oklch(0.78 0.07 25), oklch(0.62 0.1 350) 60%, oklch(0.32 0.08 280));
+  }
+  /* Notification toast (macOS-ish) */
+  .toast {
+    width: 360px;
+    background: rgba(28,24,22,0.86);
+    color: #fff;
+    border-radius: 14px;
+    padding: 12px 14px;
+    box-shadow: 0 18px 48px rgba(0,0,0,.45), 0 0 0 0.5px rgba(255,255,255,.12);
+    -webkit-backdrop-filter: blur(28px) saturate(140%);
+    backdrop-filter: blur(28px) saturate(140%);
+    font: 13px -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
+    animation: beet-toast-in .25s cubic-bezier(.2,.7,.3,1) both;
+  }
+  .toast.out { animation: beet-toast-out .2s cubic-bezier(.4,0,1,1) both; }
+  .toast .ico {
+    width: 32px; height: 32px; border-radius: 8px;
+    background: var(--accent, #c96442);
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 16px;
+  }
+  .toast .src { font-size: 11px; opacity: 0.6; margin-bottom: 2px; }
+  .toast .ttl { font-weight: 600; }
+  .toast .body { color: rgba(255,255,255,.78); margin-top: 2px; font-size: 12px; line-height: 1.4; }
+  .toast .x { width: 22px; height: 22px; border-radius: 11px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.7); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+  .toast.out { pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="root" class="beet" data-theme="light" data-accent="beet" data-density="comfy"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="src/design-canvas.jsx"></script>
+<script type="text/babel" src="src/tweaks-panel.jsx"></script>
+<script type="text/babel" src="src/data.jsx"></script>
+<script type="text/babel" src="src/ui.jsx"></script>
+<script type="text/babel" src="src/tray.jsx"></script>
+<script type="text/babel" src="src/main-window.jsx"></script>
+<script type="text/babel" src="src/settings.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "accent": "beet",
+  "density": "comfy",
+  "updateReady": true
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [refreshing, setRefreshing] = React.useState(false);
+  const [paused, setPaused] = React.useState(false);
+  const [toast, setToast] = React.useState(null);
+  const [sel, setSel] = React.useState("pr:acme/api#412");
+  const [secondarySel, setSecondarySel] = React.useState("pr:acme/billing#389");
+
+  React.useEffect(() => {
+    const root = document.getElementById("root");
+    root.dataset.theme = t.theme;
+    root.dataset.accent = t.accent;
+    root.dataset.density = t.density;
+  }, [t]);
+
+  const refresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 1100);
+  };
+  const togglePause = () => setPaused(p => !p);
+  const fireNotify = () => {
+    setToast({
+      id: Date.now(),
+      title: "🚨 Kicked from merge queue: Fix race condition in auth token refresh",
+      body: "acme/api · #412 · timeout in integration-tests",
+      src: "Beet",
+    });
+    setTimeout(() => setToast(t => t && { ...t, leaving: true }), 4200);
+    setTimeout(() => setToast(null), 4500);
+  };
+
+  return (
+    <>
+      <DesignCanvas>
+        {/* ─── Tray popover variants ─── */}
+        <DCSection id="tray" title="Tray popover"
+          subtitle="Click the beet in the menu bar — this is what you see. Click ↻ to demo a poll, ⏸ to pause, “Demo notify” for a toast.">
+          <DCArtboard id="tray-mb" label="In context · macOS menu bar" width={840} height={600}>
+            <div style={{ width:"100%", height:"100%", position:"relative", overflow:"hidden" }} className="wallpaper">
+              <div className="mb-bar">
+                <span className="apple"></span>
+                <span className="app">Finder</span>
+                <span className="menu">File</span>
+                <span className="menu">Edit</span>
+                <span className="menu">View</span>
+                <span className="menu">Go</span>
+                <span className="menu">Window</span>
+                <span className="menu">Help</span>
+                <span className="right">
+                  <BeetMark size={14} status={MOCK.needs.length ? "alert" : "ok"}/>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: "var(--accent)" }}>{MOCK.needs.length + MOCK.reviews.filter(r=>r.unread).length}</span>
+                  <span style={{ opacity: 0.6 }}>🔋</span>
+                  <span style={{ opacity: 0.6 }}>📶</span>
+                  <span style={{ fontFamily: "var(--font-mono)", fontSize: 12 }}>Tue 9:42 AM</span>
+                </span>
+              </div>
+              <div style={{ position: "absolute", top: 26, left: 0, right: 0, display:"flex", justifyContent:"flex-end", padding: "6px 16px 0 0" }}>
+                <div style={{ position: "relative" }}>
+                  <div style={{ position:"absolute", top:-8, right: 78, width: 14, height: 14, background: "var(--bg)", transform: "rotate(45deg)", boxShadow: "-1px -1px 0 var(--border-strong)" }}/>
+                  <TrayPopover variant="v1" paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause} onNotify={fireNotify} accent={t.accent}/>
+                </div>
+              </div>
+              {/* Toast slot — appears from top right, separate from tray */}
+              {toast && (
+                <div style={{ position: "absolute", top: 36, right: 16, zIndex: 50 }} className={toast.leaving ? "toast out" : "toast"}>
+                  <div className="ico"><BeetMark size={20}/></div>
+                  <div>
+                    <div className="src">BEET · now</div>
+                    <div className="ttl">{toast.title}</div>
+                    <div className="body">{toast.body}</div>
+                  </div>
+                  <div className="x" onClick={() => setToast(t=>t && {...t, leaving:true})}>×</div>
+                </div>
+              )}
+            </div>
+          </DCArtboard>
+
+          <DCArtboard id="tray-v1" label="A · Restrained" width={360} height={480}>
+            <TrayPopover variant="v1" paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause} onNotify={fireNotify}/>
+          </DCArtboard>
+
+          <DCArtboard id="tray-v2" label="B · With personality" width={360} height={480}>
+            <TrayPopover variant="v2" paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause} onNotify={fireNotify}/>
+          </DCArtboard>
+
+          <DCArtboard id="tray-empty" label="C · Empty state" width={360} height={300}>
+            <EmptyTray/>
+          </DCArtboard>
+
+          <DCArtboard id="tray-token" label="D · Invalid token" width={360} height={300}>
+            <InvalidTokenTray/>
+          </DCArtboard>
+
+          <DCArtboard id="tray-update" label="E · Update ready" width={360} height={480}>
+            <TrayPopover variant="v1" updateReady={true} paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause} onNotify={fireNotify}/>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ─── Main window ─── */}
+        <DCSection id="main" title="Main window"
+          subtitle="Three-pane triage. Click a row in the list to update the detail pane.">
+          <DCArtboard id="main-v1" label="A · Three-pane (sidebar / list / detail)" width={1200} height={760}>
+            <MainWindow variant="v1" selectedId={sel} onSelect={setSel} paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause}/>
+          </DCArtboard>
+
+          <DCArtboard id="main-v2" label="B · Lanes (kanban-ish per section)" width={1280} height={760}>
+            <MainWindow variant="v2" selectedId={secondarySel} onSelect={setSecondarySel} paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause}/>
+          </DCArtboard>
+
+          <DCArtboard id="main-update" label="C · Update banner" width={1200} height={760}>
+            <MainWindow variant="v1" selectedId={sel} onSelect={setSel} paused={paused} refreshing={refreshing} onRefresh={refresh} onTogglePause={togglePause} updateReady={true}/>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ─── Settings ─── */}
+        <DCSection id="settings" title="Settings"
+          subtitle="Every option enumerated in §11. Tabbed for breathing room — PAT validation, the 5 notification toggles, polling, mute/pin, scoring, appearance.">
+          <DCArtboard id="settings-account" label="Account & token" width={920} height={620}>
+            <SettingsPanel/>
+          </DCArtboard>
+          <DCArtboard id="settings-notifications" label="Notifications" width={920} height={620}>
+            <SettingsPanelOnTab tab="notifications"/>
+          </DCArtboard>
+          <DCArtboard id="settings-polling" label="Polling, rate limit & updates" width={920} height={620}>
+            <SettingsPanelOnTab tab="polling"/>
+          </DCArtboard>
+          <DCArtboard id="settings-filters" label="Mute & pin" width={920} height={620}>
+            <SettingsPanelOnTab tab="filters"/>
+          </DCArtboard>
+          <DCArtboard id="settings-scoring" label="Scoring & task URLs" width={920} height={620}>
+            <SettingsPanelOnTab tab="scoring"/>
+          </DCArtboard>
+        </DCSection>
+
+        {/* ─── Mark + scale ─── */}
+        <DCSection id="brand" title="The mark"
+          subtitle="Custom monogram for the tray icon — keeps the 🫜 emoji in copy.">
+          <DCArtboard id="mark-scale" label="Scales 14 → 64px" width={520} height={180}>
+            <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", gap: 36, background: "var(--panel)" }}>
+              <BeetMark size={14}/>
+              <BeetMark size={20}/>
+              <BeetMark size={28}/>
+              <BeetMark size={40}/>
+              <BeetMark size={64}/>
+            </div>
+          </DCArtboard>
+          <DCArtboard id="mark-states" label="Status states" width={520} height={180}>
+            <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"space-around", background: "var(--panel)", padding: "0 30px" }}>
+              <div style={{ textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap: 8 }}>
+                <BeetMark size={42}/>
+                <span style={{ fontSize: 11, color: "var(--text-faint)" }}>idle</span>
+              </div>
+              <div style={{ textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap: 8 }}>
+                <BeetMark size={42} status="alert"/>
+                <span style={{ fontSize: 11, color: "var(--text-faint)" }}>unread</span>
+              </div>
+              <div style={{ textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap: 8 }}>
+                <BeetMark size={42} status="paused"/>
+                <span style={{ fontSize: 11, color: "var(--text-faint)" }}>paused</span>
+              </div>
+            </div>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Theme">
+          <TweakRadio label="Mode" value={t.theme} options={[{value:"light",label:"Light"},{value:"dark",label:"Dark"}]} onChange={(v)=>setTweak("theme",v)}/>
+          <TweakColor label="Accent" value={t.accent}
+            options={["beet","ocean","forest","ink"]}
+            onChange={(v)=>setTweak("accent",v)}/>
+        </TweakSection>
+        <TweakSection label="Density">
+          <TweakRadio label="Rows" value={t.density} options={[{value:"compact",label:"Compact"},{value:"comfy",label:"Comfy"}]} onChange={(v)=>setTweak("density",v)}/>
+        </TweakSection>
+        <TweakSection label="Demo">
+          <TweakButton label="Fire notification" onClick={fireNotify}/>
+          <TweakButton secondary label={paused ? "Resume polling" : "Pause polling"} onClick={togglePause}/>
+        </TweakSection>
+      </TweaksPanel>
+    </>
+  );
+}
+
+// Accent options need real swatch colors for TweakColor — override.
+// Map keyword → preview hex (used purely for the picker chip).
+(function(){
+  const orig = TweakColor;
+  // already imports keyword strings; chips render as solid keyword via background
+  // — but we want real colors. Replace globally.
+  const map = { beet:"#a23a55", ocean:"#2a6fdb", forest:"#1f8a5b", ink:"#2a2620" };
+  window.TweakColor = function ({ value, options, ...rest }) {
+    const xform = (options || []).map(o => map[o] || o);
+    const cur = map[value] || value;
+    return orig({ ...rest, value: cur, options: xform,
+      onChange: (hex) => {
+        const k = Object.keys(map).find(k => map[k].toLowerCase() === String(hex).toLowerCase());
+        rest.onChange(k || hex);
+      }
+    });
+  };
+})();
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+
+// ─────────── Empty / error states ───────────
+function EmptyTray() {
+  return (
+    <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", background:"var(--bg)", borderRadius: 12, overflow:"hidden", boxShadow:"var(--shadow-lg)" }}>
+      <div style={{ display:"flex", alignItems:"center", gap: 8, padding:"10px 12px", borderBottom:"1px solid var(--border)" }}>
+        <BeetMark size={18}/>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>Beet</span>
+        <span style={{ flex: 1 }}/>
+        <PollingDot last="just now"/>
+      </div>
+      <div style={{ flex: 1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding: 24, textAlign:"center", gap: 10 }}>
+        <BeetMark size={48}/>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>Inbox zero</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 240, lineHeight: 1.5 }}>
+          Nothing needs you right now. Beet keeps polling — you'll hear from it if something changes.
+        </div>
+      </div>
+    </div>
+  );
+}
+function InvalidTokenTray() {
+  return (
+    <div style={{ width:"100%", height:"100%", display:"flex", flexDirection:"column", background:"var(--bg)", borderRadius: 12, overflow:"hidden", boxShadow:"var(--shadow-lg)" }}>
+      <div style={{ display:"flex", alignItems:"center", gap: 8, padding:"10px 12px", borderBottom:"1px solid var(--border)" }}>
+        <BeetMark size={18} status="alert"/>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>Beet</span>
+        <Pill tone="danger">token invalid</Pill>
+      </div>
+      <div style={{ flex: 1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding: 24, textAlign:"center", gap: 12 }}>
+        <span style={{ color:"var(--danger)", fontSize: 36, lineHeight: 1 }}>{I.alert({ width: 36, height: 36 })}</span>
+        <div style={{ fontSize: 14, fontWeight: 600 }}>GitHub PAT rejected</div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)", maxWidth: 260, lineHeight: 1.5 }}>
+          The token returned 401 on its last validation. Re-enter it in Settings to resume polling.
+        </div>
+        <button style={{ padding: "5px 12px", borderRadius: 7, background:"var(--accent)", color:"var(--accent-fg)", fontWeight: 500, fontSize: 12 }}>
+          Open Settings
+        </button>
+      </div>
+    </div>
+  );
+}
+window.EmptyTray = EmptyTray;
+window.InvalidTokenTray = InvalidTokenTray;
+
+// Helper so artboards can pre-select a Settings tab without state plumbing.
+function SettingsPanelOnTab({ tab }) {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!ref.current) return;
+    // Click the matching nav button on mount.
+    const btns = ref.current.querySelectorAll("nav button");
+    const labels = { notifications: "Notifications", polling: "Polling & rate", filters: "Mute & pin", scoring: "Scoring", appearance: "Appearance", account: "Account" };
+    const target = labels[tab];
+    btns.forEach(b => { if (b.textContent.trim() === target) b.click(); });
+  }, [tab]);
+  return <div ref={ref} style={{ width:"100%", height:"100%" }}><SettingsPanel/></div>;
+}
+window.SettingsPanelOnTab = SettingsPanelOnTab;
+</script>
+</body>
+</html>
