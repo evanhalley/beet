@@ -42,6 +42,10 @@ Two existing codebases the author wrote that Beet consolidates. The migration ta
   - `hooks/useWorkflowRuns.ts`: TanStack Query → Zustand sync pattern that the Beet `useActionableItems` hook should follow.
   - `components/{StatusBadge,RunCard,FilterBar,RunList}.tsx`: reusable UI primitives.
 
+## Match the design mockups
+
+[design/](design/) is the visual source of truth. When implementing UI, run `./design/serve.sh` and compare against the rendered mockup — pixel layouts, spacing, color tokens, row anatomy, hover states, and component composition should match what's in [design/src/](design/src/). If the spec and the design disagree, surface it before diverging from either; don't silently invent a third option. Components to mirror exist in [src/tray.jsx](design/src/tray.jsx), [src/main-window.jsx](design/src/main-window.jsx), [src/settings.jsx](design/src/settings.jsx), and the shared primitives in [src/ui.jsx](design/src/ui.jsx) (`Pill`, `CheckDot`, `Avatar`, `ScoreBar`, `ReasonBadge`, `Lifecycle`, `RunStatus`, `TaskChips`, `PinGlyph`, `BeetMark`).
+
 ## Key architectural decisions to remember
 
 These are the load-bearing concepts that span multiple files and are easy to get wrong if you only read one piece:
@@ -83,6 +87,10 @@ The project is not yet scaffolded, so there are no `npm` scripts to document. On
 - `npx vitest -t "test name"` — single test by name
 
 When scaffolding, model the layout on PRZ's directory structure ([src/app](file:///Users/evan/dev/prz/src/app), [src/lib](file:///Users/evan/dev/prz/src/lib), [src-tauri](file:///Users/evan/dev/prz/src-tauri)) but plan for the additional directories implied by §14's migration table (`src/lib/github/`, `src/lib/storage/`, `src/hooks/`, `src/components/`, `src/test/`).
+
+## GitHub CLI
+
+`gh` is installed and authed as `evanhalley`. Use it for all GitHub interactions — filing issues, reading issues/PRs, creating PRs, checking CI status. The repo is at `github.com:evanhalley/beet`. The build plan in [ISSUES.md](ISSUES.md) gets filed one issue at a time as we work through it; per-issue write-ups live in [issues/](issues/) and become issue bodies via `gh issue create --body-file issues/NN-name.md`.
 
 ## Development
 
