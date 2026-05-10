@@ -3,6 +3,21 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager,
 };
+use tauri_plugin_sql::{Migration, MigrationKind};
+
+fn migrations() -> Vec<Migration> {
+    vec![Migration {
+        version: 1,
+        description: "create etag_cache table",
+        sql: "CREATE TABLE IF NOT EXISTS etag_cache (
+            cache_key  TEXT PRIMARY KEY,
+            etag       TEXT NOT NULL,
+            body_json  TEXT NOT NULL,
+            fetched_at TEXT NOT NULL
+        );",
+        kind: MigrationKind::Up,
+    }]
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,6 +30,12 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:beet.db", migrations())
+                .build(),
+        )
         .setup(|app| {
             let open = MenuItemBuilder::with_id("open", "Open Beet").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
