@@ -1,1 +1,18 @@
 .claude/settings.local.json
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Next.js
+.next/
+out/
+next-env.d.ts.bak
+
+# Tauri
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Misc
+*.log
