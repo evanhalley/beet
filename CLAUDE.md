@@ -95,6 +95,7 @@ When scaffolding, model the layout on PRZ's directory structure ([src/app](file:
 ## Development
 
 When making changes:
+- create branches for your work, `IssueNumber-ShortIssueName` example: `01-bootstrap`
 - add tests to cover new functionality
 - unit tests for business logic and components
 - functional tests for end to end flows
