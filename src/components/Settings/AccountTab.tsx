@@ -5,6 +5,8 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime";
 import { useAuth } from "@/hooks/useAuth";
 import { REQUIRED_SCOPES } from "@/lib/github/auth";
+import { useAppStore } from "@/lib/store";
+import { parseLineList, setTeams } from "@/lib/storage/settings";
 import { ScopesGrid, type ScopeStatus } from "./ScopesGrid";
 import {
   Field,
@@ -123,21 +125,49 @@ export function AccountTab() {
         <ScopesGrid scopes={scopes} />
       </Field>
 
-      <Field
-        label="Teams to track"
-        hint="Lands in #3 — used for PR-author team detection in the priority score."
-      >
-        <input
-          type="text"
-          disabled
-          placeholder="acme/team-name"
-          className={`${inputClass} mono cursor-not-allowed opacity-60`}
-          style={{
-            ...inputStyle(true),
-            color: "var(--color-text-muted)",
-          }}
-        />
-      </Field>
+      <TeamsField />
     </Stack>
+  );
+}
+
+function TeamsField() {
+  const teams = useAppStore((s) => s.settings.teams);
+  const setSettings = useAppStore((s) => s.setSettings);
+  const [saved, setSaved] = useState(false);
+
+  const onChange = (value: string) => {
+    setSettings({ teams: value.split("\n") });
+  };
+
+  const onBlur = async () => {
+    const parsed = parseLineList(teams.join("\n"));
+    await setTeams(parsed);
+    setSettings({ teams: parsed });
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 1200);
+  };
+
+  return (
+    <Field
+      label="Teams to track"
+      hint="org/team-slug, one per line. Used to boost PR scoring when the author is on one of these teams."
+    >
+      <textarea
+        value={teams.join("\n")}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
+        placeholder="acme/platform"
+        rows={3}
+        className={`${inputClass} mono`}
+        style={inputStyle(true)}
+      />
+      {saved && (
+        <div className="mt-2">
+          <Pill tone="success" soft>
+            saved
+          </Pill>
+        </div>
+      )}
+    </Field>
   );
 }

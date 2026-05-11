@@ -1,0 +1,13 @@
+{
+  "number": 498,
+  "title": "Add retry budget",
+  "body": null,
+  "html_url": "https://github.com/acme/gateway/pull/498",
+  "user": { "login": "kai" },
+  "requested_reviewers": [],
+  "draft": true,
+  "additions": 300,
+  "deletions": 5,
+  "created_at": "2026-05-07T09:00:00Z",
+  "updated_at": "2026-05-09T09:00:00Z"
+}

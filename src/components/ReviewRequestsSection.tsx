@@ -1,0 +1,121 @@
+"use client";
+
+import { useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useAppStore } from "@/lib/store";
+import { ActionableRow } from "./ActionableRow";
+import type { ActionableItem } from "@/lib/types";
+
+export interface ReviewRequestsSectionProps {
+  items: ActionableItem[];
+}
+
+export function ReviewRequestsSection({ items }: ReviewRequestsSectionProps) {
+  const showAll = useAppStore((s) => s.showAllReviews);
+  const setShowAll = useAppStore((s) => s.setShowAllReviews);
+  const [collapsed, setCollapsed] = useState(false);
+
+  const sorted = [...items].sort(
+    (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
+  );
+
+  return (
+    <section aria-label="Review Requests">
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "12px 16px 8px",
+          fontSize: 11,
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: 0.06,
+          color: "var(--color-text-muted)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          aria-expanded={!collapsed}
+          aria-controls="review-requests-list"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+            color: "inherit",
+            background: "transparent",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <span aria-hidden>👀</span>
+          <span>Review Requests</span>
+          <span
+            className="mono"
+            style={{
+              fontSize: 10.5,
+              padding: "0 5px",
+              borderRadius: 999,
+              background: "var(--color-panel-2)",
+              color: "var(--color-text-faint)",
+            }}
+          >
+            {sorted.length}
+          </span>
+          <span
+            style={{
+              display: "inline-flex",
+              color: "var(--color-text-faint)",
+              transform: collapsed ? "rotate(-90deg)" : "rotate(0)",
+              transition: "transform .15s",
+            }}
+          >
+            <ChevronDown size={12} />
+          </span>
+        </button>
+        <span style={{ flex: 1 }} />
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 10.5,
+            fontWeight: 500,
+            textTransform: "none",
+            letterSpacing: 0,
+            color: "var(--color-text-muted)",
+            cursor: "pointer",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={showAll}
+            onChange={(e) => setShowAll(e.target.checked)}
+            aria-label="Show All review requests, including approved"
+          />
+          Show all
+        </label>
+      </header>
+      {!collapsed && (
+        <div id="review-requests-list">
+          {sorted.length === 0 ? (
+            <p
+              style={{
+                padding: "10px 16px 14px",
+                fontSize: 12,
+                color: "var(--color-text-faint)",
+              }}
+            >
+              No review requests right now.
+            </p>
+          ) : (
+            sorted.map((item) => (
+              <ActionableRow key={item.id} item={item} variant="review" />
+            ))
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
