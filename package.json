@@ -11,28 +11,36 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@octokit/rest": "^22.0.1",
+    "@tanstack/react-query": "^5.100.9",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-sql": "^2.4.0",
+    "@tauri-apps/plugin-store": "^2.4.3",
+    "dayjs": "^1.11.20",
+    "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "@tauri-apps/api": "^2.10.1",
-    "@tauri-apps/plugin-shell": "^2.3.5",
-    "lucide-react": "^0.575.0"
+    "zustand": "^5.0.13"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.0",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
-    "typescript": "^5",
-    "vitest": "^4.0.18",
-    "@vitest/coverage-v8": "^4.0.18",
-    "@testing-library/react": "^16",
+    "@tauri-apps/cli": "^2.10.0",
     "@testing-library/jest-dom": "^6",
-    "jsdom": "^25",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "babel-plugin-react-compiler": "1.0.0",
+    "@testing-library/react": "^16",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/node": "^20"
+    "@vitest/coverage-v8": "^4.0.18",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "jsdom": "^25",
+    "msw": "^2.14.5",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
