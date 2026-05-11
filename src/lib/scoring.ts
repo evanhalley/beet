@@ -43,6 +43,8 @@ export function scorePullRequests(
       score = 0;
     }
 
+    // Stale (line 39-44) and penalized-bot (below) overwrite the running score
+    // by design — verbatim from PRZ. Do not change to additive.
     if (penalizedBots.includes(pr.author)) {
       score = -10;
     }

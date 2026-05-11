@@ -74,6 +74,9 @@ export async function fetchReviewRequests(
 
   const compiledRegex = compileTaskRegex(taskRegex);
 
+  // TODO(#8 adaptive polling): bound this fan-out with p-limit. A reviewer on
+  // 100 open PRs triggers 300 concurrent requests per poll cycle and will hit
+  // GitHub's secondary rate limits.
   const items = await Promise.all(
     search.items.map(async (hit) => {
       const parsed = parseRepoAndOwnerFromURL(hit.html_url || hit.url);

@@ -10,8 +10,15 @@ export interface AppStore {
   rateLimit: RateLimitInfo | null;
   auth: AuthValidation | null;
 
-  actionableItems: Record<string, ActionableItem>;
-  showAllReviews: boolean;
+  reviewRequests: ActionableItem[];
+  inFlight: ActionableItem[];
+  standaloneRuns: ActionableItem[];
+  recentlyResolved: ActionableItem[];
+
+  // null = use settings.showAllApproved; true|false = session override.
+  showAllReviewsOverride: boolean | null;
+
+  uiError: string | null;
 
   settings: BeetSettings;
   settingsHydrated: boolean;
@@ -21,8 +28,14 @@ export interface AppStore {
   setRateLimit: (rateLimit: RateLimitInfo | null) => void;
   setAuth: (auth: AuthValidation | null) => void;
 
-  setActionableItems: (items: ActionableItem[]) => void;
-  setShowAllReviews: (value: boolean) => void;
+  setReviewRequests: (items: ActionableItem[]) => void;
+  setInFlight: (items: ActionableItem[]) => void;
+  setStandaloneRuns: (items: ActionableItem[]) => void;
+  setRecentlyResolved: (items: ActionableItem[]) => void;
+
+  setShowAllReviewsOverride: (value: boolean | null) => void;
+
+  setUiError: (message: string | null) => void;
 
   setSettings: (settings: Partial<BeetSettings>) => void;
   hydrateSettings: (settings: BeetSettings) => void;
@@ -35,8 +48,12 @@ const initialState = {
   user: null,
   rateLimit: null,
   auth: null,
-  actionableItems: {} as Record<string, ActionableItem>,
-  showAllReviews: SETTINGS_DEFAULTS.showAllApproved,
+  reviewRequests: [] as ActionableItem[],
+  inFlight: [] as ActionableItem[],
+  standaloneRuns: [] as ActionableItem[],
+  recentlyResolved: [] as ActionableItem[],
+  showAllReviewsOverride: null as boolean | null,
+  uiError: null as string | null,
   settings: SETTINGS_DEFAULTS,
   settingsHydrated: false,
 };
@@ -49,20 +66,25 @@ export const useAppStore = create<AppStore>((set) => ({
   setAuth: (auth) =>
     set({ auth, user: auth?.login ? { login: auth.login } : null }),
 
-  setActionableItems: (items) =>
-    set(() => ({
-      actionableItems: Object.fromEntries(items.map((i) => [i.id, i])),
-    })),
-  setShowAllReviews: (value) => set({ showAllReviews: value }),
+  setReviewRequests: (items) => set({ reviewRequests: items }),
+  setInFlight: (items) => set({ inFlight: items }),
+  setStandaloneRuns: (items) => set({ standaloneRuns: items }),
+  setRecentlyResolved: (items) => set({ recentlyResolved: items }),
+
+  setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
+
+  setUiError: (message) => set({ uiError: message }),
 
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),
   hydrateSettings: (settings) =>
-    set({
-      settings,
-      settingsHydrated: true,
-      showAllReviews: settings.showAllApproved,
-    }),
+    set({ settings, settingsHydrated: true }),
 
   reset: () => set(initialState),
 }));
+
+// Resolved Show-All for the Review Requests section.
+// Override (session-scoped) wins over the persisted global default.
+export function selectShowAllReviews(s: AppStore): boolean {
+  return s.showAllReviewsOverride ?? s.settings.showAllApproved;
+}

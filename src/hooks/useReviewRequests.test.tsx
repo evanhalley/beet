@@ -121,7 +121,7 @@ beforeEach(async () => {
   useAppStore.setState({
     user: { login: "octocat" },
     settings: { ...SETTINGS_DEFAULTS, pollingIntervalSec: 15 },
-    showAllReviews: true,
+    showAllReviewsOverride: true,
   });
 });
 
@@ -130,14 +130,16 @@ afterEach(() => {
 });
 
 describe("useReviewRequests", () => {
-  test("populates Zustand actionableItems on first response", async () => {
+  test("populates the reviewRequests slice on first response", async () => {
     installHandlers();
     const { Wrapper } = makeWrapper();
-    const { result } = renderHook(() => useReviewRequests(), { wrapper: Wrapper });
+    renderHook(() => useReviewRequests(), { wrapper: Wrapper });
 
-    await waitFor(() => expect(result.current.items.length).toBeGreaterThan(0));
-    const stored = useAppStore.getState().actionableItems;
-    expect(Object.keys(stored)).toEqual(
+    await waitFor(() =>
+      expect(useAppStore.getState().reviewRequests.length).toBeGreaterThan(0),
+    );
+    const ids = useAppStore.getState().reviewRequests.map((i) => i.id);
+    expect(ids).toEqual(
       expect.arrayContaining([
         "pr:acme/platform#501",
         "pr:acme/gateway#498",
@@ -150,12 +152,26 @@ describe("useReviewRequests", () => {
     installHandlers();
     useAppStore.setState({ user: null });
     const { Wrapper } = makeWrapper();
-    const { result } = renderHook(() => useReviewRequests(), { wrapper: Wrapper });
+    renderHook(() => useReviewRequests(), { wrapper: Wrapper });
     // Give it a tick — no fetch should fire.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect(searchCalls).toBe(0);
-    expect(result.current.items).toEqual([]);
+    expect(useAppStore.getState().reviewRequests).toEqual([]);
+  });
+
+  test("settings change triggers a refetch", async () => {
+    installHandlers();
+    const { Wrapper } = makeWrapper();
+    renderHook(() => useReviewRequests(), { wrapper: Wrapper });
+
+    await waitFor(() => expect(searchCalls).toBe(1));
+
+    // Mutating teams in settings should invalidate the queryKey.
+    act(() => {
+      useAppStore.getState().setSettings({ teams: ["acme/platform"] });
+    });
+    await waitFor(() => expect(searchCalls).toBe(2));
   });
 });

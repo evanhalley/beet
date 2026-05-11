@@ -2,17 +2,14 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { useAppStore } from "@/lib/store";
-import { ActionableRow } from "./ActionableRow";
-import type { ActionableItem } from "@/lib/types";
+import { selectShowAllReviews, useAppStore } from "@/lib/store";
+import { ReviewRequestRow } from "./ReviewRequestRow";
 
-export interface ReviewRequestsSectionProps {
-  items: ActionableItem[];
-}
-
-export function ReviewRequestsSection({ items }: ReviewRequestsSectionProps) {
-  const showAll = useAppStore((s) => s.showAllReviews);
-  const setShowAll = useAppStore((s) => s.setShowAllReviews);
+export function ReviewRequestsSection() {
+  const items = useAppStore((s) => s.reviewRequests);
+  const showAll = useAppStore(selectShowAllReviews);
+  const override = useAppStore((s) => s.showAllReviewsOverride);
+  const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...items].sort(
@@ -91,11 +88,32 @@ export function ReviewRequestsSection({ items }: ReviewRequestsSectionProps) {
           <input
             type="checkbox"
             checked={showAll}
-            onChange={(e) => setShowAll(e.target.checked)}
+            onChange={(e) => setOverride(e.target.checked)}
             aria-label="Show All review requests, including approved"
           />
           Show all
         </label>
+        {override !== null && (
+          <button
+            type="button"
+            onClick={() => setOverride(null)}
+            style={{
+              fontSize: 10.5,
+              fontWeight: 500,
+              textTransform: "none",
+              letterSpacing: 0,
+              color: "var(--color-accent)",
+              background: "transparent",
+              cursor: "pointer",
+              padding: 0,
+              marginLeft: 6,
+              textDecoration: "underline",
+            }}
+            aria-label="Reset Show All to default from Settings"
+          >
+            use default
+          </button>
+        )}
       </header>
       {!collapsed && (
         <div id="review-requests-list">
@@ -110,9 +128,16 @@ export function ReviewRequestsSection({ items }: ReviewRequestsSectionProps) {
               No review requests right now.
             </p>
           ) : (
-            sorted.map((item) => (
-              <ActionableRow key={item.id} item={item} variant="review" />
-            ))
+            <ul
+              role="list"
+              style={{ listStyle: "none", margin: 0, padding: 0 }}
+            >
+              {sorted.map((item) => (
+                <li role="listitem" key={item.id}>
+                  <ReviewRequestRow item={item} />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

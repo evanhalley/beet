@@ -130,6 +130,9 @@ export function AccountTab() {
   );
 }
 
+// org/team-slug — letters, digits, dot, dash, underscore on each side of the slash.
+const TEAM_SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
 function TeamsField() {
   const teams = useAppStore((s) => s.settings.teams);
   const setSettings = useAppStore((s) => s.setSettings);
@@ -139,8 +142,19 @@ function TeamsField() {
     setSettings({ teams: value.split("\n") });
   };
 
+  const invalid = useMemo(
+    () =>
+      teams
+        .map((t) => t.trim())
+        .filter((t) => t && !TEAM_SLUG_RE.test(t)),
+    [teams],
+  );
+
   const onBlur = async () => {
-    const parsed = parseLineList(teams.join("\n"));
+    const seen = new Set<string>();
+    const parsed = parseLineList(teams.join("\n"))
+      .filter((t) => TEAM_SLUG_RE.test(t))
+      .filter((t) => (seen.has(t) ? false : (seen.add(t), true)));
     await setTeams(parsed);
     setSettings({ teams: parsed });
     setSaved(true);
@@ -161,6 +175,14 @@ function TeamsField() {
         className={`${inputClass} mono`}
         style={inputStyle(true)}
       />
+      {invalid.length > 0 && (
+        <div
+          className="mono mt-2"
+          style={{ fontSize: 11, color: "var(--color-danger)" }}
+        >
+          ignored on save: {invalid.join(", ")}
+        </div>
+      )}
       {saved && (
         <div className="mt-2">
           <Pill tone="success" soft>

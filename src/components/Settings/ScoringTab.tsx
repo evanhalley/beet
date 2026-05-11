@@ -28,6 +28,9 @@ const WEIGHTS: Array<{ rule: string; delta: string }> = [
 const SAMPLE_BODY =
   "See https://your-company.atlassian.net/browse/PROJ-123 and PROJ-456 in body.";
 
+// `bot[user]`-style logins are common; allow letters, digits, dot, dash, underscore, brackets.
+const BOT_LOGIN_RE = /^[A-Za-z0-9][A-Za-z0-9._\-[\]]{0,38}$/;
+
 export function ScoringTab() {
   return (
     <Stack>
@@ -85,8 +88,15 @@ function PenalizedBotsField() {
     setSettings({ penalizedBots: value.split("\n") });
   };
 
+  const invalid = useMemo(
+    () => bots.map((b) => b.trim()).filter((b) => b && !BOT_LOGIN_RE.test(b)),
+    [bots],
+  );
+
   const onBlur = async () => {
-    const parsed = parseLineList(bots.join("\n"));
+    const parsed = parseLineList(bots.join("\n")).filter((b) =>
+      BOT_LOGIN_RE.test(b),
+    );
     await setPenalizedBots(parsed);
     setSettings({ penalizedBots: parsed });
   };
@@ -105,6 +115,14 @@ function PenalizedBotsField() {
         className={`${inputClass} mono`}
         style={inputStyle(true)}
       />
+      {invalid.length > 0 && (
+        <div
+          className="mono mt-2"
+          style={{ fontSize: 11, color: "var(--color-danger)" }}
+        >
+          ignored on save: {invalid.join(", ")}
+        </div>
+      )}
     </Field>
   );
 }
@@ -124,6 +142,7 @@ function TaskRegexField() {
   };
 
   const onBlur = async () => {
+    if (!preview.ok) return; // never persist an invalid pattern
     await setTaskRegex(taskRegex);
   };
 
@@ -151,7 +170,9 @@ function TaskRegexField() {
             <>compiles, no matches against sample.</>
           )
         ) : (
-          <span style={{ color: "var(--color-danger)" }}>invalid pattern</span>
+          <span style={{ color: "var(--color-danger)" }}>
+            invalid pattern — not saved
+          </span>
         )}
       </div>
     </Field>
@@ -161,18 +182,16 @@ function TaskRegexField() {
 function ShowApprovedField() {
   const value = useAppStore((s) => s.settings.showAllApproved);
   const setSettings = useAppStore((s) => s.setSettings);
-  const setShowAllReviews = useAppStore((s) => s.setShowAllReviews);
 
   const onToggle = async (next: boolean) => {
     await setShowAllApproved(next);
     setSettings({ showAllApproved: next });
-    setShowAllReviews(next);
   };
 
   return (
     <Field
       label="Show approved PRs"
-      hint="Default state of the Show All toggle in Review Requests."
+      hint="Default for the Show All toggle in Review Requests. The per-section toggle overrides this until you click 'use default'."
     >
       <label
         style={{

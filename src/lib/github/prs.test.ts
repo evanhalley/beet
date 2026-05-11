@@ -197,6 +197,24 @@ describe("fetchReviewRequests", () => {
     expect(Object.keys(c.pull)).toHaveLength(0);
   });
 
+  test("drops PRs whose pulls.get returns a null user (deleted account)", async () => {
+    const c = newCounters();
+    installDefaultHandlers(c);
+    const ghost = { ...pull501, user: null };
+    server.use(
+      http.get(
+        "https://api.github.com/repos/acme/platform/pulls/501",
+        ({ request }) => withEtag(request, 'W/"pull-501-ghost"', ghost),
+      ),
+    );
+
+    const items = await fetchReviewRequests(defaultOpts);
+    const ids = items.map((i) => i.id);
+    expect(ids).not.toContain("pr:acme/platform#501");
+    expect(ids).toContain("pr:acme/gateway#498");
+    expect(ids).toContain("pr:acme/search#492");
+  });
+
   test("drops PRs whose detail fetch errors and returns the rest", async () => {
     const c = newCounters();
     installDefaultHandlers(c);

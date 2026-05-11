@@ -1,18 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon, X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useReviewRequests } from "@/hooks/useReviewRequests";
 import { MissingTokenBanner, type MissingTokenReason } from "@/components/MissingTokenBanner";
 import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 import { ReviewRequestsSection } from "@/components/ReviewRequestsSection";
+import { useAppStore } from "@/lib/store";
+
+const ERROR_BANNER_TIMEOUT_MS = 4000;
 
 export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { token, auth, isLoading } = useAuth();
-  const { items } = useReviewRequests();
+  useReviewRequests();
+  const uiError = useAppStore((s) => s.uiError);
+  const setUiError = useAppStore((s) => s.setUiError);
+
+  useEffect(() => {
+    if (!uiError) return;
+    const id = window.setTimeout(
+      () => setUiError(null),
+      ERROR_BANNER_TIMEOUT_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [uiError, setUiError]);
 
   if (settingsOpen) {
     return <SettingsPanel onClose={() => setSettingsOpen(false)} />;
@@ -34,6 +48,38 @@ export default function Page() {
           reason={bannerReason}
           onOpenSettings={() => setSettingsOpen(true)}
         />
+      )}
+      {uiError && (
+        <div
+          role="alert"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "8px 14px",
+            background: "var(--color-danger-soft, rgba(220, 60, 60, 0.12))",
+            borderBottom: "1px solid var(--color-border)",
+            fontSize: 12,
+            color: "var(--color-text)",
+          }}
+        >
+          <span style={{ flex: 1 }}>{uiError}</span>
+          <button
+            type="button"
+            onClick={() => setUiError(null)}
+            aria-label="Dismiss error"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              background: "transparent",
+              cursor: "pointer",
+              padding: 2,
+              color: "var(--color-text-muted)",
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
       )}
       <header
         className="flex items-center gap-2.5 px-4 py-2.5 border-b"
@@ -63,7 +109,7 @@ export default function Page() {
       <main className="flex flex-1 flex-col">
         {hasToken ? (
           <>
-            <ReviewRequestsSection items={items} />
+            <ReviewRequestsSection />
             <p
               style={{
                 padding: "14px 16px",

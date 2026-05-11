@@ -21,6 +21,12 @@ export function PollingTab() {
   );
 }
 
+function clampInterval(n: number): number {
+  if (!Number.isFinite(n)) return 60;
+  const i = Math.round(n);
+  return Math.min(MAX, Math.max(MIN, i));
+}
+
 function IntervalSlider() {
   const value = useAppStore((s) => s.settings.pollingIntervalSec);
   const setSettings = useAppStore((s) => s.setSettings);
@@ -30,7 +36,9 @@ function IntervalSlider() {
   };
 
   const onCommit = async () => {
-    await setPollingIntervalSec(value);
+    const clamped = clampInterval(value);
+    if (clamped !== value) setSettings({ pollingIntervalSec: clamped });
+    await setPollingIntervalSec(clamped);
   };
 
   return (

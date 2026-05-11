@@ -27,9 +27,33 @@ export interface BeetGetResult<T> {
 
 let cachedClient: { token: string; client: Octokit } | null = null;
 
+// Marker header we inject on synthetic 304→200 responses so beetGet can
+// detect cache hits without Octokit ever seeing a non-2xx status.
+const CACHE_HIT_HEADER = "x-beet-cache-hit";
+
+// Octokit treats 304 as an error and throws; the underlying fetch response
+// with status 304 is then surfaced by Next.js / Turbopack dev tooling as a
+// "Console Error" even when the throw is caught. We swap in a custom fetch
+// that promotes 304 → 200 with a marker header so the 304 never escapes the
+// network adapter.
+const conditionalFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input, init);
+  if (res.status !== 304) return res;
+  const headers = new Headers(res.headers);
+  headers.set(CACHE_HIT_HEADER, "1");
+  return new Response("{}", {
+    status: 200,
+    statusText: "Not Modified (cache hit)",
+    headers,
+  });
+};
+
 function getOctokit(token: string): Octokit {
   if (cachedClient && cachedClient.token === token) return cachedClient.client;
-  const client = new Octokit({ auth: token });
+  const client = new Octokit({
+    auth: token,
+    request: { fetch: conditionalFetch },
+  });
   cachedClient = { token, client };
   return client;
 }
@@ -59,45 +83,32 @@ export async function beetGet<T>(
   const headers: Record<string, string> = {};
   if (cached) headers["If-None-Match"] = cached.etag;
 
-  try {
-    const response = await octokit.request(opts.route, {
-      ...(opts.params ?? {}),
-      headers,
-    });
-    const respHeaders = response.headers as Record<string, string | undefined>;
-    const etag = respHeaders.etag ?? null;
-    const rateLimit = readRateLimit(respHeaders);
-    if (etag) {
-      await setCached<T>(opts.cacheKey, etag, response.data as T);
-    }
-    if (onRateLimit) onRateLimit(rateLimit);
+  const response = await octokit.request(opts.route, {
+    ...(opts.params ?? {}),
+    headers,
+  });
+  const respHeaders = response.headers as Record<string, string | undefined>;
+  const rateLimit = readRateLimit(respHeaders);
+  if (onRateLimit) onRateLimit(rateLimit);
+
+  // conditionalFetch promotes upstream 304 into a 200 with this marker header.
+  if (cached && respHeaders[CACHE_HIT_HEADER]) {
     return {
-      body: response.data as T,
-      fromCache: false,
-      etag,
+      body: cached.body,
+      fromCache: true,
+      etag: cached.etag,
       rateLimit,
     };
-  } catch (err) {
-    if (
-      cached &&
-      err !== null &&
-      typeof err === "object" &&
-      "status" in err &&
-      (err as { status: unknown }).status === 304
-    ) {
-      const e = err as {
-        response?: { headers?: Record<string, string | undefined> };
-      };
-      const respHeaders = e.response?.headers ?? {};
-      const rateLimit = readRateLimit(respHeaders);
-      if (onRateLimit) onRateLimit(rateLimit);
-      return {
-        body: cached.body,
-        fromCache: true,
-        etag: cached.etag,
-        rateLimit,
-      };
-    }
-    throw err;
   }
+
+  const etag = respHeaders.etag ?? null;
+  if (etag) {
+    await setCached<T>(opts.cacheKey, etag, response.data as T);
+  }
+  return {
+    body: response.data as T,
+    fromCache: false,
+    etag,
+    rateLimit,
+  };
 }
