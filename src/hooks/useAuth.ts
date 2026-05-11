@@ -31,18 +31,8 @@ export function useAuth() {
 
   const authQuery = useQuery<AuthValidation>({
     queryKey: AUTH_QUERY_KEY(token),
-    queryFn: async () => {
-      if (!token) {
-        return {
-          ok: false,
-          scopes: [],
-          missingScopes: [],
-          error: "no_token" as const,
-        };
-      }
-      return validateToken(token);
-    },
-    enabled: tokenQuery.isSuccess,
+    queryFn: () => validateToken(token ?? ""),
+    enabled: tokenQuery.isSuccess && !!token,
     staleTime: 30_000,
   });
 
@@ -53,15 +43,21 @@ export function useAuth() {
     }
   }, [authQuery.data, setAuth, setRateLimit]);
 
-  const saveToken = useMutation({
-    mutationFn: async (newToken: string) => {
-      await storeToken(newToken);
-      return newToken;
+  const validateAndSave = useMutation<AuthValidation, Error, string>({
+    mutationFn: async (newToken) => {
+      const result = await validateToken(newToken);
+      if (result.ok) {
+        await storeToken(newToken);
+      }
+      return result;
     },
-    onSuccess: (newToken) => {
+    onSuccess: (result, newToken) => {
+      if (!result.ok) return;
       setToken(newToken);
+      setAuth(result);
+      if (result.rateLimit) setRateLimit(result.rateLimit);
       queryClient.setQueryData(TOKEN_QUERY_KEY, newToken);
-      queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY(newToken) });
+      queryClient.setQueryData(AUTH_QUERY_KEY(newToken), result);
     },
   });
 
@@ -69,12 +65,15 @@ export function useAuth() {
     queryClient.invalidateQueries({ queryKey: AUTH_QUERY_KEY(token) });
   };
 
+  const lastCheckedAt = token ? authQuery.dataUpdatedAt : 0;
+
   return {
     token,
     auth,
-    isLoading: tokenQuery.isLoading || authQuery.isFetching,
-    lastCheckedAt: authQuery.dataUpdatedAt,
-    saveToken: (t: string) => saveToken.mutateAsync(t),
+    lastValidation: validateAndSave.data ?? null,
+    isLoading: tokenQuery.isLoading || authQuery.isFetching || validateAndSave.isPending,
+    lastCheckedAt,
+    validateAndSave: (t: string) => validateAndSave.mutateAsync(t),
     revalidate,
   };
 }

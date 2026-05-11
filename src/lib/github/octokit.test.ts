@@ -73,7 +73,7 @@ describe("beetGet (ETag-aware wrapper)", () => {
     );
 
     const result = await beetGet<{ hello: string }>(
-      { cacheKey: "test", url: "GET /test" },
+      { cacheKey: "test", route: "GET /test" },
       tokenProvider,
     );
 
@@ -108,7 +108,7 @@ describe("beetGet (ETag-aware wrapper)", () => {
     );
 
     const result = await beetGet<{ hello: string }>(
-      { cacheKey: "test", url: "GET /test" },
+      { cacheKey: "test", route: "GET /test" },
       tokenProvider,
     );
 
@@ -134,7 +134,7 @@ describe("beetGet (ETag-aware wrapper)", () => {
     );
 
     const result = await beetGet<{ hello: string }>(
-      { cacheKey: "test", url: "GET /test" },
+      { cacheKey: "test", route: "GET /test" },
       tokenProvider,
     );
 
@@ -146,7 +146,7 @@ describe("beetGet (ETag-aware wrapper)", () => {
   test("throws NoTokenError when no token is configured", async () => {
     const noToken = async () => null;
     await expect(
-      beetGet({ cacheKey: "test", url: "GET /test" }, noToken),
+      beetGet({ cacheKey: "test", route: "GET /test" }, noToken),
     ).rejects.toMatchObject({ name: "NoTokenError" });
   });
 });

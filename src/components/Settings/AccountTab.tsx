@@ -21,7 +21,8 @@ dayjs.extend(relativeTime);
 const TOKEN_PLACEHOLDER = "ghp_••••••••••••••••••••••••••••••••••••";
 
 export function AccountTab() {
-  const { auth, token, lastCheckedAt, saveToken, revalidate, isLoading } = useAuth();
+  const { auth, token, lastCheckedAt, validateAndSave, revalidate, isLoading, lastValidation } =
+    useAuth();
   const [draft, setDraft] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -31,13 +32,15 @@ export function AccountTab() {
     return () => window.clearInterval(id);
   }, [lastCheckedAt]);
 
+  const display = lastValidation && !lastValidation.ok ? lastValidation : auth;
+
   const scopes: ScopeStatus[] = useMemo(
     () =>
       REQUIRED_SCOPES.map((name) => ({
         name,
-        status: auth?.scopes.includes(name) ? "ok" : "missing",
+        status: display?.scopes.includes(name) ? "ok" : "missing",
       })),
-    [auth],
+    [display],
   );
 
   const lastCheckedLabel = lastCheckedAt ? dayjs(lastCheckedAt).from(now) : null;
@@ -45,8 +48,8 @@ export function AccountTab() {
   const onValidate = async () => {
     const trimmed = draft.trim();
     if (trimmed && trimmed !== token) {
-      await saveToken(trimmed);
-      setDraft("");
+      const result = await validateAndSave(trimmed);
+      if (result.ok) setDraft("");
     } else {
       revalidate();
     }
@@ -65,7 +68,7 @@ export function AccountTab() {
         <input
           type="text"
           readOnly
-          value={auth?.login ?? ""}
+          value={display?.login ?? ""}
           placeholder="—"
           className={inputClass}
           style={inputStyle()}
@@ -96,15 +99,15 @@ export function AccountTab() {
             Validate
           </button>
         </div>
-        {auth && (
+        {display && (
           <div className="mt-2 flex items-center gap-2 flex-wrap">
-            {auth.ok ? (
+            {display.ok ? (
               <Pill tone="success" soft>
-                ● valid{auth.login ? ` as ${auth.login}` : ""}
+                ● valid{display.login ? ` as ${display.login}` : ""}
               </Pill>
-            ) : auth.error === "no_token" ? null : (
+            ) : display.error === "no_token" ? null : (
               <Pill tone="warn" soft>
-                ● {auth.error === "invalid" ? "rejected" : "network error"}
+                ● {display.error === "invalid" ? "rejected" : "network error"}
               </Pill>
             )}
             {lastCheckedLabel && (

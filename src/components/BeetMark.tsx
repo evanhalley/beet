@@ -1,8 +1,13 @@
+"use client";
+
+import { useId } from "react";
+
 export function BeetMark({ size = 18 }: { size?: number }) {
+  const gradId = useId();
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: "block" }}>
       <defs>
-        <linearGradient id="beet-grad" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stopColor="var(--color-accent)" stopOpacity="1" />
           <stop offset="1" stopColor="var(--color-accent)" stopOpacity="0.78" />
         </linearGradient>
@@ -20,7 +25,7 @@ export function BeetMark({ size = 18 }: { size?: number }) {
         strokeLinecap="round"
         fill="none"
       />
-      <path d="M12 7.5 L 19 13 L 12 21 L 5 13 Z" fill="url(#beet-grad)" />
+      <path d="M12 7.5 L 19 13 L 12 21 L 5 13 Z" fill={`url(#${gradId})`} />
       <path
         d="M12 11.5 L 16 13.8 L 12 17.5 L 8 13.8 Z"
         fill="rgba(255,255,255,0.18)"

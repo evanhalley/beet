@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setRateLimitListener } from "@/lib/github/octokit";
+import { useAppStore } from "@/lib/store";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -15,5 +17,14 @@ export function Providers({ children }: { children: ReactNode }) {
         },
       }),
   );
+
+  useEffect(() => {
+    const setRateLimit = useAppStore.getState().setRateLimit;
+    setRateLimitListener((rl) => {
+      if (rl) setRateLimit(rl);
+    });
+    return () => setRateLimitListener(null);
+  }, []);
+
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }

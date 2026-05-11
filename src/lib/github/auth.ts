@@ -1,5 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { RequestError } from "@octokit/request-error";
+import { readRateLimit } from "@/lib/github/rate-limit";
 
 export const REQUIRED_SCOPES = [
   "repo",
@@ -26,16 +27,6 @@ export function parseScopes(header: string | null | undefined): string[] {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-}
-
-function readRateLimit(
-  headers: Record<string, string | undefined> | undefined,
-): { remaining: number; reset: number } | null {
-  if (!headers) return null;
-  const remaining = headers["x-ratelimit-remaining"];
-  const reset = headers["x-ratelimit-reset"];
-  if (remaining === undefined || reset === undefined) return null;
-  return { remaining: Number(remaining), reset: Number(reset) };
 }
 
 export async function validateToken(token: string): Promise<AuthValidation> {

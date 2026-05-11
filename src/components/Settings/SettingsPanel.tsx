@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { BeetMark } from "@/components/BeetMark";
 import { AccountTab } from "./AccountTab";
 import { NavIcon, type NavIconName } from "./NavIcon";
@@ -15,10 +15,28 @@ const ITEMS: readonly NavItem[] = [
   { id: "account", label: "Account", icon: "user" },
 ] as const;
 
-const APP_VERSION = "0.1.0";
+function useAppVersion(): string | null {
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    import("@tauri-apps/api/app")
+      .then(({ getVersion }) => getVersion())
+      .then((v) => {
+        if (!cancelled) setVersion(v);
+      })
+      .catch(() => {
+        // Not running in Tauri (e.g. browser dev, tests) — leave blank.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return version;
+}
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<NavItem["id"]>("account");
+  const appVersion = useAppVersion();
 
   return (
     <div
@@ -97,7 +115,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
               lineHeight: 1.5,
             }}
           >
-            Beet {APP_VERSION}
+            Beet {appVersion ?? ""}
           </div>
         </nav>
 

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 export function Stack({ children }: { children: ReactNode }) {
   return <div className="flex flex-col gap-[22px] max-w-[620px]">{children}</div>;
@@ -52,7 +52,7 @@ export function Field({
 export const inputClass =
   "w-full rounded-md border outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-0";
 
-export function inputStyle(mono = false): React.CSSProperties {
+export function inputStyle(mono = false): CSSProperties {
   return {
     padding: "7px 10px",
     fontSize: mono ? 11.5 : 12.5,
@@ -63,8 +63,8 @@ export function inputStyle(mono = false): React.CSSProperties {
   };
 }
 
-export function btnStyle(kind?: "primary"): React.CSSProperties {
-  const base: React.CSSProperties = {
+export function btnStyle(kind?: "primary"): CSSProperties {
+  const base: CSSProperties = {
     padding: "6px 12px",
     borderRadius: 6,
     fontSize: 12,

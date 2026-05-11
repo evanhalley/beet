@@ -1,6 +1,9 @@
 import { Octokit } from "@octokit/rest";
 import { getCached, setCached } from "@/lib/storage/etag-cache";
 import { getToken as getStoredToken } from "@/lib/storage/token";
+import { readRateLimit, type RateLimitInfo } from "@/lib/github/rate-limit";
+
+export type { RateLimitInfo };
 
 export class NoTokenError extends Error {
   constructor() {
@@ -11,13 +14,8 @@ export class NoTokenError extends Error {
 
 export interface BeetGetOptions {
   cacheKey: string;
-  url: string;
+  route: string;
   params?: Record<string, unknown>;
-}
-
-export interface RateLimitInfo {
-  remaining: number;
-  reset: number;
 }
 
 export interface BeetGetResult<T> {
@@ -38,16 +36,6 @@ function getOctokit(token: string): Octokit {
 
 export function __resetOctokitForTests(): void {
   cachedClient = null;
-}
-
-function readRateLimit(
-  headers: Record<string, string | undefined> | undefined,
-): RateLimitInfo | null {
-  if (!headers) return null;
-  const remaining = headers["x-ratelimit-remaining"];
-  const reset = headers["x-ratelimit-reset"];
-  if (remaining === undefined || reset === undefined) return null;
-  return { remaining: Number(remaining), reset: Number(reset) };
 }
 
 type TokenProvider = () => Promise<string | null>;
@@ -72,7 +60,7 @@ export async function beetGet<T>(
   if (cached) headers["If-None-Match"] = cached.etag;
 
   try {
-    const response = await octokit.request(opts.url, {
+    const response = await octokit.request(opts.route, {
       ...(opts.params ?? {}),
       headers,
     });

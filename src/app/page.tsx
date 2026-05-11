@@ -9,7 +9,7 @@ import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 
 export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const { auth, isLoading } = useAuth();
+  const { token, auth, isLoading } = useAuth();
 
   if (settingsOpen) {
     return <SettingsPanel onClose={() => setSettingsOpen(false)} />;
@@ -17,9 +17,8 @@ export default function Page() {
 
   const bannerReason: MissingTokenReason | null = (() => {
     if (isLoading) return null;
-    if (!auth) return null;
-    if (auth.error === "no_token") return "no_token";
-    if (auth.error === "invalid") return "invalid";
+    if (!token) return "no_token";
+    if (auth?.error === "invalid") return "invalid";
     return null;
   })();
 
