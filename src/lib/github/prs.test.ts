@@ -50,6 +50,7 @@ import { storeToken } from "@/lib/storage/token";
 
 const RATE_HEADERS = {
   "x-ratelimit-remaining": "4990",
+  "x-ratelimit-limit": "5000",
   "x-ratelimit-reset": "1700000000",
 };
 

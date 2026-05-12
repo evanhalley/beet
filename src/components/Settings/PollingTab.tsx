@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import dayjs from "dayjs";
+import dayjs from "@/lib/dayjs";
 import { useAppStore } from "@/lib/store";
 import { setPollingIntervalSec } from "@/lib/storage/settings";
 import { Field, H, Stack, inputClass, inputStyle } from "./atoms";
@@ -117,6 +117,10 @@ function RateLimitDisplay() {
         style={{ fontSize: 14, color: "var(--color-text)", fontWeight: 600 }}
       >
         {rateLimit.remaining}
+        <span style={{ color: "var(--color-text-faint)", fontWeight: 500 }}>
+          {" / "}
+          {rateLimit.limit}
+        </span>
       </div>
     </Field>
   );

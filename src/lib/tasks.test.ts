@@ -24,6 +24,15 @@ describe("compileTaskRegex", () => {
     expect(re?.global).toBe(true);
   });
 
+  test("/pattern/flags forces global flag even when user omits it", () => {
+    // /PROJ-\d+/i — user wants case-insensitive but didn't add g. Without
+    // forcing g, extractTaskUrls would silently miss every match past the
+    // first because String.match() with a non-global regex returns one hit.
+    const re = compileTaskRegex("/PROJ-\\d+/i");
+    expect(re?.global).toBe(true);
+    expect(re?.ignoreCase).toBe(true);
+  });
+
   test("returns null on invalid pattern", () => {
     expect(compileTaskRegex("[unterminated")).toBeNull();
   });

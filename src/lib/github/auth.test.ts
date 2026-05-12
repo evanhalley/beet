@@ -31,7 +31,11 @@ describe("validateToken", () => {
     expect(result.login).toBe("octocat");
     expect(result.scopes).toEqual([...REQUIRED_SCOPES]);
     expect(result.missingScopes).toEqual([]);
-    expect(result.rateLimit).toEqual({ remaining: 4998, reset: 1700000000 });
+    expect(result.rateLimit).toEqual({
+      remaining: 4998,
+      limit: 5000,
+      reset: 1700000000,
+    });
   });
 
   test("flags missingScopes when the token lacks notifications", async () => {

@@ -6,7 +6,10 @@ export function compileTaskRegex(input: string | null | undefined): RegExp | nul
   try {
     const m = input.match(/^\/(.*)\/([a-z]*)$/i);
     if (m) {
-      return new RegExp(m[1], m[2] || "g");
+      // extractTaskUrls uses String.match, which only returns multiple hits
+      // when the regex is global — force `g` while preserving user flags.
+      const flags = m[2].includes("g") ? m[2] : m[2] + "g";
+      return new RegExp(m[1], flags);
     }
     return new RegExp(input, "g");
   } catch {

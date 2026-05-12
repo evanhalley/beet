@@ -63,6 +63,7 @@ function makeWrapper() {
 
 const RATE_HEADERS = {
   "x-ratelimit-remaining": "4900",
+  "x-ratelimit-limit": "5000",
   "x-ratelimit-reset": "1700000000",
 };
 

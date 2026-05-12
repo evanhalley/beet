@@ -65,6 +65,7 @@ describe("beetGet (ETag-aware wrapper)", () => {
             headers: {
               ETag: 'W/"v1"',
               "x-ratelimit-remaining": "4990",
+              "x-ratelimit-limit": "5000",
               "x-ratelimit-reset": "1700000100",
             },
           },
@@ -81,7 +82,11 @@ describe("beetGet (ETag-aware wrapper)", () => {
     expect(result.fromCache).toBe(false);
     expect(result.body).toEqual({ hello: "world" });
     expect(result.etag).toBe('W/"v1"');
-    expect(result.rateLimit).toEqual({ remaining: 4990, reset: 1700000100 });
+    expect(result.rateLimit).toEqual({
+      remaining: 4990,
+      limit: 5000,
+      reset: 1700000100,
+    });
     expect(findRow("test")?.etag).toBe('W/"v1"');
   });
 
@@ -101,6 +106,7 @@ describe("beetGet (ETag-aware wrapper)", () => {
           status: 304,
           headers: {
             "x-ratelimit-remaining": "4980",
+            "x-ratelimit-limit": "5000",
             "x-ratelimit-reset": "1700000200",
           },
         });
@@ -116,7 +122,11 @@ describe("beetGet (ETag-aware wrapper)", () => {
     expect(result.fromCache).toBe(true);
     expect(result.body).toEqual({ hello: "cached" });
     expect(result.etag).toBe('W/"v1"');
-    expect(result.rateLimit).toEqual({ remaining: 4980, reset: 1700000200 });
+    expect(result.rateLimit).toEqual({
+      remaining: 4980,
+      limit: 5000,
+      reset: 1700000200,
+    });
   });
 
   test("200 with new ETag overwrites cached entry", async () => {

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import dayjs from "dayjs";
-import relativeTime from "dayjs/plugin/relativeTime";
+import dayjs from "@/lib/dayjs";
 import { useAuth } from "@/hooks/useAuth";
 import { REQUIRED_SCOPES } from "@/lib/github/auth";
 import { useAppStore } from "@/lib/store";
@@ -17,8 +16,6 @@ import {
   inputClass,
   inputStyle,
 } from "./atoms";
-
-dayjs.extend(relativeTime);
 
 const TOKEN_PLACEHOLDER = "ghp_••••••••••••••••••••••••••••••••••••";
 

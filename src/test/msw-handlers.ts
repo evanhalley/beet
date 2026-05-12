@@ -9,6 +9,7 @@ const PARTIAL_SCOPES = "repo, read:org, read:user, user:email";
 
 const RATE_HEADERS = {
   "x-ratelimit-remaining": "4998",
+  "x-ratelimit-limit": "5000",
   "x-ratelimit-reset": "1700000000",
 };
 
