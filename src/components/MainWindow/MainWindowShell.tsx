@@ -90,7 +90,7 @@ export function MainWindowShell({
         style={{
           flex: 1,
           display: "grid",
-          gridTemplateColumns: `200px 1fr 4px ${detailWidth}px`,
+          gridTemplateColumns: `200px 1fr 1px ${detailWidth}px`,
           minHeight: 0,
         }}
       >
