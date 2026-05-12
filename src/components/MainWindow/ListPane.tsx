@@ -62,7 +62,6 @@ export function ListPane() {
       aria-label="List"
       style={{
         borderLeft: "1px solid var(--color-border)",
-        borderRight: "1px solid var(--color-border)",
         overflow: "auto",
         background: "var(--color-bg)",
       }}

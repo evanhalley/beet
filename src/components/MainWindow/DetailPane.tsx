@@ -44,7 +44,6 @@ export function DetailPane({ item }: DetailPaneProps) {
         aria-label="Detail"
         style={{
           background: "var(--color-bg-elev)",
-          borderLeft: "1px solid var(--color-border)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
