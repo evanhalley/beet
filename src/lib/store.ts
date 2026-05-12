@@ -20,6 +20,8 @@ export interface AppStore {
 
   uiError: string | null;
 
+  selectedItemId: string | null;
+
   settings: BeetSettings;
   settingsHydrated: boolean;
 
@@ -36,6 +38,8 @@ export interface AppStore {
   setShowAllReviewsOverride: (value: boolean | null) => void;
 
   setUiError: (message: string | null) => void;
+
+  setSelectedItemId: (id: string | null) => void;
 
   setSettings: (settings: Partial<BeetSettings>) => void;
   hydrateSettings: (settings: BeetSettings) => void;
@@ -54,6 +58,7 @@ const initialState = {
   recentlyResolved: [] as ActionableItem[],
   showAllReviewsOverride: null as boolean | null,
   uiError: null as string | null,
+  selectedItemId: null as string | null,
   settings: SETTINGS_DEFAULTS,
   settingsHydrated: false,
 };
@@ -74,6 +79,8 @@ export const useAppStore = create<AppStore>((set) => ({
   setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
 
   setUiError: (message) => set({ uiError: message }),
+
+  setSelectedItemId: (id) => set({ selectedItemId: id }),
 
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),

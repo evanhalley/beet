@@ -61,17 +61,27 @@ describe("ReviewRequestsSection", () => {
   test("renders rows sorted by score desc", () => {
     seedItems([makeItem("a", 3), makeItem("b", 9), makeItem("c", 5)]);
     render(<ReviewRequestsSection />);
-    const buttons = screen.getAllByRole("button", { name: /open .* on github/i });
+    const buttons = screen.getAllByRole("button", { name: /^select title /i });
     expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
-      "Open Title b on GitHub",
-      "Open Title c on GitHub",
-      "Open Title a on GitHub",
+      "Select Title b",
+      "Select Title c",
+      "Select Title a",
     ]);
   });
 
   test("renders empty state when no items", () => {
     render(<ReviewRequestsSection />);
     expect(screen.getByText(/no review requests right now/i)).toBeInTheDocument();
+  });
+
+  test("rows have aria-pressed reflecting selection", () => {
+    seedItems([makeItem("a", 6), makeItem("b", 5)]);
+    useAppStore.setState({ selectedItemId: "a" });
+    render(<ReviewRequestsSection />);
+    const a = screen.getByRole("button", { name: "Select Title a" });
+    const b = screen.getByRole("button", { name: "Select Title b" });
+    expect(a.getAttribute("aria-pressed")).toBe("true");
+    expect(b.getAttribute("aria-pressed")).toBe("false");
   });
 
   test("Show all toggle writes to override slice (not the global setting)", async () => {
@@ -116,19 +126,17 @@ describe("ReviewRequestsSection", () => {
     expect(useAppStore.getState().showAllReviewsOverride).toBeNull();
   });
 
-  test("clicking a row invokes tauri shell open", async () => {
+  test("clicking a row sets selectedItemId (does not open browser)", async () => {
     const user = userEvent.setup();
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
       open: ReturnType<typeof vi.fn>;
     };
     seedItems([makeItem("a", 7)]);
     render(<ReviewRequestsSection />);
-    await user.click(
-      screen.getByRole("button", { name: "Open Title a on GitHub" }),
-    );
-    expect(shellMod.open).toHaveBeenCalledWith(
-      "https://github.com/acme/repo/pull/a",
-    );
+    expect(useAppStore.getState().selectedItemId).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Select Title a" }));
+    expect(useAppStore.getState().selectedItemId).toBe("a");
+    expect(shellMod.open).not.toHaveBeenCalled();
   });
 
   test("collapse hides the list", async () => {
@@ -136,9 +144,9 @@ describe("ReviewRequestsSection", () => {
     seedItems([makeItem("a", 7)]);
     render(<ReviewRequestsSection />);
     const header = screen.getByRole("button", { name: /review requests/i });
-    expect(screen.getByRole("button", { name: /open title a/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /select title a/i })).toBeInTheDocument();
     await user.click(header);
-    expect(screen.queryByRole("button", { name: /open title a/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /select title a/i })).toBeNull();
   });
 
   test("task chips render when present", () => {
@@ -151,7 +159,7 @@ describe("ReviewRequestsSection", () => {
       }),
     ]);
     render(<ReviewRequestsSection />);
-    const row = screen.getByRole("button", { name: /open title a/i });
+    const row = screen.getByRole("button", { name: /select title a/i });
     expect(within(row).getByText("PROJ-1")).toBeInTheDocument();
     expect(within(row).getByText("PROJ-2")).toBeInTheDocument();
   });

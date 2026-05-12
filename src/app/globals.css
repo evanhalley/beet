@@ -51,3 +51,9 @@ body {
   font-feature-settings: "zero", "ss03";
   letter-spacing: 0;
 }
+
+@keyframes beet-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

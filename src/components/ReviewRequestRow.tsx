@@ -1,5 +1,6 @@
 "use client";
 
+import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { Pill } from "./Pill";
@@ -13,13 +14,16 @@ export interface ReviewRequestRowProps {
 
 export function ReviewRequestRow({ item }: ReviewRequestRowProps) {
   const pr = item.pr;
+  const active = useAppStore((s) => s.selectedItemId === item.id);
+  const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
   if (!pr) return null;
 
   return (
     <RowShell
-      url={item.url}
-      ariaLabel={`Open ${item.title} on GitHub`}
+      ariaLabel={`Select ${item.title}`}
       unread={item.unread}
+      active={active}
+      onSelect={() => setSelectedItemId(item.id)}
       aside={<ScoreBar score={pr.score} width={26} />}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
