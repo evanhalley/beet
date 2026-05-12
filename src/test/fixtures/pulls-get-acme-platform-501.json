@@ -1,0 +1,13 @@
+{
+  "number": 501,
+  "title": "Refactor token cache",
+  "body": "Fixes https://your-company.atlassian.net/browse/PLAT-100 and https://your-company.atlassian.net/browse/PLAT-101",
+  "html_url": "https://github.com/acme/platform/pull/501",
+  "user": { "login": "rina" },
+  "requested_reviewers": [{ "login": "octocat" }],
+  "draft": false,
+  "additions": 80,
+  "deletions": 12,
+  "created_at": "2026-05-08T10:00:00Z",
+  "updated_at": "2026-05-09T11:00:00Z"
+}

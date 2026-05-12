@@ -1,6 +1,6 @@
 import { Octokit } from "@octokit/rest";
 import { RequestError } from "@octokit/request-error";
-import { readRateLimit } from "@/lib/github/rate-limit";
+import { readRateLimit, type RateLimitInfo } from "@/lib/github/rate-limit";
 
 export const REQUIRED_SCOPES = [
   "repo",
@@ -17,7 +17,7 @@ export interface AuthValidation {
   login?: string;
   scopes: string[];
   missingScopes: string[];
-  rateLimit?: { remaining: number; reset: number } | null;
+  rateLimit?: RateLimitInfo | null;
   error?: "no_token" | "invalid" | "network";
 }
 

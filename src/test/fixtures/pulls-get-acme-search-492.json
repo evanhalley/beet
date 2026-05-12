@@ -1,0 +1,13 @@
+{
+  "number": 492,
+  "title": "Tune indexer",
+  "body": "no tasks",
+  "html_url": "https://github.com/acme/search/pull/492",
+  "user": { "login": "mo" },
+  "requested_reviewers": [{ "login": "octocat" }],
+  "draft": false,
+  "additions": 40,
+  "deletions": 40,
+  "created_at": "2026-05-06T12:00:00Z",
+  "updated_at": "2026-05-08T12:00:00Z"
+}

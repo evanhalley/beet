@@ -1,0 +1,165 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ReviewRequestsSection } from "./ReviewRequestsSection";
+import { useAppStore } from "@/lib/store";
+import { SETTINGS_DEFAULTS } from "@/lib/storage/settings";
+import type { ActionableItem } from "@/lib/types";
+
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  open: vi.fn(async () => {}),
+}));
+
+function makeItem(
+  id: string,
+  score: number,
+  overrides: Partial<ActionableItem["pr"]> = {},
+): ActionableItem {
+  return {
+    id,
+    kind: "pr",
+    title: `Title ${id}`,
+    url: `https://github.com/acme/repo/pull/${id}`,
+    repoFullName: "acme/repo",
+    updatedAt: "2026-05-09T10:00:00Z",
+    unread: true,
+    dismissedUntilFingerprint: null,
+    pr: {
+      number: 1,
+      author: "rina",
+      isAuthoredByMe: false,
+      isReviewRequestedFromMe: true,
+      isAuthorOnMyTeam: false,
+      iveCommented: false,
+      iveReviewed: false,
+      iveApproved: false,
+      isDraft: false,
+      additions: 10,
+      deletions: 5,
+      createdAt: "2026-05-08T10:00:00Z",
+      lifecycle: "in_review",
+      taskUrls: [],
+      score,
+      ...overrides,
+    },
+  };
+}
+
+function seedItems(items: ActionableItem[]) {
+  useAppStore.setState({ reviewRequests: items });
+}
+
+beforeEach(() => {
+  useAppStore.getState().reset();
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("ReviewRequestsSection", () => {
+  test("renders rows sorted by score desc", () => {
+    seedItems([makeItem("a", 3), makeItem("b", 9), makeItem("c", 5)]);
+    render(<ReviewRequestsSection />);
+    const buttons = screen.getAllByRole("button", { name: /open .* on github/i });
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Open Title b on GitHub",
+      "Open Title c on GitHub",
+      "Open Title a on GitHub",
+    ]);
+  });
+
+  test("renders empty state when no items", () => {
+    render(<ReviewRequestsSection />);
+    expect(screen.getByText(/no review requests right now/i)).toBeInTheDocument();
+  });
+
+  test("Show all toggle writes to override slice (not the global setting)", async () => {
+    const user = userEvent.setup();
+    seedItems([makeItem("a", 6)]);
+    expect(useAppStore.getState().showAllReviewsOverride).toBeNull();
+    expect(useAppStore.getState().settings.showAllApproved).toBe(false);
+
+    render(<ReviewRequestsSection />);
+    await user.click(screen.getByLabelText(/show all review requests/i));
+
+    expect(useAppStore.getState().showAllReviewsOverride).toBe(true);
+    // Global is untouched.
+    expect(useAppStore.getState().settings.showAllApproved).toBe(false);
+  });
+
+  test("override resolves over the global default", () => {
+    seedItems([makeItem("a", 6)]);
+    useAppStore.setState({
+      settings: { ...SETTINGS_DEFAULTS, showAllApproved: true },
+      showAllReviewsOverride: false,
+    });
+    render(<ReviewRequestsSection />);
+    const toggle = screen.getByLabelText(
+      /show all review requests/i,
+    ) as HTMLInputElement;
+    // override (false) wins despite global being true
+    expect(toggle.checked).toBe(false);
+  });
+
+  test("'use default' link is hidden when override is null and clears it when clicked", async () => {
+    const user = userEvent.setup();
+    seedItems([makeItem("a", 6)]);
+    render(<ReviewRequestsSection />);
+
+    expect(screen.queryByRole("button", { name: /reset show all/i })).toBeNull();
+
+    await user.click(screen.getByLabelText(/show all review requests/i));
+    expect(useAppStore.getState().showAllReviewsOverride).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: /reset show all/i }));
+    expect(useAppStore.getState().showAllReviewsOverride).toBeNull();
+  });
+
+  test("clicking a row invokes tauri shell open", async () => {
+    const user = userEvent.setup();
+    const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
+      open: ReturnType<typeof vi.fn>;
+    };
+    seedItems([makeItem("a", 7)]);
+    render(<ReviewRequestsSection />);
+    await user.click(
+      screen.getByRole("button", { name: "Open Title a on GitHub" }),
+    );
+    expect(shellMod.open).toHaveBeenCalledWith(
+      "https://github.com/acme/repo/pull/a",
+    );
+  });
+
+  test("collapse hides the list", async () => {
+    const user = userEvent.setup();
+    seedItems([makeItem("a", 7)]);
+    render(<ReviewRequestsSection />);
+    const header = screen.getByRole("button", { name: /review requests/i });
+    expect(screen.getByRole("button", { name: /open title a/i })).toBeInTheDocument();
+    await user.click(header);
+    expect(screen.queryByRole("button", { name: /open title a/i })).toBeNull();
+  });
+
+  test("task chips render when present", () => {
+    seedItems([
+      makeItem("a", 6, {
+        taskUrls: [
+          "https://your-company.atlassian.net/browse/PROJ-1",
+          "https://your-company.atlassian.net/browse/PROJ-2",
+        ],
+      }),
+    ]);
+    render(<ReviewRequestsSection />);
+    const row = screen.getByRole("button", { name: /open title a/i });
+    expect(within(row).getByText("PROJ-1")).toBeInTheDocument();
+    expect(within(row).getByText("PROJ-2")).toBeInTheDocument();
+  });
+
+  test("rows are exposed as a list for screen readers", () => {
+    seedItems([makeItem("a", 6), makeItem("b", 5)]);
+    render(<ReviewRequestsSection />);
+    const list = screen.getByRole("list");
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+  });
+});

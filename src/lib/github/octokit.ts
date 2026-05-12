@@ -27,9 +27,26 @@ export interface BeetGetResult<T> {
 
 let cachedClient: { token: string; client: Octokit } | null = null;
 
+// Octokit treats 304 as an error and `@octokit/plugin-request-log` calls
+// `log.error(...)` on every rejected request — including conditional-GET cache
+// hits. Default `log.error` is bound to `console.error`, which Next.js's dev
+// overlay surfaces as a "Console Error". Suppress just the 304 line; real
+// errors keep flowing.
+const NOT_MODIFIED_LOG = / - 304 with id /;
+
+const octokitLog = {
+  debug: () => {},
+  info: () => {},
+  warn: console.warn.bind(console),
+  error: (message: string, ...args: unknown[]) => {
+    if (typeof message === "string" && NOT_MODIFIED_LOG.test(message)) return;
+    console.error(message, ...args);
+  },
+};
+
 function getOctokit(token: string): Octokit {
   if (cachedClient && cachedClient.token === token) return cachedClient.client;
-  const client = new Octokit({ auth: token });
+  const client = new Octokit({ auth: token, log: octokitLog });
   cachedClient = { token, client };
   return client;
 }

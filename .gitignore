@@ -10,6 +10,9 @@ npm-debug.log*
 out/
 next-env.d.ts.bak
 
+# TypeScript
+*.tsbuildinfo
+
 # Tauri
 src-tauri/target/
 src-tauri/gen/schemas/
