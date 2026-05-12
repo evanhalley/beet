@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppStore, selectShowAllReviews } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 import { Sidebar } from "./Sidebar";
@@ -18,6 +18,10 @@ const DETAIL_WIDTH_KEY = "beet.detailWidth";
 const DETAIL_WIDTH_DEFAULT = 380;
 const DETAIL_WIDTH_MIN = 280;
 const DETAIL_WIDTH_MAX = 720;
+
+const SIDEBAR_COLLAPSED_KEY = "beet.sidebarCollapsed";
+const SIDEBAR_WIDTH_EXPANDED = 200;
+const SIDEBAR_WIDTH_COLLAPSED = 44;
 
 function clampDetailWidth(w: number): number {
   if (!Number.isFinite(w)) return DETAIL_WIDTH_DEFAULT;
@@ -54,15 +58,37 @@ export function MainWindowShell({
   }, [selectedItemId, reviewRequests, showAll]);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
-  const [detailWidth, setDetailWidth] = useState<number>(() => {
-    if (typeof window === "undefined") return DETAIL_WIDTH_DEFAULT;
-    const raw = window.localStorage.getItem(DETAIL_WIDTH_KEY);
-    if (raw == null) return DETAIL_WIDTH_DEFAULT;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed)
-      ? clampDetailWidth(parsed)
-      : DETAIL_WIDTH_DEFAULT;
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [detailWidth, setDetailWidth] = useState<number>(DETAIL_WIDTH_DEFAULT);
+
+  // Hydrate persisted layout state from localStorage on mount.
+  // Kept in an effect (not a lazy initializer) so SSR/static-build markup
+  // matches the client's first render, then we sync up post-hydration.
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (stored === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSidebarCollapsed(true);
+    }
+    const rawWidth = window.localStorage.getItem(DETAIL_WIDTH_KEY);
+    if (rawWidth != null) {
+      const parsed = Number(rawWidth);
+      if (Number.isFinite(parsed)) {
+        setDetailWidth(clampDetailWidth(parsed));
+      }
+    }
+  }, []);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }, []);
+  const sidebarWidth = sidebarCollapsed
+    ? SIDEBAR_WIDTH_COLLAPSED
+    : SIDEBAR_WIDTH_EXPANDED;
 
   const onResize = useCallback((clientX: number) => {
     const grid = gridRef.current;
@@ -85,19 +111,36 @@ export function MainWindowShell({
       }}
     >
       <TitleBar onOpenSettings={onOpenSettings} settingsOpen={settingsOpen} />
-      <div
-        ref={gridRef}
-        style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: `200px 1fr 1px ${detailWidth}px`,
-          minHeight: 0,
-        }}
-      >
-        <Sidebar activeSection="reviews" />
-        <ListPane />
-        <Splitter onResize={onResize} />
-        <DetailPane item={selected} />
+      <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
+        <div
+          style={{
+            width: sidebarWidth,
+            flexShrink: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            transition: "width 180ms cubic-bezier(0.4, 0, 0.2, 1)",
+          }}
+        >
+          <Sidebar
+            activeSection="reviews"
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={toggleSidebar}
+          />
+        </div>
+        <div
+          ref={gridRef}
+          style={{
+            flex: 1,
+            display: "grid",
+            gridTemplateColumns: `1fr 1px ${detailWidth}px`,
+            minHeight: 0,
+          }}
+        >
+          <ListPane />
+          <Splitter onResize={onResize} />
+          <DetailPane item={selected} />
+        </div>
       </div>
     </div>
   );

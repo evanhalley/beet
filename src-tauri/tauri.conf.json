@@ -14,8 +14,10 @@
       {
         "label": "main",
         "title": "Beet",
-        "width": 800,
-        "height": 600,
+        "width": 1240,
+        "height": 820,
+        "minWidth": 880,
+        "minHeight": 560,
         "resizable": true,
         "fullscreen": false
       }
