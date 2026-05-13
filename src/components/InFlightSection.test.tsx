@@ -1,0 +1,123 @@
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { InFlightSection } from "./InFlightSection";
+import { useAppStore } from "@/lib/store";
+import type { ActionableItem, PrLifecycle } from "@/lib/types";
+
+vi.mock("@tauri-apps/plugin-shell", () => ({
+  open: vi.fn(async () => {}),
+}));
+
+interface MakeItemOpts {
+  id: string;
+  updatedAt: string;
+  lifecycle?: PrLifecycle;
+  mergeQueue?: ActionableItem["pr"] extends infer P
+    ? P extends { mergeQueue?: infer M }
+      ? M
+      : never
+    : never;
+}
+
+function makeItem({
+  id,
+  updatedAt,
+  lifecycle = "open",
+  mergeQueue,
+}: MakeItemOpts): ActionableItem {
+  return {
+    id,
+    kind: "pr",
+    title: `Title ${id}`,
+    url: `https://github.com/acme/repo/pull/${id}`,
+    repoFullName: "acme/repo",
+    updatedAt,
+    unread: false,
+    dismissedUntilFingerprint: null,
+    pr: {
+      number: 1,
+      author: "octocat",
+      isAuthoredByMe: true,
+      isReviewRequestedFromMe: false,
+      isAuthorOnMyTeam: false,
+      iveCommented: false,
+      iveReviewed: false,
+      iveApproved: false,
+      isDraft: false,
+      additions: 10,
+      deletions: 5,
+      createdAt: "2026-05-08T10:00:00Z",
+      lifecycle,
+      mergeQueue,
+      taskUrls: [],
+      score: 0,
+    },
+  };
+}
+
+function seed(items: ActionableItem[]) {
+  useAppStore.getState().setInFlight(items);
+}
+
+beforeEach(() => {
+  useAppStore.getState().reset();
+});
+
+describe("InFlightSection", () => {
+  test("rows sorted by updatedAt desc (not score)", () => {
+    seed([
+      makeItem({ id: "older", updatedAt: "2026-05-01T00:00:00Z" }),
+      makeItem({ id: "newest", updatedAt: "2026-05-12T00:00:00Z" }),
+      makeItem({ id: "middle", updatedAt: "2026-05-09T00:00:00Z" }),
+    ]);
+    render(<InFlightSection />);
+    const buttons = screen.getAllByRole("button", { name: /^select title /i });
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Select Title newest",
+      "Select Title middle",
+      "Select Title older",
+    ]);
+  });
+
+  test("renders the Lifecycle pill, including queue · ? for merge_queue", () => {
+    seed([
+      makeItem({
+        id: "queued",
+        updatedAt: "2026-05-12T00:00:00Z",
+        lifecycle: "merge_queue",
+        mergeQueue: { position: null, enteredAt: "2026-05-12T00:00:00Z" },
+      }),
+    ]);
+    render(<InFlightSection />);
+    expect(screen.getByText(/queue · \?/)).toBeInTheDocument();
+  });
+
+  test("renders the Kicked-from-queue badge when ejectedChecks is set", () => {
+    seed([
+      makeItem({
+        id: "ejected",
+        updatedAt: "2026-05-12T00:00:00Z",
+        lifecycle: "open",
+        mergeQueue: {
+          position: null,
+          enteredAt: "2026-05-11T00:00:00Z",
+          lastEjectionAt: "2026-05-12T00:00:00Z",
+          ejectedChecks: [{ name: "ci/integration", conclusion: "failure" }],
+        },
+      }),
+    ]);
+    render(<InFlightSection />);
+    expect(screen.getByText("Kicked from queue")).toBeInTheDocument();
+  });
+
+  test("does not render the ScoreBar (review-request-only)", () => {
+    seed([makeItem({ id: "a", updatedAt: "2026-05-12T00:00:00Z" })]);
+    render(<InFlightSection />);
+    expect(screen.queryByLabelText(/score/i)).not.toBeInTheDocument();
+  });
+
+  test("empty state when no items", () => {
+    render(<InFlightSection />);
+    expect(screen.getByText(/no prs in flight right now/i)).toBeInTheDocument();
+  });
+});

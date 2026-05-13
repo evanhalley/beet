@@ -21,3 +21,9 @@ A 10-step iteration plan from empty repo to V1 acceptance (per [SPECS.md §16](S
 - **#4 is the UI shell on its own.** The original plan bundled the shell refactor with In Flight + lifecycle history (now #5). Splitting it buys earlier visual feedback against the design and keeps #5's review surface focused on query/lifecycle semantics.
 - **#1–#3 rebuild PRZ inside Beet's shell.** Resist the urge to merge #1 + #3 — the SQLite + ETag work in #2 is load-bearing for everything after.
 - **#8 is the densest.** Mentions + fingerprints + snooze touch a lot of the data model. Natural sub-cut if it feels too big: 8a "mentions only", 8b "fingerprints + unread/snooze".
+
+## Off-plan items
+
+These aren't part of the original 10-step V1 plan; they sit alongside the build plan and can ship whenever they fit.
+
+- **[Merge-queue auto-requeue](issues/merge-queue-auto-requeue.md)** — when a PR you authored ejects from the merge queue, automatically re-enqueue it (capped by retry count). Scaffolded by #5 (`pr_ejection_events` table + `pr.mergeQueue.ejectedChecks`); the actual GraphQL `enqueuePullRequest` mutation + Settings UI + retry cap live in this issue. Treat all check failures as retry-worthy — no flaky-check allowlist.

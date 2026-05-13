@@ -10,10 +10,11 @@ export interface AppStore {
   rateLimit: RateLimitInfo | null;
   auth: AuthValidation | null;
 
-  reviewRequests: ActionableItem[];
-  inFlight: ActionableItem[];
-  standaloneRuns: ActionableItem[];
-  recentlyResolved: ActionableItem[];
+  actionableItems: Record<string, ActionableItem>;
+  reviewRequestIds: string[];
+  inFlightIds: string[];
+  standaloneRunIds: string[];
+  recentlyResolvedIds: string[];
 
   // null = use settings.showAllApproved; true|false = session override.
   showAllReviewsOverride: boolean | null;
@@ -52,16 +53,62 @@ const initialState = {
   user: null,
   rateLimit: null,
   auth: null,
-  reviewRequests: [] as ActionableItem[],
-  inFlight: [] as ActionableItem[],
-  standaloneRuns: [] as ActionableItem[],
-  recentlyResolved: [] as ActionableItem[],
+  actionableItems: {} as Record<string, ActionableItem>,
+  reviewRequestIds: [] as string[],
+  inFlightIds: [] as string[],
+  standaloneRunIds: [] as string[],
+  recentlyResolvedIds: [] as string[],
   showAllReviewsOverride: null as boolean | null,
   uiError: null as string | null,
   selectedItemId: null as string | null,
   settings: SETTINGS_DEFAULTS,
   settingsHydrated: false,
 };
+
+type SectionKey =
+  | "reviewRequestIds"
+  | "inFlightIds"
+  | "standaloneRunIds"
+  | "recentlyResolvedIds";
+
+const SECTION_KEYS: SectionKey[] = [
+  "reviewRequestIds",
+  "inFlightIds",
+  "standaloneRunIds",
+  "recentlyResolvedIds",
+];
+
+function applySection(
+  state: Pick<
+    AppStore,
+    | "actionableItems"
+    | "reviewRequestIds"
+    | "inFlightIds"
+    | "standaloneRunIds"
+    | "recentlyResolvedIds"
+  >,
+  section: SectionKey,
+  items: ActionableItem[],
+) {
+  const nextIds = items.map((it) => it.id);
+  const mergedItems = { ...state.actionableItems };
+  for (const item of items) {
+    mergedItems[item.id] = item;
+  }
+  const nextSectionLists = { ...state, [section]: nextIds };
+  // GC: drop any actionable item not referenced by any section list.
+  const referenced = new Set<string>();
+  for (const key of SECTION_KEYS) {
+    for (const id of nextSectionLists[key]) referenced.add(id);
+  }
+  for (const id of Object.keys(mergedItems)) {
+    if (!referenced.has(id)) delete mergedItems[id];
+  }
+  return {
+    actionableItems: mergedItems,
+    [section]: nextIds,
+  } as Partial<AppStore>;
+}
 
 export const useAppStore = create<AppStore>((set) => ({
   ...initialState,
@@ -71,10 +118,13 @@ export const useAppStore = create<AppStore>((set) => ({
   setAuth: (auth) =>
     set({ auth, user: auth?.login ? { login: auth.login } : null }),
 
-  setReviewRequests: (items) => set({ reviewRequests: items }),
-  setInFlight: (items) => set({ inFlight: items }),
-  setStandaloneRuns: (items) => set({ standaloneRuns: items }),
-  setRecentlyResolved: (items) => set({ recentlyResolved: items }),
+  setReviewRequests: (items) =>
+    set((s) => applySection(s, "reviewRequestIds", items)),
+  setInFlight: (items) => set((s) => applySection(s, "inFlightIds", items)),
+  setStandaloneRuns: (items) =>
+    set((s) => applySection(s, "standaloneRunIds", items)),
+  setRecentlyResolved: (items) =>
+    set((s) => applySection(s, "recentlyResolvedIds", items)),
 
   setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
 
@@ -94,4 +144,34 @@ export const useAppStore = create<AppStore>((set) => ({
 // Override (session-scoped) wins over the persisted global default.
 export function selectShowAllReviews(s: AppStore): boolean {
   return s.showAllReviewsOverride ?? s.settings.showAllApproved;
+}
+
+function pluckItems(s: AppStore, ids: string[]): ActionableItem[] {
+  const out: ActionableItem[] = [];
+  for (const id of ids) {
+    const it = s.actionableItems[id];
+    if (it) out.push(it);
+  }
+  return out;
+}
+
+export function selectReviewRequests(s: AppStore): ActionableItem[] {
+  return pluckItems(s, s.reviewRequestIds);
+}
+
+export function selectInFlight(s: AppStore): ActionableItem[] {
+  return pluckItems(s, s.inFlightIds);
+}
+
+export function selectStandaloneRuns(s: AppStore): ActionableItem[] {
+  return pluckItems(s, s.standaloneRunIds);
+}
+
+export function selectRecentlyResolved(s: AppStore): ActionableItem[] {
+  return pluckItems(s, s.recentlyResolvedIds);
+}
+
+export function selectSelectedItem(s: AppStore): ActionableItem | null {
+  if (!s.selectedItemId) return null;
+  return s.actionableItems[s.selectedItemId] ?? null;
 }

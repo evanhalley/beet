@@ -276,9 +276,9 @@ export function Sidebar({
   collapsed = false,
   onToggleCollapsed,
 }: SidebarProps) {
-  const reviewCount = useAppStore((s) => s.reviewRequests.length);
-  const inFlightCount = useAppStore((s) => s.inFlight.length);
-  const runsCount = useAppStore((s) => s.standaloneRuns.length);
+  const reviewCount = useAppStore((s) => s.reviewRequestIds.length);
+  const inFlightCount = useAppStore((s) => s.inFlightIds.length);
+  const runsCount = useAppStore((s) => s.standaloneRunIds.length);
 
   const toggleButton = onToggleCollapsed ? (
     <button

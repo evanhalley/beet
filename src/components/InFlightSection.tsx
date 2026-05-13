@@ -1,24 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Rocket } from "lucide-react";
 import { useShallow } from "zustand/react/shallow";
-import { selectReviewRequests, selectShowAllReviews, useAppStore } from "@/lib/store";
+import { selectInFlight, useAppStore } from "@/lib/store";
 import { ActionableRow } from "./ActionableRow";
 
-export function ReviewRequestsSection() {
-  const items = useAppStore(useShallow(selectReviewRequests));
-  const showAll = useAppStore(selectShowAllReviews);
-  const override = useAppStore((s) => s.showAllReviewsOverride);
-  const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
+export function InFlightSection() {
+  const items = useAppStore(useShallow(selectInFlight));
   const [collapsed, setCollapsed] = useState(false);
 
-  const sorted = [...items].sort(
-    (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
+  const sorted = [...items].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
   );
 
   return (
-    <section aria-label="Review Requests">
+    <section aria-label="In Flight">
       <header
         style={{
           display: "flex",
@@ -36,7 +33,7 @@ export function ReviewRequestsSection() {
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          aria-controls="review-requests-list"
+          aria-controls="in-flight-list"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -47,8 +44,8 @@ export function ReviewRequestsSection() {
             padding: 0,
           }}
         >
-          <span aria-hidden>👀</span>
-          <span>Review Requests</span>
+          <Rocket size={12} aria-hidden />
+          <span>In Flight</span>
           <span
             className="mono"
             style={{
@@ -72,52 +69,9 @@ export function ReviewRequestsSection() {
             <ChevronDown size={12} />
           </span>
         </button>
-        <span style={{ flex: 1 }} />
-        <label
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: 10.5,
-            fontWeight: 500,
-            textTransform: "none",
-            letterSpacing: 0,
-            color: "var(--color-text-muted)",
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={showAll}
-            onChange={(e) => setOverride(e.target.checked)}
-            aria-label="Show All review requests, including approved"
-          />
-          Show all
-        </label>
-        {override !== null && (
-          <button
-            type="button"
-            onClick={() => setOverride(null)}
-            style={{
-              fontSize: 10.5,
-              fontWeight: 500,
-              textTransform: "none",
-              letterSpacing: 0,
-              color: "var(--color-accent)",
-              background: "transparent",
-              cursor: "pointer",
-              padding: 0,
-              marginLeft: 6,
-              textDecoration: "underline",
-            }}
-            aria-label="Reset Show All to default from Settings"
-          >
-            use default
-          </button>
-        )}
       </header>
       {!collapsed && (
-        <div id="review-requests-list">
+        <div id="in-flight-list">
           {sorted.length === 0 ? (
             <p
               style={{
@@ -126,7 +80,7 @@ export function ReviewRequestsSection() {
                 color: "var(--color-text-faint)",
               }}
             >
-              No review requests right now.
+              No PRs in flight right now.
             </p>
           ) : (
             <ul
@@ -135,7 +89,7 @@ export function ReviewRequestsSection() {
             >
               {sorted.map((item) => (
                 <li role="listitem" key={item.id}>
-                  <ActionableRow item={item} variant="review" />
+                  <ActionableRow item={item} variant="inflight" />
                 </li>
               ))}
             </ul>

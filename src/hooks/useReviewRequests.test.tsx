@@ -137,9 +137,9 @@ describe("useReviewRequests", () => {
     renderHook(() => useReviewRequests(), { wrapper: Wrapper });
 
     await waitFor(() =>
-      expect(useAppStore.getState().reviewRequests.length).toBeGreaterThan(0),
+      expect(useAppStore.getState().reviewRequestIds.length).toBeGreaterThan(0),
     );
-    const ids = useAppStore.getState().reviewRequests.map((i) => i.id);
+    const ids = useAppStore.getState().reviewRequestIds;
     expect(ids).toEqual(
       expect.arrayContaining([
         "pr:acme/platform#501",
@@ -159,7 +159,7 @@ describe("useReviewRequests", () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect(searchCalls).toBe(0);
-    expect(useAppStore.getState().reviewRequests).toEqual([]);
+    expect(useAppStore.getState().reviewRequestIds).toEqual([]);
   });
 
   test("settings change triggers a refetch", async () => {

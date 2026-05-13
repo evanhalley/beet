@@ -1,7 +1,7 @@
 "use client";
 
 import { ExternalLink } from "lucide-react";
-import { Pill } from "@/components/Pill";
+import { Lifecycle } from "@/components/Lifecycle";
 import { ScoreBar } from "@/components/ScoreBar";
 import { openInBrowser } from "@/lib/openInBrowser";
 import type { ActionableItem } from "@/lib/types";
@@ -104,8 +104,10 @@ export function DetailPane({ item }: DetailPaneProps) {
             flexWrap: "wrap",
           }}
         >
-          {/* Lifecycle slot — full enum lands in #5. */}
-          <Pill tone="neutral">open</Pill>
+          <Lifecycle
+            state={pr.lifecycle}
+            mqPos={pr.mergeQueue?.position ?? null}
+          />
           <ScoreBar score={pr.score} width={36} />
           <span style={{ flex: 1 }} />
           <button

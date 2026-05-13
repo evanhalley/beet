@@ -1,0 +1,17 @@
+{
+  "total_count": 2,
+  "check_runs": [
+    {
+      "name": "ci/integration",
+      "conclusion": "failure",
+      "html_url": "https://github.com/acme/api/runs/123",
+      "status": "completed"
+    },
+    {
+      "name": "lint",
+      "conclusion": "success",
+      "html_url": "https://github.com/acme/api/runs/124",
+      "status": "completed"
+    }
+  ]
+}

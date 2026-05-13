@@ -3,20 +3,30 @@
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
+import { Lifecycle } from "./Lifecycle";
 import { Pill } from "./Pill";
+import { ReasonBadge } from "./ReasonBadge";
 import { RowShell } from "./RowShell";
 import { ScoreBar } from "./ScoreBar";
 import { TaskChips } from "./TaskChips";
 
-export interface ReviewRequestRowProps {
+export type ActionableRowVariant = "review" | "inflight";
+
+export interface ActionableRowProps {
   item: ActionableItem;
+  variant?: ActionableRowVariant;
 }
 
-export function ReviewRequestRow({ item }: ReviewRequestRowProps) {
+export function ActionableRow({ item, variant = "review" }: ActionableRowProps) {
   const pr = item.pr;
   const active = useAppStore((s) => s.selectedItemId === item.id);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
   if (!pr) return null;
+
+  const wasEjected = (pr.mergeQueue?.ejectedChecks?.length ?? 0) > 0;
+
+  const aside =
+    variant === "review" ? <ScoreBar score={pr.score} width={26} /> : null;
 
   return (
     <RowShell
@@ -24,7 +34,7 @@ export function ReviewRequestRow({ item }: ReviewRequestRowProps) {
       unread={item.unread}
       active={active}
       onSelect={() => setSelectedItemId(item.id)}
-      aside={<ScoreBar score={pr.score} width={26} />}
+      aside={aside}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
         <span
@@ -39,8 +49,20 @@ export function ReviewRequestRow({ item }: ReviewRequestRowProps) {
         >
           #{pr.number}
         </span>
-        {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}
-        {pr.isDraft && <Pill tone="neutral">draft</Pill>}
+        {variant === "review" ? (
+          <>
+            {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}
+            {pr.isDraft && <Pill tone="neutral">draft</Pill>}
+          </>
+        ) : (
+          <>
+            <Lifecycle
+              state={pr.lifecycle}
+              mqPos={pr.mergeQueue?.position ?? null}
+            />
+            {wasEjected && <ReasonBadge reason="ejected" />}
+          </>
+        )}
         {pr.taskUrls.length > 0 && <TaskChips urls={pr.taskUrls} />}
       </div>
       <div

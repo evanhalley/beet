@@ -40,11 +40,10 @@ beforeEach(() => {
 
 describe("Sidebar", () => {
   test("Triage counts reflect store arrays", () => {
-    useAppStore.setState({
-      reviewRequests: [prItem("a"), prItem("b"), prItem("c")],
-      inFlight: [],
-      standaloneRuns: [],
-    });
+    const store = useAppStore.getState();
+    store.setReviewRequests([prItem("a"), prItem("b"), prItem("c")]);
+    store.setInFlight([]);
+    store.setStandaloneRuns([]);
     render(<Sidebar />);
     const reviews = screen.getByRole("button", { name: /Review Requests/ });
     expect(reviews.textContent).toContain("3");

@@ -6,17 +6,42 @@ use tauri::{
 use tauri_plugin_sql::{Migration, MigrationKind};
 
 fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        description: "create etag_cache table",
-        sql: "CREATE TABLE IF NOT EXISTS etag_cache (
+    vec![
+        Migration {
+            version: 1,
+            description: "create etag_cache table",
+            sql: "CREATE TABLE IF NOT EXISTS etag_cache (
             cache_key  TEXT PRIMARY KEY,
             etag       TEXT NOT NULL,
             body_json  TEXT NOT NULL,
             fetched_at TEXT NOT NULL
         );",
-        kind: MigrationKind::Up,
-    }]
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 2,
+            description: "create pr_lifecycle_history table",
+            sql: "CREATE TABLE IF NOT EXISTS pr_lifecycle_history (
+            pr_id       TEXT NOT NULL,
+            lifecycle   TEXT NOT NULL,
+            observed_at TEXT NOT NULL,
+            PRIMARY KEY (pr_id, observed_at)
+        );",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 3,
+            description: "create pr_ejection_events table",
+            sql: "CREATE TABLE IF NOT EXISTS pr_ejection_events (
+            pr_id               TEXT NOT NULL,
+            observed_at         TEXT NOT NULL,
+            head_sha            TEXT NOT NULL,
+            failing_checks_json TEXT NOT NULL,
+            PRIMARY KEY (pr_id, observed_at)
+        );",
+            kind: MigrationKind::Up,
+        },
+    ]
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

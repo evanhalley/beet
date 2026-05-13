@@ -7,6 +7,19 @@ export type PrLifecycle =
   | "merged"
   | "closed";
 
+export interface EjectedCheck {
+  name: string;
+  conclusion: string;
+  detailsUrl?: string | null;
+}
+
+export interface ActionableItemMergeQueue {
+  position: number | null;
+  enteredAt: string;
+  lastEjectionAt?: string;
+  ejectedChecks?: EjectedCheck[];
+}
+
 export interface ActionableItemPr {
   number: number;
   author: string;
@@ -21,6 +34,7 @@ export interface ActionableItemPr {
   deletions: number;
   createdAt: string;
   lifecycle: PrLifecycle;
+  mergeQueue?: ActionableItemMergeQueue;
   taskUrls: string[];
   score: number;
 }

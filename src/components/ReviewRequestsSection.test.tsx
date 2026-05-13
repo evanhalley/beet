@@ -46,7 +46,7 @@ function makeItem(
 }
 
 function seedItems(items: ActionableItem[]) {
-  useAppStore.setState({ reviewRequests: items });
+  useAppStore.getState().setReviewRequests(items);
 }
 
 beforeEach(() => {

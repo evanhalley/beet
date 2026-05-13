@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAppStore, selectShowAllReviews } from "@/lib/store";
+import { useShallow } from "zustand/react/shallow";
+import {
+  selectReviewRequests,
+  selectShowAllReviews,
+  useAppStore,
+} from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 import { Sidebar } from "./Sidebar";
 import { ListPane } from "./ListPane";
@@ -47,7 +52,7 @@ export function MainWindowShell({
 }: MainWindowShellProps) {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
-  const reviewRequests = useAppStore((s) => s.reviewRequests);
+  const reviewRequests = useAppStore(useShallow(selectReviewRequests));
   const showAll = useAppStore(selectShowAllReviews);
 
   const selected = useMemo<ActionableItem | null>(() => {

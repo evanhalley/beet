@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { InFlightSection } from "@/components/InFlightSection";
 import { ReviewRequestsSection } from "@/components/ReviewRequestsSection";
 
 interface EmptySectionProps {
@@ -67,7 +68,7 @@ export function ListPane() {
       }}
     >
       <ReviewRequestsSection />
-      <EmptySection title="In Flight" icon="🚀" hint="lands in #5" />
+      <InFlightSection />
       <EmptySection title="Standalone Runs" icon="⚙️" hint="lands in #6" />
       <EmptySection title="Recently Resolved" icon="✅" hint="lands in #6" />
     </div>
