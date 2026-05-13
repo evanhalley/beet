@@ -74,6 +74,18 @@ describe("Sidebar", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
+  test("inactive Triage items are disabled; the active one is aria-current=page", () => {
+    render(<Sidebar />);
+    // Default activeSection is "reviews".
+    const reviews = screen.getByRole("button", { name: /Review Requests/ });
+    expect(reviews).not.toBeDisabled();
+    expect(reviews.getAttribute("aria-current")).toBe("page");
+
+    const inflight = screen.getByRole("button", { name: /In Flight/ });
+    expect(inflight).toBeDisabled();
+    expect(inflight.getAttribute("aria-current")).toBeNull();
+  });
+
   test("Filters / Pinned / Muted groups render but their rows are disabled", () => {
     render(<Sidebar />);
     const failing = screen.getByRole("button", { name: /Failing only/ });

@@ -66,6 +66,7 @@ interface SidebarItemProps {
   muted?: boolean;
   disabled?: boolean;
   collapsed?: boolean;
+  current?: boolean;
 }
 
 function SidebarItem({
@@ -76,12 +77,14 @@ function SidebarItem({
   muted = false,
   disabled = false,
   collapsed = false,
+  current = false,
 }: SidebarItemProps) {
   return (
     <button
       type="button"
       disabled={disabled}
       aria-pressed={active}
+      aria-current={current ? "page" : undefined}
       aria-label={label}
       title={collapsed ? label : undefined}
       style={{
@@ -314,11 +317,17 @@ export function Sidebar({
         overflow: "auto",
       }}
     >
+      {/*
+        Sidebar navigation isn't wired yet — inactive Triage items are
+        disabled so they don't read as clickable to users or assistive
+        tech. The active item gets aria-current="page".
+      */}
       <SidebarGroup title="Triage" collapsed={collapsed} action={toggleButton}>
         <SidebarItem
           icon={<span aria-hidden>🔴</span>}
           label="Needs Action"
           active={activeSection === "needs"}
+          current={activeSection === "needs"}
           collapsed={collapsed}
           disabled
         />
@@ -327,28 +336,36 @@ export function Sidebar({
           label="Review Requests"
           badge={reviewCount}
           active={activeSection === "reviews"}
+          current={activeSection === "reviews"}
           collapsed={collapsed}
+          disabled={activeSection !== "reviews"}
         />
         <SidebarItem
           icon={<Rocket size={12} />}
           label="In Flight"
           badge={inFlightCount}
           active={activeSection === "inflight"}
+          current={activeSection === "inflight"}
           collapsed={collapsed}
+          disabled={activeSection !== "inflight"}
         />
         <SidebarItem
           icon={<Cog size={12} />}
           label="Standalone Runs"
           badge={runsCount}
           active={activeSection === "runs"}
+          current={activeSection === "runs"}
           collapsed={collapsed}
+          disabled={activeSection !== "runs"}
         />
         <SidebarItem
           icon={<CheckCircle2 size={12} />}
           label="Recently Resolved"
           muted
           active={activeSection === "recent"}
+          current={activeSection === "recent"}
           collapsed={collapsed}
+          disabled={activeSection !== "recent"}
         />
       </SidebarGroup>
 

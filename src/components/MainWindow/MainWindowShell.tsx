@@ -46,6 +46,7 @@ export function MainWindowShell({
   settingsOpen = false,
 }: MainWindowShellProps) {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
+  const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
   const reviewRequests = useAppStore((s) => s.reviewRequests);
   const showAll = useAppStore(selectShowAllReviews);
 
@@ -56,6 +57,16 @@ export function MainWindowShell({
     }
     return pickAutoSelect(reviewRequests, showAll);
   }, [selectedItemId, reviewRequests, showAll]);
+
+  // Mirror the effective selection back into the store so the row in the
+  // list and the header in the detail pane always agree, and so a stored
+  // id that no longer resolves gets repaired instead of dangling.
+  useEffect(() => {
+    const targetId = selected?.id ?? null;
+    if (targetId !== selectedItemId) {
+      setSelectedItemId(targetId);
+    }
+  }, [selected, selectedItemId, setSelectedItemId]);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);

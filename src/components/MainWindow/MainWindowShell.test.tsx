@@ -93,6 +93,25 @@ describe("MainWindowShell", () => {
     ).toBeInTheDocument();
   });
 
+  test("auto-pick is mirrored back into the store so the row highlights", async () => {
+    useAppStore.setState({
+      reviewRequests: [makeItem("a", 4, "Low"), makeItem("b", 9, "High")],
+    });
+    renderShell();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().selectedItemId).toBe("b");
+  });
+
+  test("stored selection that no longer resolves repairs to the auto-pick", async () => {
+    useAppStore.setState({
+      reviewRequests: [makeItem("a", 7, "Only")],
+      selectedItemId: "ghost",
+    });
+    renderShell();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().selectedItemId).toBe("a");
+  });
+
   test("Open on GitHub button invokes tauri shell open", async () => {
     const user = userEvent.setup();
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
