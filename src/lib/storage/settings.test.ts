@@ -2,6 +2,7 @@ import { describe, test, expect, beforeEach } from "vitest";
 import {
   SETTINGS_DEFAULTS,
   loadSettings,
+  setFontScale,
   setPenalizedBots,
   setPollingIntervalSec,
   setShowAllApproved,
@@ -31,6 +32,7 @@ describe("settings storage", () => {
     await setPollingIntervalSec(120);
     await setShowAllApproved(true);
     await setTheme("dark");
+    await setFontScale(1.15);
 
     const settings = await loadSettings();
     expect(settings.teams).toEqual(["acme/platform", "acme/api"]);
@@ -39,6 +41,7 @@ describe("settings storage", () => {
     expect(settings.pollingIntervalSec).toBe(120);
     expect(settings.showAllApproved).toBe(true);
     expect(settings.theme).toBe("dark");
+    expect(settings.fontScale).toBe(1.15);
   });
 
   test("falls back to 'system' when a corrupt theme value is stored", async () => {
@@ -49,6 +52,16 @@ describe("settings storage", () => {
 
     const settings = await loadSettings();
     expect(settings.theme).toBe("system");
+  });
+
+  test("falls back to default font scale when a corrupt value is stored", async () => {
+    const mod = (await import("@tauri-apps/plugin-store")) as unknown as {
+      __fakeStore: { set: (k: string, v: unknown) => Promise<void> };
+    };
+    await mod.__fakeStore.set("fontScale", 2.5);
+
+    const settings = await loadSettings();
+    expect(settings.fontScale).toBe(SETTINGS_DEFAULTS.fontScale);
   });
 });
 

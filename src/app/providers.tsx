@@ -6,7 +6,7 @@ import { setRateLimitListener } from "@/lib/github/octokit";
 import { useAppStore } from "@/lib/store";
 import { loadSettings } from "@/lib/storage/settings";
 import { clearCache } from "@/lib/storage/etag-cache";
-import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { applyFontScale, applyTheme, watchSystemTheme } from "@/lib/theme";
 
 // Bump when ETag cache shape or write semantics change. On a mismatch the
 // existing cache is dropped once and the new version is recorded.
@@ -41,6 +41,7 @@ export function Providers({ children }: { children: ReactNode }) {
         if (cancelled) return;
         useAppStore.getState().hydrateSettings(settings);
         applyTheme(settings.theme);
+        applyFontScale(settings.fontScale);
       })
       .catch(() => {
         // Tauri-less / test environments fall back to defaults already in the store.

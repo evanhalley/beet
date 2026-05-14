@@ -10,12 +10,20 @@ export const SETTINGS_KEYS = {
   pollingIntervalSec: "pollingIntervalSec",
   showAllApproved: "showAllApproved",
   theme: "theme",
+  fontScale: "fontScale",
 } as const;
 
 export type ThemeMode = "light" | "dark" | "system";
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
+}
+
+// Whole-UI zoom factor applied to the app root (see src/lib/theme.ts).
+export type FontScale = 0.9 | 1 | 1.15 | 1.3;
+
+export function isFontScale(value: unknown): value is FontScale {
+  return value === 0.9 || value === 1 || value === 1.15 || value === 1.3;
 }
 
 export interface BeetSettings {
@@ -25,6 +33,7 @@ export interface BeetSettings {
   pollingIntervalSec: number;
   showAllApproved: boolean;
   theme: ThemeMode;
+  fontScale: FontScale;
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -34,6 +43,7 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   pollingIntervalSec: 60,
   showAllApproved: false,
   theme: "system",
+  fontScale: 1,
 };
 
 async function getStore() {
@@ -64,6 +74,7 @@ export async function loadSettings(): Promise<BeetSettings> {
     pollingIntervalSec,
     showAllApproved,
     themeRaw,
+    fontScaleRaw,
   ] = await Promise.all([
     getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
     getValue<string[]>(
@@ -80,8 +91,12 @@ export async function loadSettings(): Promise<BeetSettings> {
       SETTINGS_DEFAULTS.showAllApproved,
     ),
     getValue<unknown>(SETTINGS_KEYS.theme, SETTINGS_DEFAULTS.theme),
+    getValue<unknown>(SETTINGS_KEYS.fontScale, SETTINGS_DEFAULTS.fontScale),
   ]);
   const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
+  const fontScale = isFontScale(fontScaleRaw)
+    ? fontScaleRaw
+    : SETTINGS_DEFAULTS.fontScale;
   return {
     teams,
     penalizedBots,
@@ -89,6 +104,7 @@ export async function loadSettings(): Promise<BeetSettings> {
     pollingIntervalSec,
     showAllApproved,
     theme,
+    fontScale,
   };
 }
 
@@ -114,6 +130,10 @@ export async function setShowAllApproved(value: boolean): Promise<void> {
 
 export async function setTheme(value: ThemeMode): Promise<void> {
   await setValue(SETTINGS_KEYS.theme, value);
+}
+
+export async function setFontScale(value: FontScale): Promise<void> {
+  await setValue(SETTINGS_KEYS.fontScale, value);
 }
 
 export function parseLineList(text: string): string[] {
