@@ -22,6 +22,7 @@ function makeItem(overrides: Partial<ActionableItem["pr"]> = {}): ActionableItem
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 10,
       deletions: 10,

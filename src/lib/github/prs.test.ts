@@ -105,7 +105,12 @@ sqlMod.__fakeDb.execute.mockImplementation(async (sql: string, params: unknown[]
   return { rowsAffected: 1, lastInsertId: 0 };
 });
 
-import { deriveLifecycle, fetchMyOpenPrs, fetchReviewRequests } from "./prs";
+import {
+  countDistinctApprovers,
+  deriveLifecycle,
+  fetchMyOpenPrs,
+  fetchReviewRequests,
+} from "./prs";
 import { __resetOctokitForTests, setRateLimitListener } from "@/lib/github/octokit";
 import { __resetDbForTests } from "@/lib/storage/db";
 import { storeToken } from "@/lib/storage/token";
@@ -239,6 +244,11 @@ describe("fetchReviewRequests", () => {
       "https://your-company.atlassian.net/browse/PLAT-101",
     ]);
 
+    // approval counts from review fixtures
+    expect(byId["pr:acme/search#492"].pr?.approvalCount).toBe(1); // octocat APPROVED
+    expect(byId["pr:acme/platform#501"].pr?.approvalCount).toBe(0); // empty reviews
+    expect(byId["pr:acme/gateway#498"].pr?.approvalCount).toBe(0); // empty reviews
+
     // team membership picks up rina via teams fixture
     expect(byId["pr:acme/platform#501"].pr?.isAuthorOnMyTeam).toBe(true);
     expect(byId["pr:acme/gateway#498"].pr?.isAuthorOnMyTeam).toBe(false);
@@ -323,6 +333,56 @@ describe("fetchReviewRequests", () => {
     // 1 search + 1 team + 3 pulls + 3 comments + 3 reviews = 11
     expect(saw304).toBe(11);
     server.events.removeAllListeners("response:mocked");
+  });
+});
+
+describe("countDistinctApprovers", () => {
+  test("returns 0 when there are no reviews", () => {
+    expect(countDistinctApprovers([])).toBe(0);
+  });
+
+  test("counts distinct users who approved", () => {
+    expect(
+      countDistinctApprovers([
+        { user: { login: "rina" }, state: "APPROVED" },
+        { user: { login: "mo" }, state: "APPROVED" },
+        { user: { login: "kai" }, state: "COMMENTED" },
+      ]),
+    ).toBe(2);
+  });
+
+  test("ignores PENDING events when picking the latest state per user", () => {
+    expect(
+      countDistinctApprovers([
+        { user: { login: "rina" }, state: "APPROVED" },
+        { user: { login: "rina" }, state: "PENDING" },
+      ]),
+    ).toBe(1);
+  });
+
+  test("uses the latest non-pending state per user (dismissed approval doesn't count)", () => {
+    expect(
+      countDistinctApprovers([
+        { user: { login: "rina" }, state: "APPROVED" },
+        { user: { login: "rina" }, state: "CHANGES_REQUESTED" },
+      ]),
+    ).toBe(0);
+  });
+
+  test("re-approval after a dismissal counts", () => {
+    expect(
+      countDistinctApprovers([
+        { user: { login: "rina" }, state: "APPROVED" },
+        { user: { login: "rina" }, state: "DISMISSED" },
+        { user: { login: "rina" }, state: "APPROVED" },
+      ]),
+    ).toBe(1);
+  });
+
+  test("ignores reviews with a null user (e.g. deleted account)", () => {
+    expect(
+      countDistinctApprovers([{ user: null, state: "APPROVED" }]),
+    ).toBe(0);
   });
 });
 

@@ -21,6 +21,7 @@ function pr(id: string, updatedAt = "2026-05-12T00:00:00Z"): ActionableItem {
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 0,
       deletions: 0,

@@ -29,6 +29,7 @@ export interface ActionableItemPr {
   iveCommented: boolean;
   iveReviewed: boolean;
   iveApproved: boolean;
+  approvalCount: number;
   isDraft: boolean;
   additions: number;
   deletions: number;

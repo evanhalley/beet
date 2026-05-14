@@ -43,6 +43,7 @@ function makeItem({
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 10,
       deletions: 5,
@@ -114,6 +115,38 @@ describe("InFlightSection", () => {
     seed([makeItem({ id: "a", updatedAt: "2026-05-12T00:00:00Z" })]);
     render(<InFlightSection />);
     expect(screen.queryByLabelText(/score/i)).not.toBeInTheDocument();
+  });
+
+  test("renders the approvals pill when approvalCount > 0", () => {
+    const base = makeItem({ id: "a", updatedAt: "2026-05-12T00:00:00Z" });
+    base.pr!.approvalCount = 2;
+    seed([base]);
+    render(<InFlightSection />);
+    expect(screen.getByText(/2 approved/)).toBeInTheDocument();
+  });
+
+  test("hides the approvals pill when approvalCount is 0", () => {
+    seed([makeItem({ id: "a", updatedAt: "2026-05-12T00:00:00Z" })]);
+    render(<InFlightSection />);
+    expect(screen.queryByText(/approved/)).not.toBeInTheDocument();
+  });
+
+  test("renders the AlertTriangle warning on ejected rows", () => {
+    seed([
+      makeItem({
+        id: "ej",
+        updatedAt: "2026-05-12T00:00:00Z",
+        lifecycle: "open",
+        mergeQueue: {
+          position: null,
+          enteredAt: "2026-05-11T00:00:00Z",
+          lastEjectionAt: "2026-05-12T00:00:00Z",
+          ejectedChecks: [{ name: "ci/integration", conclusion: "failure" }],
+        },
+      }),
+    ]);
+    render(<InFlightSection />);
+    expect(screen.getByLabelText("Kicked from queue")).toBeInTheDocument();
   });
 
   test("empty state when no items", () => {

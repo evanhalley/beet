@@ -80,6 +80,29 @@ const EJECTION_CHECK_CONCLUSIONS = new Set([
   "action_required",
 ]);
 
+/**
+ * Counts distinct reviewers whose latest non-pending review state is APPROVED.
+ *
+ * GitHub returns the full review timeline including superseded events
+ * (approve → request changes → approve again). Walk the array in order and
+ * let the last non-pending state per user win; if it's APPROVED, the user
+ * still counts as an approver.
+ */
+export function countDistinctApprovers(reviews: ReviewRow[]): number {
+  const latestByUser = new Map<string, string>();
+  for (const r of reviews) {
+    const login = r.user?.login;
+    if (!login) continue;
+    if (r.state === "PENDING") continue;
+    latestByUser.set(login, r.state);
+  }
+  let n = 0;
+  for (const state of latestByUser.values()) {
+    if (state === "APPROVED") n += 1;
+  }
+  return n;
+}
+
 export function deriveLifecycle(pull: PullDetail): PrLifecycle {
   if (pull.state === "closed") {
     return pull.merged ? "merged" : "closed";
@@ -177,6 +200,7 @@ export async function fetchReviewRequests(
         const iveApproved = reviews.some(
           (r) => r.user?.login === username && r.state === "APPROVED",
         );
+        const approvalCount = countDistinctApprovers(reviews);
         const taskUrls = extractTaskUrls(pull.body, compiledRegex);
 
         const lifecycle = deriveLifecycle(pull);
@@ -199,6 +223,7 @@ export async function fetchReviewRequests(
             iveCommented,
             iveReviewed,
             iveApproved,
+            approvalCount,
             isDraft: Boolean(pull.draft),
             additions: pull.additions,
             deletions: pull.deletions,
@@ -327,6 +352,7 @@ export async function fetchMyOpenPrs(
         const iveApproved = reviews.some(
           (r) => r.user?.login === username && r.state === "APPROVED",
         );
+        const approvalCount = countDistinctApprovers(reviews);
         const taskUrls = extractTaskUrls(pull.body, compiledRegex);
 
         const item: ActionableItem = {
@@ -347,6 +373,7 @@ export async function fetchMyOpenPrs(
             iveCommented,
             iveReviewed,
             iveApproved,
+            approvalCount,
             isDraft: Boolean(pull.draft),
             additions: pull.additions,
             deletions: pull.deletions,

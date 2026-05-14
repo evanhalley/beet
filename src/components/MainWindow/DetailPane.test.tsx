@@ -29,6 +29,7 @@ const pr: ActionableItem = {
     iveCommented: false,
     iveReviewed: false,
     iveApproved: false,
+      approvalCount: 0,
     isDraft: false,
     additions: 12,
     deletions: 3,

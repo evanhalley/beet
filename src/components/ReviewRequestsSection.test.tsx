@@ -33,6 +33,7 @@ function makeItem(
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 10,
       deletions: 5,

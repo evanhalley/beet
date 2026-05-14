@@ -195,6 +195,7 @@ function rrItem(id: string): ActionableItem {
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 0,
       deletions: 0,

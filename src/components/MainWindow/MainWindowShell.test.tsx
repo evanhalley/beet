@@ -29,6 +29,7 @@ function makeItem(id: string, score: number, title?: string): ActionableItem {
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 10,
       deletions: 5,

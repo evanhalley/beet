@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle, Check } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -63,19 +64,41 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             {wasEjected && <ReasonBadge reason="ejected" />}
           </>
         )}
+        {pr.approvalCount > 0 && (
+          <Pill tone="success">
+            <Check size={10} aria-hidden />
+            {pr.approvalCount} approved
+          </Pill>
+        )}
         {pr.taskUrls.length > 0 && <TaskChips urls={pr.taskUrls} />}
       </div>
       <div
         style={{
-          fontWeight: item.unread ? 600 : 500,
-          color: item.unread ? "var(--color-text)" : "var(--color-text-muted)",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          fontWeight: 600,
+          color: "var(--color-text)",
           fontSize: 13,
           overflow: "hidden",
-          textOverflow: "ellipsis",
-          whiteSpace: "nowrap",
         }}
       >
-        {item.title}
+        {wasEjected && (
+          <AlertTriangle
+            size={13}
+            aria-label="Kicked from queue"
+            style={{ color: "var(--color-danger)", flexShrink: 0 }}
+          />
+        )}
+        <span
+          style={{
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.title}
+        </span>
       </div>
       <div
         style={{
