@@ -2,11 +2,16 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InFlightSection } from "./InFlightSection";
+import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem, PrLifecycle } from "@/lib/types";
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
+}));
+
+vi.mock("@/hooks/useMyOpenPrs", () => ({
+  useMyOpenPrs: vi.fn(),
 }));
 
 interface MakeItemOpts {
@@ -59,11 +64,18 @@ function makeItem({
 }
 
 function seed(items: ActionableItem[]) {
-  useAppStore.getState().setInFlight(items);
+  vi.mocked(useMyOpenPrs).mockReturnValue({
+    items,
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  });
 }
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  seed([]);
 });
 
 describe("InFlightSection", () => {

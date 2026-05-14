@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
-import { selectReviewRequests, selectShowAllReviews, useAppStore } from "@/lib/store";
+import { selectShowAllReviews, useAppStore } from "@/lib/store";
+import { useReviewRequests } from "@/hooks/useReviewRequests";
 import { ActionableRow } from "./ActionableRow";
 
 export function ReviewRequestsSection() {
-  const items = useAppStore(useShallow(selectReviewRequests));
+  const { items } = useReviewRequests();
   const showAll = useAppStore(selectShowAllReviews);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);

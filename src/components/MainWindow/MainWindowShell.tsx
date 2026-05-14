@@ -7,13 +7,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useShallow } from "zustand/react/shallow";
-import {
-  selectReviewRequests,
-  selectSelectedItem,
-  selectShowAllReviews,
-  useAppStore,
-} from "@/lib/store";
+import { selectShowAllReviews, useAppStore } from "@/lib/store";
+import { useActionableItems } from "@/hooks/useActionableItems";
+import { useSelectedItem } from "@/hooks/useSelectedItem";
 import type { ActionableItem } from "@/lib/types";
 import { Sidebar } from "./Sidebar";
 import { ListPane } from "./ListPane";
@@ -62,8 +58,8 @@ export function MainWindowShell({
 }: MainWindowShellProps) {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
-  const selected = useAppStore(selectSelectedItem);
-  const reviewRequests = useAppStore(useShallow(selectReviewRequests));
+  const selected = useSelectedItem();
+  const { reviewRequests } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const [activeSection, setActiveSection] =
     useState<"reviews" | "inflight">("reviews");

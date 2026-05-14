@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReviewRequestsSection } from "./ReviewRequestsSection";
+import { useReviewRequests } from "@/hooks/useReviewRequests";
 import { useAppStore } from "@/lib/store";
 import { SETTINGS_DEFAULTS } from "@/lib/storage/settings";
 import type { ActionableItem } from "@/lib/types";
@@ -9,6 +10,20 @@ import type { ActionableItem } from "@/lib/types";
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
+
+vi.mock("@/hooks/useReviewRequests", () => ({
+  useReviewRequests: vi.fn(),
+}));
+
+function setItems(items: ActionableItem[]) {
+  vi.mocked(useReviewRequests).mockReturnValue({
+    items,
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  });
+}
 
 function makeItem(
   id: string,
@@ -48,11 +63,12 @@ function makeItem(
 }
 
 function seedItems(items: ActionableItem[]) {
-  useAppStore.getState().setReviewRequests(items);
+  setItems(items);
 }
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  setItems([]);
 });
 
 afterEach(() => {

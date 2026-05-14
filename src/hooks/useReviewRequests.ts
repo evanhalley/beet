@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchReviewRequests } from "@/lib/github/prs";
 import { selectShowAllReviews, useAppStore } from "@/lib/store";
+import { useAuth } from "@/hooks/useAuth";
+import type { ActionableItem } from "@/lib/types";
 
 export interface UseReviewRequestsResult {
+  items: ActionableItem[];
   isLoading: boolean;
   isFetching: boolean;
   error: unknown;
@@ -13,10 +15,10 @@ export interface UseReviewRequestsResult {
 }
 
 export function useReviewRequests(): UseReviewRequestsResult {
-  const username = useAppStore((s) => s.user?.login ?? null);
+  const { auth } = useAuth();
+  const username = auth?.login ?? null;
   const settings = useAppStore((s) => s.settings);
   const showAll = useAppStore(selectShowAllReviews);
-  const setReviewRequests = useAppStore((s) => s.setReviewRequests);
 
   const enabled = !!username;
 
@@ -44,11 +46,8 @@ export function useReviewRequests(): UseReviewRequestsResult {
     staleTime: 0,
   });
 
-  useEffect(() => {
-    if (query.data) setReviewRequests(query.data);
-  }, [query.data, setReviewRequests]);
-
   return {
+    items: query.data ?? [],
     isLoading: query.isLoading,
     isFetching: query.isFetching,
     error: query.error,

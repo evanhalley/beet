@@ -4,7 +4,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { server } from "@/test/msw-server";
-import { VALID_TOKEN } from "@/test/msw-handlers";
+import { VALID_TOKEN, INVALID_TOKEN } from "@/test/msw-handlers";
 
 import searchAuthorMe from "@/test/fixtures/search-author-me.json";
 import pull412 from "@/test/fixtures/pulls-get-acme-api-412.json";
@@ -106,7 +106,6 @@ import { storeToken } from "@/lib/storage/token";
 import { __resetOctokitForTests, setRateLimitListener } from "@/lib/github/octokit";
 import { __resetDbForTests } from "@/lib/storage/db";
 import { SETTINGS_DEFAULTS } from "@/lib/storage/settings";
-import type { ActionableItem } from "@/lib/types";
 
 function makeWrapper() {
   const client = new QueryClient({
@@ -166,8 +165,8 @@ beforeEach(async () => {
   setRateLimitListener(null);
   await storeToken(VALID_TOKEN);
   useAppStore.getState().reset();
+  // username is resolved via useAuth → the stored token → GET /user.
   useAppStore.setState({
-    user: { login: "octocat" },
     settings: { ...SETTINGS_DEFAULTS, pollingIntervalSec: 15 },
   });
 });
@@ -176,75 +175,21 @@ afterEach(() => {
   server.resetHandlers();
 });
 
-function rrItem(id: string): ActionableItem {
-  return {
-    id,
-    kind: "pr",
-    title: id,
-    url: `https://github.com/acme/repo/pull/${id}`,
-    repoFullName: "acme/repo",
-    updatedAt: "2026-05-12T00:00:00Z",
-    unread: false,
-    dismissedUntilFingerprint: null,
-    pr: {
-      number: 1,
-      author: "rina",
-      body: null,
-      isAuthoredByMe: false,
-      isReviewRequestedFromMe: true,
-      isAuthorOnMyTeam: true,
-      iveCommented: false,
-      iveReviewed: false,
-      iveApproved: false,
-      approvalCount: 0,
-      isDraft: false,
-      additions: 0,
-      deletions: 0,
-      createdAt: "2026-05-08T10:00:00Z",
-      lifecycle: "in_review",
-      taskUrls: [],
-      score: 9,
-    },
-  };
-}
-
 describe("useMyOpenPrs", () => {
-  test("populates the inFlightIds slice on first response", async () => {
+  test("returns in-flight items on first response", async () => {
     installHandlers();
     const { Wrapper } = makeWrapper();
-    renderHook(() => useMyOpenPrs(), { wrapper: Wrapper });
+    const { result } = renderHook(() => useMyOpenPrs(), { wrapper: Wrapper });
 
     await waitFor(() =>
-      expect(useAppStore.getState().inFlightIds.length).toBeGreaterThan(0),
+      expect(result.current.items.length).toBeGreaterThan(0),
     );
-    expect(useAppStore.getState().inFlightIds).toEqual(
+    expect(result.current.items.map((it) => it.id)).toEqual(
       expect.arrayContaining(["pr:acme/api#412", "pr:acme/web#700"]),
     );
   });
 
-  test("does not blow away a previously-set review-requests slice", async () => {
-    installHandlers();
-
-    // Seed the review-requests slice through the real setter so the store map
-    // and id list agree.
-    useAppStore.getState().setReviewRequests([rrItem("pr:other/repo#1")]);
-
-    const { Wrapper } = makeWrapper();
-    renderHook(() => useMyOpenPrs(), { wrapper: Wrapper });
-
-    await waitFor(() =>
-      expect(useAppStore.getState().inFlightIds.length).toBeGreaterThan(0),
-    );
-
-    // Review-requests slice still intact + item still resolvable through the map.
-    expect(useAppStore.getState().reviewRequestIds).toEqual([
-      "pr:other/repo#1",
-    ]);
-    expect(useAppStore.getState().actionableItems["pr:other/repo#1"]).toBeDefined();
-    expect(useAppStore.getState().actionableItems["pr:acme/api#412"]).toBeDefined();
-  });
-
-  test("does not fetch when username is missing", async () => {
+  test("does not fetch when username cannot be resolved", async () => {
     let searchCalls = 0;
     server.use(
       http.get("https://api.github.com/search/issues", () => {
@@ -252,13 +197,14 @@ describe("useMyOpenPrs", () => {
         return HttpResponse.json(searchAuthorMe);
       }),
     );
-    useAppStore.setState({ user: null });
+    // An invalid token → GET /user 401 → no login → query stays disabled.
+    await storeToken(INVALID_TOKEN);
     const { Wrapper } = makeWrapper();
-    renderHook(() => useMyOpenPrs(), { wrapper: Wrapper });
+    const { result } = renderHook(() => useMyOpenPrs(), { wrapper: Wrapper });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect(searchCalls).toBe(0);
-    expect(useAppStore.getState().inFlightIds).toEqual([]);
+    expect(result.current.items).toEqual([]);
   });
 });

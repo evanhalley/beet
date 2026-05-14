@@ -4,7 +4,7 @@ import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { server } from "@/test/msw-server";
-import { VALID_TOKEN } from "@/test/msw-handlers";
+import { VALID_TOKEN, INVALID_TOKEN } from "@/test/msw-handlers";
 
 import searchFixture from "@/test/fixtures/search-review-requested.json";
 import pull501 from "@/test/fixtures/pulls-get-acme-platform-501.json";
@@ -119,8 +119,8 @@ beforeEach(async () => {
   setRateLimitListener(null);
   await storeToken(VALID_TOKEN);
   useAppStore.getState().reset();
+  // username is resolved via useAuth → the stored token → GET /user.
   useAppStore.setState({
-    user: { login: "octocat" },
     settings: { ...SETTINGS_DEFAULTS, pollingIntervalSec: 15 },
     showAllReviewsOverride: true,
   });
@@ -131,15 +131,17 @@ afterEach(() => {
 });
 
 describe("useReviewRequests", () => {
-  test("populates the reviewRequests slice on first response", async () => {
+  test("returns review-request items on first response", async () => {
     installHandlers();
     const { Wrapper } = makeWrapper();
-    renderHook(() => useReviewRequests(), { wrapper: Wrapper });
+    const { result } = renderHook(() => useReviewRequests(), {
+      wrapper: Wrapper,
+    });
 
     await waitFor(() =>
-      expect(useAppStore.getState().reviewRequestIds.length).toBeGreaterThan(0),
+      expect(result.current.items.length).toBeGreaterThan(0),
     );
-    const ids = useAppStore.getState().reviewRequestIds;
+    const ids = result.current.items.map((it) => it.id);
     expect(ids).toEqual(
       expect.arrayContaining([
         "pr:acme/platform#501",
@@ -149,17 +151,20 @@ describe("useReviewRequests", () => {
     );
   });
 
-  test("does not fetch when username is missing", async () => {
+  test("does not fetch when username cannot be resolved", async () => {
     installHandlers();
-    useAppStore.setState({ user: null });
+    // An invalid token → GET /user 401 → no login → query stays disabled.
+    await storeToken(INVALID_TOKEN);
     const { Wrapper } = makeWrapper();
-    renderHook(() => useReviewRequests(), { wrapper: Wrapper });
+    const { result } = renderHook(() => useReviewRequests(), {
+      wrapper: Wrapper,
+    });
     // Give it a tick — no fetch should fire.
     await act(async () => {
       await new Promise((r) => setTimeout(r, 20));
     });
     expect(searchCalls).toBe(0);
-    expect(useAppStore.getState().reviewRequestIds).toEqual([]);
+    expect(result.current.items).toEqual([]);
   });
 
   test("settings change triggers a refetch", async () => {

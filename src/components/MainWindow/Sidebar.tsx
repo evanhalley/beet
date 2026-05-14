@@ -13,6 +13,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { useActionableItems } from "@/hooks/useActionableItems";
 
 interface SidebarGroupProps {
   title: string;
@@ -288,9 +289,11 @@ export function Sidebar({
   onToggleCollapsed,
   onSectionClick,
 }: SidebarProps) {
-  const reviewCount = useAppStore((s) => s.reviewRequestIds.length);
-  const inFlightCount = useAppStore((s) => s.inFlightIds.length);
-  const runsCount = useAppStore((s) => s.standaloneRunIds.length);
+  const { reviewRequests, inFlight } = useActionableItems();
+  const reviewCount = reviewRequests.length;
+  const inFlightCount = inFlight.length;
+  // Standalone Runs has no fetcher yet — scaffolding only.
+  const runsCount = 0;
 
   const toggleButton = onToggleCollapsed ? (
     <button

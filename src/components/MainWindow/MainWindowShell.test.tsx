@@ -3,12 +3,43 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainWindowShell } from "./MainWindowShell";
+import { useReviewRequests } from "@/hooks/useReviewRequests";
+import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
+
+// Mock the two leaf data hooks; useActionableItems / useSelectedItem compose
+// them, so the shell sees real aggregation over the seeded items.
+vi.mock("@/hooks/useReviewRequests", () => ({
+  useReviewRequests: vi.fn(),
+}));
+vi.mock("@/hooks/useMyOpenPrs", () => ({
+  useMyOpenPrs: vi.fn(),
+}));
+
+function seedReviews(items: ActionableItem[]) {
+  vi.mocked(useReviewRequests).mockReturnValue({
+    items,
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  });
+}
+
+function seedInFlight(items: ActionableItem[]) {
+  vi.mocked(useMyOpenPrs).mockReturnValue({
+    items,
+    isLoading: false,
+    isFetching: false,
+    error: null,
+    refetch: vi.fn(),
+  });
+}
 
 function makeItem(id: string, score: number, title?: string): ActionableItem {
   return {
@@ -53,11 +84,13 @@ function renderShell() {
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  seedReviews([]);
+  seedInFlight([]);
 });
 
 describe("MainWindowShell", () => {
   test("auto-selects the top-scored review request when nothing is selected", () => {
-    useAppStore.getState().setReviewRequests([
+    seedReviews([
       makeItem("a", 3, "Low scorer"),
       makeItem("b", 9, "High scorer"),
       makeItem("c", 5, "Mid scorer"),
@@ -75,10 +108,7 @@ describe("MainWindowShell", () => {
 
   test("clicking a row updates the detail pane to that item", async () => {
     const user = userEvent.setup();
-    useAppStore.getState().setReviewRequests([
-      makeItem("a", 8, "First"),
-      makeItem("b", 4, "Second"),
-    ]);
+    seedReviews([makeItem("a", 8, "First"), makeItem("b", 4, "Second")]);
     renderShell();
     expect(
       screen.getByRole("button", { name: "Open First on GitHub" }),
@@ -92,19 +122,15 @@ describe("MainWindowShell", () => {
   });
 
   test("auto-pick is mirrored back into the store so the row highlights", async () => {
-    useAppStore.getState().setReviewRequests([
-      makeItem("a", 4, "Low"),
-      makeItem("b", 9, "High"),
-    ]);
+    seedReviews([makeItem("a", 4, "Low"), makeItem("b", 9, "High")]);
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("b");
   });
 
   test("stored selection that no longer resolves repairs to the auto-pick", async () => {
-    const store = useAppStore.getState();
-    store.setReviewRequests([makeItem("a", 7, "Only")]);
-    store.setSelectedItemId("ghost");
+    seedReviews([makeItem("a", 7, "Only")]);
+    useAppStore.getState().setSelectedItemId("ghost");
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("a");
@@ -115,7 +141,7 @@ describe("MainWindowShell", () => {
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
       open: ReturnType<typeof vi.fn>;
     };
-    useAppStore.getState().setReviewRequests([makeItem("a", 7, "Only")]);
+    seedReviews([makeItem("a", 7, "Only")]);
     renderShell();
     await user.click(screen.getByRole("button", { name: "Open Only on GitHub" }));
     expect(shellMod.open).toHaveBeenCalledWith(
