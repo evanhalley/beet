@@ -5,6 +5,8 @@ use tauri::{
 };
 use tauri_plugin_sql::{Migration, MigrationKind};
 
+mod secure_token;
+
 fn migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -62,6 +64,11 @@ pub fn run() {
                 .add_migrations("sqlite:beet.db", migrations())
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![
+            secure_token::store_token,
+            secure_token::get_token,
+            secure_token::clear_token,
+        ])
         .setup(|app| {
             let open = MenuItemBuilder::with_id("open", "Open Beet").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
