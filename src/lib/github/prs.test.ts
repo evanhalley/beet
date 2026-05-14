@@ -533,7 +533,9 @@ describe("fetchMyOpenPrs", () => {
 
     const items = await fetchMyOpenPrs(myOpenOpts);
     const it = items.find((i) => i.id === "pr:acme/api#412")!;
-    expect(it.unread).toBe(false);
+    // Hydrated rows are marked unread alongside the rest of the In Flight
+    // section; the fingerprint system (#8) will eventually distinguish.
+    expect(it.unread).toBe(true);
     expect(it.pr?.mergeQueue?.ejectedChecks).toEqual([
       { name: "ci/integration", conclusion: "failure", detailsUrl: null },
     ]);
@@ -548,7 +550,6 @@ describe("fetchMyOpenPrs", () => {
     const it = items.find((i) => i.id === "pr:acme/api#412")!;
     expect(it.pr?.lifecycle).toBe("merge_queue");
     expect(it.pr?.mergeQueue).toBeDefined();
-    expect(it.unread).toBe(false);
     // No check-runs fetch when we're freshly entering the queue (not ejected).
     expect(c.checkRuns).toEqual({});
   });

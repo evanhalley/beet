@@ -275,7 +275,10 @@ export async function fetchMyOpenPrs(
         await recordLifecycle(prId, lifecycle);
 
         let mergeQueue: ActionableItemMergeQueue | undefined;
-        let unread = false;
+        // Default to true to match fetchReviewRequests; the fingerprint
+        // system in #8 will replace this with real read-state tracking.
+        // Ejection forces unread regardless.
+        let unread = true;
 
         if (ejected) {
           const failingChecks = await fetchFailingChecks(

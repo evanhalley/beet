@@ -18,7 +18,7 @@ export function ReviewRequestsSection() {
   );
 
   return (
-    <section aria-label="Review Requests">
+    <section aria-label="Review Requests" id="section-reviews">
       <header
         style={{
           display: "flex",

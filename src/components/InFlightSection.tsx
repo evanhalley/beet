@@ -15,7 +15,7 @@ export function InFlightSection() {
   );
 
   return (
-    <section aria-label="In Flight">
+    <section aria-label="In Flight" id="section-inflight">
       <header
         style={{
           display: "flex",

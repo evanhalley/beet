@@ -67,6 +67,7 @@ interface SidebarItemProps {
   disabled?: boolean;
   collapsed?: boolean;
   current?: boolean;
+  onClick?: () => void;
 }
 
 function SidebarItem({
@@ -78,11 +79,13 @@ function SidebarItem({
   disabled = false,
   collapsed = false,
   current = false,
+  onClick,
 }: SidebarItemProps) {
   return (
     <button
       type="button"
       disabled={disabled}
+      onClick={disabled ? undefined : onClick}
       aria-pressed={active}
       aria-current={current ? "page" : undefined}
       aria-label={label}
@@ -265,16 +268,25 @@ function formatResetIn(resetEpochSec: number): string {
   return `${h}h ${rm}m`;
 }
 
+export type SidebarSection =
+  | "needs"
+  | "reviews"
+  | "inflight"
+  | "runs"
+  | "recent";
+
 export interface SidebarProps {
-  activeSection?: "needs" | "reviews" | "inflight" | "runs" | "recent";
+  activeSection?: SidebarSection;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
+  onSectionClick?: (section: SidebarSection) => void;
 }
 
 export function Sidebar({
   activeSection = "reviews",
   collapsed = false,
   onToggleCollapsed,
+  onSectionClick,
 }: SidebarProps) {
   const reviewCount = useAppStore((s) => s.reviewRequestIds.length);
   const inFlightCount = useAppStore((s) => s.inFlightIds.length);
@@ -338,7 +350,7 @@ export function Sidebar({
           active={activeSection === "reviews"}
           current={activeSection === "reviews"}
           collapsed={collapsed}
-          disabled={activeSection !== "reviews"}
+          onClick={() => onSectionClick?.("reviews")}
         />
         <SidebarItem
           icon={<Rocket size={12} />}
@@ -347,7 +359,7 @@ export function Sidebar({
           active={activeSection === "inflight"}
           current={activeSection === "inflight"}
           collapsed={collapsed}
-          disabled={activeSection !== "inflight"}
+          onClick={() => onSectionClick?.("inflight")}
         />
         <SidebarItem
           icon={<Cog size={12} />}

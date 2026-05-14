@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   selectReviewRequests,
+  selectSelectedItem,
   selectShowAllReviews,
   useAppStore,
 } from "@/lib/store";
@@ -52,26 +53,23 @@ export function MainWindowShell({
 }: MainWindowShellProps) {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
+  const selected = useAppStore(selectSelectedItem);
   const reviewRequests = useAppStore(useShallow(selectReviewRequests));
   const showAll = useAppStore(selectShowAllReviews);
+  const [activeSection, setActiveSection] =
+    useState<"reviews" | "inflight">("reviews");
 
-  const selected = useMemo<ActionableItem | null>(() => {
-    if (selectedItemId) {
-      const hit = reviewRequests.find((it) => it.id === selectedItemId);
-      if (hit) return hit;
-    }
-    return pickAutoSelect(reviewRequests, showAll);
-  }, [selectedItemId, reviewRequests, showAll]);
-
-  // Mirror the effective selection back into the store so the row in the
-  // list and the header in the detail pane always agree, and so a stored
-  // id that no longer resolves gets repaired instead of dangling.
+  // When no item is currently resolved (either nothing selected, or the
+  // stored id is a ghost), auto-pick the top-scored Review Request and
+  // mirror it into the store so the row highlights.
   useEffect(() => {
-    const targetId = selected?.id ?? null;
+    if (selected) return;
+    const autoPick = pickAutoSelect(reviewRequests, showAll);
+    const targetId = autoPick?.id ?? null;
     if (targetId !== selectedItemId) {
       setSelectedItemId(targetId);
     }
-  }, [selected, selectedItemId, setSelectedItemId]);
+  }, [selected, reviewRequests, showAll, selectedItemId, setSelectedItemId]);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
@@ -120,9 +118,10 @@ export function MainWindowShell({
   return (
     <div
       style={{
+        flex: 1,
+        minHeight: 0,
         display: "flex",
         flexDirection: "column",
-        minHeight: "100vh",
         background: "var(--color-bg)",
       }}
     >
@@ -139,9 +138,15 @@ export function MainWindowShell({
           }}
         >
           <Sidebar
-            activeSection="reviews"
+            activeSection={activeSection}
             collapsed={sidebarCollapsed}
             onToggleCollapsed={toggleSidebar}
+            onSectionClick={(section) => {
+              if (section !== "reviews" && section !== "inflight") return;
+              setActiveSection(section);
+              const el = document.getElementById(`section-${section}`);
+              el?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
           />
         </div>
         <div

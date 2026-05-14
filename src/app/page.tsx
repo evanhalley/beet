@@ -41,7 +41,7 @@ export default function Page() {
   })();
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-screen flex-col">
       {bannerReason && (
         <MissingTokenBanner
           reason={bannerReason}
