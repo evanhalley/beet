@@ -16,6 +16,7 @@ function makeItem(overrides: Partial<ActionableItem["pr"]> = {}): ActionableItem
     pr: {
       number: 123,
       author: "johndoe",
+      body: null,
       isAuthoredByMe: false,
       isReviewRequestedFromMe: false,
       isAuthorOnMyTeam: false,

@@ -37,6 +37,7 @@ function makeItem({
     pr: {
       number: 1,
       author: "octocat",
+      body: null,
       isAuthoredByMe: true,
       isReviewRequestedFromMe: false,
       isAuthorOnMyTeam: false,

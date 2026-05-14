@@ -23,6 +23,7 @@ export interface ActionableItemMergeQueue {
 export interface ActionableItemPr {
   number: number;
   author: string;
+  body: string | null;
   isAuthoredByMe: boolean;
   isReviewRequestedFromMe: boolean;
   isAuthorOnMyTeam: boolean;

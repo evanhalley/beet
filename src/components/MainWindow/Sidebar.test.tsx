@@ -17,6 +17,7 @@ function prItem(id: string): ActionableItem {
     pr: {
       number: 1,
       author: "rina",
+      body: null,
       isAuthoredByMe: false,
       isReviewRequestedFromMe: true,
       isAuthorOnMyTeam: false,

@@ -15,6 +15,7 @@ function pr(id: string, updatedAt = "2026-05-12T00:00:00Z"): ActionableItem {
     pr: {
       number: 1,
       author: "octocat",
+      body: null,
       isAuthoredByMe: true,
       isReviewRequestedFromMe: false,
       isAuthorOnMyTeam: false,

@@ -217,6 +217,7 @@ export async function fetchReviewRequests(
           pr: {
             number: num,
             author,
+            body: pull.body,
             isAuthoredByMe: author === username,
             isReviewRequestedFromMe,
             isAuthorOnMyTeam,
@@ -367,6 +368,7 @@ export async function fetchMyOpenPrs(
           pr: {
             number: num,
             author,
+            body: pull.body,
             isAuthoredByMe: true,
             isReviewRequestedFromMe,
             isAuthorOnMyTeam: false,

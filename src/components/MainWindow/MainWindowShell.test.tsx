@@ -23,6 +23,7 @@ function makeItem(id: string, score: number, title?: string): ActionableItem {
     pr: {
       number: 1,
       author: "rina",
+      body: null,
       isAuthoredByMe: false,
       isReviewRequestedFromMe: true,
       isAuthorOnMyTeam: false,
