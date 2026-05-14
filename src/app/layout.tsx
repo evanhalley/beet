@@ -24,7 +24,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // The inline script below sets data-theme on <html> before hydration,
+    // so the attribute intentionally differs from the server markup.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Set data-theme synchronously before first paint so the theme
          *  doesn't flash while settings hydrate from the Tauri store. Reads
