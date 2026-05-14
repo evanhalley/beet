@@ -9,7 +9,14 @@ export const SETTINGS_KEYS = {
   taskRegex: "taskRegex",
   pollingIntervalSec: "pollingIntervalSec",
   showAllApproved: "showAllApproved",
+  theme: "theme",
 } as const;
+
+export type ThemeMode = "light" | "dark" | "system";
+
+export function isThemeMode(value: unknown): value is ThemeMode {
+  return value === "light" || value === "dark" || value === "system";
+}
 
 export interface BeetSettings {
   teams: string[];
@@ -17,6 +24,7 @@ export interface BeetSettings {
   taskRegex: string;
   pollingIntervalSec: number;
   showAllApproved: boolean;
+  theme: ThemeMode;
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -25,6 +33,7 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   taskRegex: DEFAULT_TASK_REGEX,
   pollingIntervalSec: 60,
   showAllApproved: false,
+  theme: "system",
 };
 
 async function getStore() {
@@ -48,24 +57,39 @@ async function setValue<T>(key: string, value: T): Promise<void> {
 }
 
 export async function loadSettings(): Promise<BeetSettings> {
-  const [teams, penalizedBots, taskRegex, pollingIntervalSec, showAllApproved] =
-    await Promise.all([
-      getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
-      getValue<string[]>(
-        SETTINGS_KEYS.penalizedBots,
-        SETTINGS_DEFAULTS.penalizedBots,
-      ),
-      getValue<string>(SETTINGS_KEYS.taskRegex, SETTINGS_DEFAULTS.taskRegex),
-      getValue<number>(
-        SETTINGS_KEYS.pollingIntervalSec,
-        SETTINGS_DEFAULTS.pollingIntervalSec,
-      ),
-      getValue<boolean>(
-        SETTINGS_KEYS.showAllApproved,
-        SETTINGS_DEFAULTS.showAllApproved,
-      ),
-    ]);
-  return { teams, penalizedBots, taskRegex, pollingIntervalSec, showAllApproved };
+  const [
+    teams,
+    penalizedBots,
+    taskRegex,
+    pollingIntervalSec,
+    showAllApproved,
+    themeRaw,
+  ] = await Promise.all([
+    getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
+    getValue<string[]>(
+      SETTINGS_KEYS.penalizedBots,
+      SETTINGS_DEFAULTS.penalizedBots,
+    ),
+    getValue<string>(SETTINGS_KEYS.taskRegex, SETTINGS_DEFAULTS.taskRegex),
+    getValue<number>(
+      SETTINGS_KEYS.pollingIntervalSec,
+      SETTINGS_DEFAULTS.pollingIntervalSec,
+    ),
+    getValue<boolean>(
+      SETTINGS_KEYS.showAllApproved,
+      SETTINGS_DEFAULTS.showAllApproved,
+    ),
+    getValue<unknown>(SETTINGS_KEYS.theme, SETTINGS_DEFAULTS.theme),
+  ]);
+  const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
+  return {
+    teams,
+    penalizedBots,
+    taskRegex,
+    pollingIntervalSec,
+    showAllApproved,
+    theme,
+  };
 }
 
 export async function setTeams(value: string[]): Promise<void> {
@@ -86,6 +110,10 @@ export async function setPollingIntervalSec(value: number): Promise<void> {
 
 export async function setShowAllApproved(value: boolean): Promise<void> {
   await setValue(SETTINGS_KEYS.showAllApproved, value);
+}
+
+export async function setTheme(value: ThemeMode): Promise<void> {
+  await setValue(SETTINGS_KEYS.theme, value);
 }
 
 export function parseLineList(text: string): string[] {

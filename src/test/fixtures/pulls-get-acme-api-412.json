@@ -1,0 +1,17 @@
+{
+  "number": 412,
+  "title": "Wire retry budget into ingest path",
+  "body": null,
+  "html_url": "https://github.com/acme/api/pull/412",
+  "state": "open",
+  "merged": false,
+  "auto_merge": null,
+  "user": { "login": "octocat" },
+  "requested_reviewers": [{ "login": "rina" }],
+  "head": { "sha": "abc1234deadbeef" },
+  "draft": false,
+  "additions": 120,
+  "deletions": 18,
+  "created_at": "2026-05-05T10:00:00Z",
+  "updated_at": "2026-05-12T14:00:00Z"
+}

@@ -3,18 +3,20 @@
 import { useEffect, useState } from "react";
 import { BeetMark } from "@/components/BeetMark";
 import { AccountTab } from "./AccountTab";
+import { AppearanceTab } from "./AppearanceTab";
 import { ScoringTab } from "./ScoringTab";
 import { PollingTab } from "./PollingTab";
 import { NavIcon, type NavIconName } from "./NavIcon";
 
 interface NavItem {
-  id: "account" | "scoring" | "polling";
+  id: "account" | "scoring" | "polling" | "appearance";
   label: string;
   icon: NavIconName;
 }
 
 const ITEMS: readonly NavItem[] = [
   { id: "account", label: "Account", icon: "user" },
+  { id: "appearance", label: "Appearance", icon: "theme" },
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
 ] as const;
@@ -50,8 +52,13 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
       style={{ background: "var(--color-bg)", color: "var(--color-text)" }}
     >
       <header
-        className="flex items-center gap-2.5 px-3.5 py-2.5 border-b"
+        data-tauri-drag-region
+        className="flex items-center gap-2.5 border-b"
         style={{
+          // Fixed height + left padding aligns header content with the
+          // macOS traffic-light buttons (since the native bar is hidden).
+          height: 38,
+          padding: "0 14px 0 84px",
           borderColor: "var(--color-border)",
           background:
             "linear-gradient(180deg, var(--color-panel), var(--color-bg))",
@@ -127,6 +134,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {tab === "account" && <AccountTab />}
           {tab === "scoring" && <ScoringTab />}
           {tab === "polling" && <PollingTab />}
+          {tab === "appearance" && <AppearanceTab />}
         </div>
       </div>
     </div>

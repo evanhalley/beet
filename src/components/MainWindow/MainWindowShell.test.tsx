@@ -23,12 +23,14 @@ function makeItem(id: string, score: number, title?: string): ActionableItem {
     pr: {
       number: 1,
       author: "rina",
+      body: null,
       isAuthoredByMe: false,
       isReviewRequestedFromMe: true,
       isAuthorOnMyTeam: false,
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 10,
       deletions: 5,
@@ -55,13 +57,11 @@ beforeEach(() => {
 
 describe("MainWindowShell", () => {
   test("auto-selects the top-scored review request when nothing is selected", () => {
-    useAppStore.setState({
-      reviewRequests: [
-        makeItem("a", 3, "Low scorer"),
-        makeItem("b", 9, "High scorer"),
-        makeItem("c", 5, "Mid scorer"),
-      ],
-    });
+    useAppStore.getState().setReviewRequests([
+      makeItem("a", 3, "Low scorer"),
+      makeItem("b", 9, "High scorer"),
+      makeItem("c", 5, "Mid scorer"),
+    ]);
     renderShell();
     expect(
       screen.getByRole("button", { name: "Open High scorer on GitHub" }),
@@ -75,12 +75,10 @@ describe("MainWindowShell", () => {
 
   test("clicking a row updates the detail pane to that item", async () => {
     const user = userEvent.setup();
-    useAppStore.setState({
-      reviewRequests: [
-        makeItem("a", 8, "First"),
-        makeItem("b", 4, "Second"),
-      ],
-    });
+    useAppStore.getState().setReviewRequests([
+      makeItem("a", 8, "First"),
+      makeItem("b", 4, "Second"),
+    ]);
     renderShell();
     expect(
       screen.getByRole("button", { name: "Open First on GitHub" }),
@@ -94,19 +92,19 @@ describe("MainWindowShell", () => {
   });
 
   test("auto-pick is mirrored back into the store so the row highlights", async () => {
-    useAppStore.setState({
-      reviewRequests: [makeItem("a", 4, "Low"), makeItem("b", 9, "High")],
-    });
+    useAppStore.getState().setReviewRequests([
+      makeItem("a", 4, "Low"),
+      makeItem("b", 9, "High"),
+    ]);
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("b");
   });
 
   test("stored selection that no longer resolves repairs to the auto-pick", async () => {
-    useAppStore.setState({
-      reviewRequests: [makeItem("a", 7, "Only")],
-      selectedItemId: "ghost",
-    });
+    const store = useAppStore.getState();
+    store.setReviewRequests([makeItem("a", 7, "Only")]);
+    store.setSelectedItemId("ghost");
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("a");
@@ -117,7 +115,7 @@ describe("MainWindowShell", () => {
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
       open: ReturnType<typeof vi.fn>;
     };
-    useAppStore.setState({ reviewRequests: [makeItem("a", 7, "Only")] });
+    useAppStore.getState().setReviewRequests([makeItem("a", 7, "Only")]);
     renderShell();
     await user.click(screen.getByRole("button", { name: "Open Only on GitHub" }));
     expect(shellMod.open).toHaveBeenCalledWith(

@@ -22,6 +22,27 @@ export const MIGRATIONS: readonly MigrationDescriptor[] = [
       fetched_at TEXT NOT NULL
     );`,
   },
+  {
+    version: 2,
+    description: "create pr_lifecycle_history table",
+    sql: `CREATE TABLE IF NOT EXISTS pr_lifecycle_history (
+      pr_id       TEXT NOT NULL,
+      lifecycle   TEXT NOT NULL,
+      observed_at TEXT NOT NULL,
+      PRIMARY KEY (pr_id, observed_at)
+    );`,
+  },
+  {
+    version: 3,
+    description: "create pr_ejection_events table",
+    sql: `CREATE TABLE IF NOT EXISTS pr_ejection_events (
+      pr_id               TEXT NOT NULL,
+      observed_at         TEXT NOT NULL,
+      head_sha            TEXT NOT NULL,
+      failing_checks_json TEXT NOT NULL,
+      PRIMARY KEY (pr_id, observed_at)
+    );`,
+  },
 ] as const;
 
 export const CURRENT_DB_VERSION = MIGRATIONS[MIGRATIONS.length - 1]?.version ?? 0;

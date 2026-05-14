@@ -27,12 +27,14 @@ function makeItem(
     pr: {
       number: 1,
       author: "rina",
+      body: null,
       isAuthoredByMe: false,
       isReviewRequestedFromMe: true,
       isAuthorOnMyTeam: false,
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 10,
       deletions: 5,
@@ -46,7 +48,7 @@ function makeItem(
 }
 
 function seedItems(items: ActionableItem[]) {
-  useAppStore.setState({ reviewRequests: items });
+  useAppStore.getState().setReviewRequests(items);
 }
 
 beforeEach(() => {

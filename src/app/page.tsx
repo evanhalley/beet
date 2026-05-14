@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
 import { useReviewRequests } from "@/hooks/useReviewRequests";
 import { MissingTokenBanner, type MissingTokenReason } from "@/components/MissingTokenBanner";
 import { SettingsPanel } from "@/components/Settings/SettingsPanel";
@@ -15,6 +16,7 @@ export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { token, auth, isLoading } = useAuth();
   useReviewRequests();
+  useMyOpenPrs();
   const uiError = useAppStore((s) => s.uiError);
   const setUiError = useAppStore((s) => s.setUiError);
 
@@ -39,7 +41,7 @@ export default function Page() {
   })();
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex h-screen flex-col">
       {bannerReason && (
         <MissingTokenBanner
           reason={bannerReason}

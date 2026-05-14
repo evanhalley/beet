@@ -7,20 +7,36 @@ export type PrLifecycle =
   | "merged"
   | "closed";
 
+export interface EjectedCheck {
+  name: string;
+  conclusion: string;
+  detailsUrl?: string | null;
+}
+
+export interface ActionableItemMergeQueue {
+  position: number | null;
+  enteredAt: string;
+  lastEjectionAt?: string;
+  ejectedChecks?: EjectedCheck[];
+}
+
 export interface ActionableItemPr {
   number: number;
   author: string;
+  body: string | null;
   isAuthoredByMe: boolean;
   isReviewRequestedFromMe: boolean;
   isAuthorOnMyTeam: boolean;
   iveCommented: boolean;
   iveReviewed: boolean;
   iveApproved: boolean;
+  approvalCount: number;
   isDraft: boolean;
   additions: number;
   deletions: number;
   createdAt: string;
   lifecycle: PrLifecycle;
+  mergeQueue?: ActionableItemMergeQueue;
   taskUrls: string[];
   score: number;
 }

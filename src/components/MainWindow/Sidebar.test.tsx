@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Sidebar } from "./Sidebar";
 import { useAppStore } from "@/lib/store";
@@ -17,12 +17,14 @@ function prItem(id: string): ActionableItem {
     pr: {
       number: 1,
       author: "rina",
+      body: null,
       isAuthoredByMe: false,
       isReviewRequestedFromMe: true,
       isAuthorOnMyTeam: false,
       iveCommented: false,
       iveReviewed: false,
       iveApproved: false,
+      approvalCount: 0,
       isDraft: false,
       additions: 0,
       deletions: 0,
@@ -40,11 +42,10 @@ beforeEach(() => {
 
 describe("Sidebar", () => {
   test("Triage counts reflect store arrays", () => {
-    useAppStore.setState({
-      reviewRequests: [prItem("a"), prItem("b"), prItem("c")],
-      inFlight: [],
-      standaloneRuns: [],
-    });
+    const store = useAppStore.getState();
+    store.setReviewRequests([prItem("a"), prItem("b"), prItem("c")]);
+    store.setInFlight([]);
+    store.setStandaloneRuns([]);
     render(<Sidebar />);
     const reviews = screen.getByRole("button", { name: /Review Requests/ });
     expect(reviews.textContent).toContain("3");
@@ -74,7 +75,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 
-  test("inactive Triage items are disabled; the active one is aria-current=page", () => {
+  test("Review Requests and In Flight are both clickable; the active one is aria-current=page", () => {
     render(<Sidebar />);
     // Default activeSection is "reviews".
     const reviews = screen.getByRole("button", { name: /Review Requests/ });
@@ -82,8 +83,16 @@ describe("Sidebar", () => {
     expect(reviews.getAttribute("aria-current")).toBe("page");
 
     const inflight = screen.getByRole("button", { name: /In Flight/ });
-    expect(inflight).toBeDisabled();
+    expect(inflight).not.toBeDisabled();
     expect(inflight.getAttribute("aria-current")).toBeNull();
+  });
+
+  test("clicking a Triage section fires onSectionClick", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const onSectionClick = vi.fn();
+    render(<Sidebar onSectionClick={onSectionClick} />);
+    await user.click(screen.getByRole("button", { name: /In Flight/ }));
+    expect(onSectionClick).toHaveBeenCalledWith("inflight");
   });
 
   test("Filters / Pinned / Muted groups render but their rows are disabled", () => {

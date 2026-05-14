@@ -33,11 +33,17 @@ export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps
 
   return (
     <div
+      data-tauri-drag-region
       style={{
         display: "flex",
         alignItems: "center",
         gap: 10,
-        padding: "10px 14px",
+        // Fixed height + flex centering puts toolbar items on the same
+        // y-axis as the macOS traffic-light buttons (which sit centered
+        // around y≈20px from the window top). Left padding clears the
+        // ~78px-wide traffic-light cluster.
+        height: 38,
+        padding: "0 14px 0 84px",
         background: "var(--color-bg-elev)",
         borderBottom: "1px solid var(--color-border)",
       }}
