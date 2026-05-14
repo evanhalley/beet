@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useShallow } from "zustand/react/shallow";
 import {
   selectReviewRequests,
@@ -18,6 +24,8 @@ import { Splitter } from "./Splitter";
 export interface MainWindowShellProps {
   onOpenSettings: () => void;
   settingsOpen?: boolean;
+  // Rendered directly below the TitleBar so it clears the macOS traffic lights.
+  banner?: ReactNode;
 }
 
 const DETAIL_WIDTH_KEY = "beet.detailWidth";
@@ -50,6 +58,7 @@ function pickAutoSelect(
 export function MainWindowShell({
   onOpenSettings,
   settingsOpen = false,
+  banner,
 }: MainWindowShellProps) {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
@@ -126,6 +135,7 @@ export function MainWindowShell({
       }}
     >
       <TitleBar onOpenSettings={onOpenSettings} settingsOpen={settingsOpen} />
+      {banner}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <div
           style={{

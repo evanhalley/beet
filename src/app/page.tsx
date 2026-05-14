@@ -40,8 +40,10 @@ export default function Page() {
     return null;
   })();
 
-  return (
-    <div className="flex h-screen flex-col">
+  // Banners render below the TitleBar (inside MainWindowShell) so they clear
+  // the macOS traffic-light buttons, which overlay the top-left of the window.
+  const banner = (
+    <>
       {bannerReason && (
         <MissingTokenBanner
           reason={bannerReason}
@@ -80,7 +82,13 @@ export default function Page() {
           </button>
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="flex h-screen flex-col">
       <MainWindowShell
+        banner={banner}
         onOpenSettings={() => setSettingsOpen(true)}
         settingsOpen={settingsOpen}
       />
