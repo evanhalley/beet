@@ -16,9 +16,9 @@ interface NavItem {
 
 const ITEMS: readonly NavItem[] = [
   { id: "account", label: "Account", icon: "user" },
+  { id: "appearance", label: "Appearance", icon: "theme" },
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
-  { id: "appearance", label: "Appearance", icon: "theme" },
 ] as const;
 
 function useAppVersion(): string | null {
