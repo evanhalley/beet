@@ -6,6 +6,7 @@ import { setRateLimitListener } from "@/lib/github/octokit";
 import { useAppStore } from "@/lib/store";
 import { loadSettings } from "@/lib/storage/settings";
 import { clearCache } from "@/lib/storage/etag-cache";
+import { applyTheme } from "@/lib/theme";
 
 // Bump when ETag cache shape or write semantics change. On a mismatch the
 // existing cache is dropped once and the new version is recorded.
@@ -37,7 +38,9 @@ export function Providers({ children }: { children: ReactNode }) {
     let cancelled = false;
     loadSettings()
       .then((settings) => {
-        if (!cancelled) useAppStore.getState().hydrateSettings(settings);
+        if (cancelled) return;
+        useAppStore.getState().hydrateSettings(settings);
+        applyTheme(settings.theme);
       })
       .catch(() => {
         // Tauri-less / test environments fall back to defaults already in the store.

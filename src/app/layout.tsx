@@ -25,6 +25,19 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* Set data-theme synchronously before first paint so an explicit
+         *  light/dark preference doesn't flash the opposite theme while
+         *  settings hydrate from the Tauri store. The script reads a
+         *  localStorage hint written by applyTheme(); absence falls back
+         *  to the prefers-color-scheme media query in globals.css. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var t=localStorage.getItem('beet.theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();",
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

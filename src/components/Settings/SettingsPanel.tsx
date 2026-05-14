@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { BeetMark } from "@/components/BeetMark";
 import { AccountTab } from "./AccountTab";
+import { AppearanceTab } from "./AppearanceTab";
 import { ScoringTab } from "./ScoringTab";
 import { PollingTab } from "./PollingTab";
 import { NavIcon, type NavIconName } from "./NavIcon";
 
 interface NavItem {
-  id: "account" | "scoring" | "polling";
+  id: "account" | "scoring" | "polling" | "appearance";
   label: string;
   icon: NavIconName;
 }
@@ -17,6 +18,7 @@ const ITEMS: readonly NavItem[] = [
   { id: "account", label: "Account", icon: "user" },
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
+  { id: "appearance", label: "Appearance", icon: "theme" },
 ] as const;
 
 function useAppVersion(): string | null {
@@ -127,6 +129,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {tab === "account" && <AccountTab />}
           {tab === "scoring" && <ScoringTab />}
           {tab === "polling" && <PollingTab />}
+          {tab === "appearance" && <AppearanceTab />}
         </div>
       </div>
     </div>

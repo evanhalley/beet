@@ -37,6 +37,81 @@
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
+/* Dark theme override. Applied when the user picks "dark" explicitly,
+ * or when no preference is stored AND the OS prefers dark. Light is the
+ * default so an explicit data-theme="light" always wins. */
+:root[data-theme="dark"] {
+  --color-bg: oklch(0.18 0.006 60);
+  --color-bg-elev: oklch(0.22 0.006 60);
+  --color-panel: oklch(0.20 0.006 60);
+  --color-panel-2: oklch(0.25 0.006 60);
+  --color-hover: oklch(0.29 0.007 60);
+  --color-text: oklch(0.94 0.004 60);
+  --color-text-muted: oklch(0.72 0.006 60);
+  --color-text-faint: oklch(0.55 0.006 60);
+  --color-border: oklch(0.30 0.005 60);
+  --color-border-strong: oklch(0.42 0.005 60);
+
+  --color-accent: oklch(0.72 0.18 355);
+  --color-accent-soft: oklch(0.32 0.07 355);
+  --color-accent-fg: oklch(0.18 0.006 60);
+  --color-leaf: oklch(0.70 0.14 145);
+
+  --color-success: oklch(0.72 0.14 145);
+  --color-success-soft: oklch(0.30 0.06 145);
+  --color-success-border: oklch(0.42 0.10 145);
+  --color-warn: oklch(0.80 0.14 75);
+  --color-warn-soft: oklch(0.30 0.07 75);
+  --color-warn-border: oklch(0.44 0.11 75);
+  --color-danger: oklch(0.70 0.18 25);
+  --color-danger-soft: oklch(0.30 0.07 25);
+  --color-danger-border: oklch(0.44 0.10 25);
+  --color-info: oklch(0.72 0.13 245);
+  --color-info-soft: oklch(0.30 0.06 245);
+
+  --shadow-beet-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-beet: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-beet-lg: 0 18px 48px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* System mode: no explicit override → follow the OS. Explicit "light"
+   * still wins because of the :not() guard. */
+  :root:not([data-theme="light"]):not([data-theme="dark"]) {
+    --color-bg: oklch(0.18 0.006 60);
+    --color-bg-elev: oklch(0.22 0.006 60);
+    --color-panel: oklch(0.20 0.006 60);
+    --color-panel-2: oklch(0.25 0.006 60);
+    --color-hover: oklch(0.29 0.007 60);
+    --color-text: oklch(0.94 0.004 60);
+    --color-text-muted: oklch(0.72 0.006 60);
+    --color-text-faint: oklch(0.55 0.006 60);
+    --color-border: oklch(0.30 0.005 60);
+    --color-border-strong: oklch(0.42 0.005 60);
+
+    --color-accent: oklch(0.72 0.18 355);
+    --color-accent-soft: oklch(0.32 0.07 355);
+    --color-accent-fg: oklch(0.18 0.006 60);
+    --color-leaf: oklch(0.70 0.14 145);
+
+    --color-success: oklch(0.72 0.14 145);
+    --color-success-soft: oklch(0.30 0.06 145);
+    --color-success-border: oklch(0.42 0.10 145);
+    --color-warn: oklch(0.80 0.14 75);
+    --color-warn-soft: oklch(0.30 0.07 75);
+    --color-warn-border: oklch(0.44 0.11 75);
+    --color-danger: oklch(0.70 0.18 25);
+    --color-danger-soft: oklch(0.30 0.07 25);
+    --color-danger-border: oklch(0.44 0.10 25);
+    --color-info: oklch(0.72 0.13 245);
+    --color-info-soft: oklch(0.30 0.06 245);
+
+    --shadow-beet-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-beet: 0 2px 8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-beet-lg: 0 18px 48px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
+  }
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);

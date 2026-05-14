@@ -7,6 +7,7 @@ import {
   setShowAllApproved,
   setTaskRegex,
   setTeams,
+  setTheme,
   parseLineList,
 } from "./settings";
 
@@ -29,6 +30,7 @@ describe("settings storage", () => {
     await setTaskRegex("/PROJ-\\d+/g");
     await setPollingIntervalSec(120);
     await setShowAllApproved(true);
+    await setTheme("dark");
 
     const settings = await loadSettings();
     expect(settings.teams).toEqual(["acme/platform", "acme/api"]);
@@ -36,6 +38,17 @@ describe("settings storage", () => {
     expect(settings.taskRegex).toBe("/PROJ-\\d+/g");
     expect(settings.pollingIntervalSec).toBe(120);
     expect(settings.showAllApproved).toBe(true);
+    expect(settings.theme).toBe("dark");
+  });
+
+  test("falls back to 'system' when a corrupt theme value is stored", async () => {
+    const mod = (await import("@tauri-apps/plugin-store")) as unknown as {
+      __fakeStore: { set: (k: string, v: unknown) => Promise<void> };
+    };
+    await mod.__fakeStore.set("theme", "magenta");
+
+    const settings = await loadSettings();
+    expect(settings.theme).toBe("system");
   });
 });
 
