@@ -1,7 +1,9 @@
 "use client";
 
-import { AlertTriangle, Check } from "lucide-react";
+import { useState, type MouseEvent } from "react";
+import { AlertTriangle, Check, Link2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { copyToClipboard } from "@/lib/copyToClipboard";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
 import { Lifecycle } from "./Lifecycle";
@@ -22,12 +24,45 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
   const pr = item.pr;
   const active = useAppStore((s) => s.selectedItemId === item.id);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
+  const [copied, setCopied] = useState(false);
   if (!pr) return null;
 
   const wasEjected = (pr.mergeQueue?.ejectedChecks?.length ?? 0) > 0;
 
   const aside =
     variant === "review" ? <ScoreBar score={pr.score} width={26} /> : null;
+
+  const onCopy = async (e: MouseEvent) => {
+    // Don't let the click bubble to RowShell's select handler.
+    e.stopPropagation();
+    const ok = await copyToClipboard(item.url);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
+  };
+
+  const copyButton = (
+    <button
+      type="button"
+      onClick={onCopy}
+      aria-label={`Copy link to ${item.title}`}
+      title={copied ? "Copied!" : "Copy PR URL"}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 22,
+        height: 22,
+        borderRadius: 5,
+        background: copied ? "var(--color-success-soft)" : "transparent",
+        color: copied ? "var(--color-success)" : "var(--color-text-faint)",
+        cursor: "pointer",
+      }}
+    >
+      {copied ? <Check size={13} /> : <Link2 size={13} />}
+    </button>
+  );
 
   return (
     <RowShell
@@ -36,6 +71,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
       active={active}
       onSelect={() => setSelectedItemId(item.id)}
       aside={aside}
+      actions={copyButton}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
         <span

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { InFlightSection } from "./InFlightSection";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem, PrLifecycle } from "@/lib/types";
@@ -153,5 +154,29 @@ describe("InFlightSection", () => {
   test("empty state when no items", () => {
     render(<InFlightSection />);
     expect(screen.getByText(/no prs in flight right now/i)).toBeInTheDocument();
+  });
+
+  test("copy-link button writes the PR URL to the clipboard without selecting the row", async () => {
+    // userEvent.setup() installs its own navigator.clipboard stub, so define
+    // ours afterwards to make sure it's the one the helper hits.
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    seed([makeItem({ id: "412", updatedAt: "2026-05-12T00:00:00Z" })]);
+    render(<InFlightSection />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy link to Title 412" }),
+    );
+
+    expect(writeText).toHaveBeenCalledWith(
+      "https://github.com/acme/repo/pull/412",
+    );
+    // Clicking copy must not bubble to the row's select handler.
+    expect(useAppStore.getState().selectedItemId).toBeNull();
   });
 });

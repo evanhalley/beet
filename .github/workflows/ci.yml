@@ -24,6 +24,14 @@ jobs:
         with:
           components: clippy
 
+      # dtolnay/rust-toolchain only appends ~/.cargo/bin to PATH when it has
+      # to bootstrap rustup itself. On runner images that already ship a
+      # rustup shim, `cargo` is "found" so that PATH update is skipped — and
+      # subsequent steps resolve `cargo` to the rustup-init shim instead of
+      # the stable toolchain it just installed. Add it explicitly.
+      - name: Put cargo on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
