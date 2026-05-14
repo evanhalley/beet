@@ -49,7 +49,7 @@ sqlMod.__fakeDb.select.mockImplementation(async (sql: string, params: unknown[])
     const matches = lifecycleRows
       .filter((r) => r.pr_id === prId)
       .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
-    return matches.length ? [{ lifecycle: matches[0].lifecycle }] : [];
+    return matches.length ? [{ lifecycle: matches[0].lifecycle, observed_at: matches[0].observed_at }] : [];
   }
   if (sql.includes("FROM pr_ejection_events")) {
     const prId = params[0] as string;

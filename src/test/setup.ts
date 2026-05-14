@@ -40,6 +40,21 @@ vi.mock("@tauri-apps/plugin-sql", () => {
   };
 });
 
+// jsdom has no matchMedia. Default to "light" (matches: false); tests that
+// need dark can override window.matchMedia themselves.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = ((query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })) as unknown as typeof window.matchMedia;
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
 beforeEach(async () => {

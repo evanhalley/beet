@@ -6,7 +6,7 @@ import { setRateLimitListener } from "@/lib/github/octokit";
 import { useAppStore } from "@/lib/store";
 import { loadSettings } from "@/lib/storage/settings";
 import { clearCache } from "@/lib/storage/etag-cache";
-import { applyTheme } from "@/lib/theme";
+import { applyTheme, watchSystemTheme } from "@/lib/theme";
 
 // Bump when ETag cache shape or write semantics change. On a mismatch the
 // existing cache is dropped once and the new version is recorded.
@@ -48,6 +48,11 @@ export function Providers({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // While the preference is "system", track live OS theme changes.
+  useEffect(() => {
+    return watchSystemTheme(() => useAppStore.getState().settings.theme);
   }, []);
 
   useEffect(() => {

@@ -31,7 +31,7 @@ select.mockImplementation(async (sql: string, params: unknown[]) => {
     const matches = lifecycleRows
       .filter((r) => r.pr_id === prId)
       .sort((a, b) => b.observed_at.localeCompare(a.observed_at));
-    return matches.length ? [{ lifecycle: matches[0].lifecycle }] : [];
+    return matches.length ? [{ lifecycle: matches[0].lifecycle, observed_at: matches[0].observed_at }] : [];
   }
   if (sql.includes("FROM pr_ejection_events")) {
     const prId = params[0] as string;
@@ -84,6 +84,7 @@ import {
   detectEjection,
   getLatestEjectionEvent,
   getLatestLifecycle,
+  getLatestLifecycleRow,
   recordEjectionEvent,
   recordLifecycle,
 } from "./lifecycle";
@@ -144,6 +145,28 @@ describe("getLatestLifecycle", () => {
     tick();
     await recordLifecycle("pr:acme/api#1", "in_review");
     expect(await getLatestLifecycle("pr:acme/api#1")).toBe("in_review");
+  });
+});
+
+describe("getLatestLifecycleRow", () => {
+  test("returns null when nothing has been recorded", async () => {
+    expect(await getLatestLifecycleRow("pr:nope#1")).toBeNull();
+  });
+
+  test("returns the lifecycle plus the transition-in observedAt", async () => {
+    await recordLifecycle("pr:acme/api#1", "open");
+    tick();
+    await recordLifecycle("pr:acme/api#1", "merge_queue");
+    const enteredQueueAt = new Date(nowMs).toISOString();
+    // No-op polls while still in the queue must not move the timestamp.
+    tick();
+    await recordLifecycle("pr:acme/api#1", "merge_queue");
+    tick();
+    await recordLifecycle("pr:acme/api#1", "merge_queue");
+
+    const row = await getLatestLifecycleRow("pr:acme/api#1");
+    expect(row?.lifecycle).toBe("merge_queue");
+    expect(row?.observedAt).toBe(enteredQueueAt);
   });
 });
 

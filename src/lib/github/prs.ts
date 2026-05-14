@@ -5,6 +5,7 @@ import { scorePullRequests } from "@/lib/scoring";
 import {
   detectEjection,
   getLatestEjectionEvent,
+  getLatestLifecycleRow,
   recordEjectionEvent,
   recordLifecycle,
 } from "@/lib/storage/lifecycle";
@@ -307,18 +308,28 @@ export async function fetchMyOpenPrs(
         let unread = true;
 
         if (ejected) {
-          const failingChecks = await fetchFailingChecks(
-            owner,
-            repo,
-            pull.head.sha,
-          );
-          await recordEjectionEvent(prId, pull.head.sha, failingChecks);
           const now = new Date().toISOString();
+          // The check-runs fetch is an auxiliary signal — if it fails
+          // (transient 5xx, rate limit, network blip) the PR must still
+          // surface, just without the populated ejectedChecks. The next
+          // poll retries.
+          let ejectedChecks: EjectedCheck[] = [];
+          try {
+            ejectedChecks = await fetchFailingChecks(
+              owner,
+              repo,
+              pull.head.sha,
+            );
+            await recordEjectionEvent(prId, pull.head.sha, ejectedChecks);
+          } catch {
+            // Leave ejectedChecks empty; the ejection is still reflected
+            // via unread + lastEjectionAt below.
+          }
           mergeQueue = {
             position: null,
             enteredAt: now,
             lastEjectionAt: now,
-            ejectedChecks: failingChecks,
+            ejectedChecks,
           };
           unread = true;
         } else if (lifecycle !== "merge_queue") {
@@ -335,12 +346,15 @@ export async function fetchMyOpenPrs(
             };
           }
         } else {
-          // PR is currently in the merge queue — surface that state to the
-          // row, but ejectedChecks belongs to the prior ejection cycle (if
-          // any) and is not relevant right now.
+          // PR is currently in the merge queue. recordLifecycle (above) only
+          // inserts on a transition, so the latest lifecycle row's
+          // observedAt is the moment the PR entered the queue — not when it
+          // was last polled. Fall back to now only on the very first
+          // observation.
+          const latest = await getLatestLifecycleRow(prId);
           mergeQueue = {
             position: null,
-            enteredAt: new Date().toISOString(),
+            enteredAt: latest?.observedAt ?? new Date().toISOString(),
           };
         }
 

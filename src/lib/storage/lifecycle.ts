@@ -14,14 +14,36 @@ interface EjectionRow {
 export async function getLatestLifecycle(
   prId: string,
 ): Promise<PrLifecycle | null> {
+  const row = await getLatestLifecycleRow(prId);
+  return row ? row.lifecycle : null;
+}
+
+export interface LifecycleObservation {
+  lifecycle: PrLifecycle;
+  observedAt: string;
+}
+
+/**
+ * The most-recent `pr_lifecycle_history` row for a PR. Because
+ * `recordLifecycle` only inserts on a *transition*, the latest row's
+ * `observedAt` is the moment the PR entered its current lifecycle state —
+ * e.g. for a PR sitting in the merge queue across many polls, this is when
+ * it actually entered the queue, not when it was last observed.
+ */
+export async function getLatestLifecycleRow(
+  prId: string,
+): Promise<LifecycleObservation | null> {
   const db = await getDb();
-  const rows = await db.select<LifecycleRow[]>(
-    "SELECT lifecycle FROM pr_lifecycle_history WHERE pr_id = ? ORDER BY observed_at DESC LIMIT 1",
+  const rows = await db.select<(LifecycleRow & { observed_at: string })[]>(
+    "SELECT lifecycle, observed_at FROM pr_lifecycle_history WHERE pr_id = ? ORDER BY observed_at DESC LIMIT 1",
     [prId],
   );
   const row = rows[0];
   if (!row) return null;
-  return row.lifecycle as PrLifecycle;
+  return {
+    lifecycle: row.lifecycle as PrLifecycle,
+    observedAt: row.observed_at,
+  };
 }
 
 export async function recordLifecycle(

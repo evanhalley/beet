@@ -48,9 +48,9 @@ describe("AppearanceTab", () => {
     expect(window.localStorage.getItem(THEME_LS_KEY)).toBe("light");
   });
 
-  test("selecting System removes the data-theme attribute (falls through to media query)", async () => {
+  test("selecting System resolves data-theme against the OS preference", async () => {
     const user = userEvent.setup();
-    // Start in dark so the toggle to System has something to clear.
+    // Start in dark so the toggle to System has something to change.
     useAppStore.getState().setSettings({ theme: "dark" });
     document.documentElement.setAttribute("data-theme", "dark");
     render(<AppearanceTab />);
@@ -58,9 +58,43 @@ describe("AppearanceTab", () => {
     await user.click(screen.getByRole("radio", { name: "System" }));
 
     await waitFor(() => {
-      expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+      // The test matchMedia mock reports light (matches: false), so "system"
+      // resolves to a concrete data-theme="light".
+      expect(document.documentElement.getAttribute("data-theme")).toBe("light");
     });
+    // The stored *preference* is still "system" — only the resolved attribute
+    // is concrete.
     expect(useAppStore.getState().settings.theme).toBe("system");
     expect(window.localStorage.getItem(THEME_LS_KEY)).toBe("system");
+  });
+
+  test("selecting System resolves to dark when the OS prefers dark", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("dark"),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+
+    try {
+      const user = userEvent.setup();
+      // Start in light so clicking System actually fires an onChange.
+      useAppStore.getState().setSettings({ theme: "light" });
+      render(<AppearanceTab />);
+      await user.click(screen.getByRole("radio", { name: "System" }));
+      await waitFor(() => {
+        expect(document.documentElement.getAttribute("data-theme")).toBe(
+          "dark",
+        );
+      });
+      expect(useAppStore.getState().settings.theme).toBe("system");
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });
