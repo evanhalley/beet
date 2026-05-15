@@ -1,4 +1,5 @@
 import { load } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_TASK_REGEX } from "@/lib/tasks";
 
 const STORE_FILE = "config.json";
@@ -66,6 +67,17 @@ async function setValue<T>(key: string, value: T): Promise<void> {
   await store.save();
 }
 
+// Tell the Rust poll loop to re-read config.json and poll immediately, so a
+// settings change takes effect without an app restart. Best-effort: a no-op in
+// Tauri-less / test environments, or before the poll loop has started.
+async function notifyPollerConfigChanged(): Promise<void> {
+  try {
+    await invoke("update_poll_config");
+  } catch {
+    // No Tauri host, or the poll loop isn't running yet — ignore.
+  }
+}
+
 export async function loadSettings(): Promise<BeetSettings> {
   const [
     teams,
@@ -108,22 +120,29 @@ export async function loadSettings(): Promise<BeetSettings> {
   };
 }
 
+// These four feed the Rust poll loop, so each notifies it after persisting.
 export async function setTeams(value: string[]): Promise<void> {
   await setValue(SETTINGS_KEYS.teams, value);
+  await notifyPollerConfigChanged();
 }
 
 export async function setPenalizedBots(value: string[]): Promise<void> {
   await setValue(SETTINGS_KEYS.penalizedBots, value);
+  await notifyPollerConfigChanged();
 }
 
 export async function setTaskRegex(value: string): Promise<void> {
   await setValue(SETTINGS_KEYS.taskRegex, value);
+  await notifyPollerConfigChanged();
 }
 
 export async function setPollingIntervalSec(value: number): Promise<void> {
   await setValue(SETTINGS_KEYS.pollingIntervalSec, value);
+  await notifyPollerConfigChanged();
 }
 
+// showAllApproved only affects frontend visibility filtering — the poll loop
+// never sees it, so no notification is needed.
 export async function setShowAllApproved(value: boolean): Promise<void> {
   await setValue(SETTINGS_KEYS.showAllApproved, value);
 }

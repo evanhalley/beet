@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { ChevronDown, Rocket } from "lucide-react";
-import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
+import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
 
 export function InFlightSection() {
-  const { items } = useMyOpenPrs();
+  const { inFlight: items } = useActionableItems();
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...items].sort((a, b) =>

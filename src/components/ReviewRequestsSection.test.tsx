@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReviewRequestsSection } from "./ReviewRequestsSection";
-import { useReviewRequests } from "@/hooks/useReviewRequests";
 import { useAppStore } from "@/lib/store";
 import { SETTINGS_DEFAULTS } from "@/lib/storage/settings";
 import type { ActionableItem } from "@/lib/types";
@@ -11,17 +10,14 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
 
-vi.mock("@/hooks/useReviewRequests", () => ({
-  useReviewRequests: vi.fn(),
-}));
-
+// ReviewRequestsSection reads from the store (fed by the Rust poll loop in
+// prod); tests push items straight in via setPollResult.
 function setItems(items: ActionableItem[]) {
-  vi.mocked(useReviewRequests).mockReturnValue({
-    items,
-    isLoading: false,
-    isFetching: false,
-    error: null,
-    refetch: vi.fn(),
+  useAppStore.getState().setPollResult({
+    reviewRequests: items,
+    inFlight: [],
+    rateLimit: null,
+    polledAt: "2026-05-09T10:00:00.000Z",
   });
 }
 

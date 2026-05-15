@@ -1,8 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
-import { useReviewRequests } from "@/hooks/useReviewRequests";
-import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
+import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 
 export interface UseActionableItemsResult {
@@ -14,22 +12,20 @@ export interface UseActionableItemsResult {
   isFetching: boolean;
 }
 
+// Server state now lives in the Zustand store, fed by the Rust poll loop via
+// usePollEvents. This hook is a thin selector kept for component compatibility.
 export function useActionableItems(): UseActionableItemsResult {
-  const reviews = useReviewRequests();
-  const inFlight = useMyOpenPrs();
-
-  const byId = useMemo(() => {
-    const map = new Map<string, ActionableItem>();
-    for (const item of reviews.items) map.set(item.id, item);
-    for (const item of inFlight.items) map.set(item.id, item);
-    return map;
-  }, [reviews.items, inFlight.items]);
+  const reviewRequests = useAppStore((s) => s.reviewRequests);
+  const inFlight = useAppStore((s) => s.inFlight);
+  const byId = useAppStore((s) => s.byId);
+  const pollState = useAppStore((s) => s.pollState);
 
   return {
-    reviewRequests: reviews.items,
-    inFlight: inFlight.items,
+    reviewRequests,
+    inFlight,
     byId,
-    isLoading: reviews.isLoading || inFlight.isLoading,
-    isFetching: reviews.isFetching || inFlight.isFetching,
+    // "idle" = no poll cycle has completed yet.
+    isLoading: pollState === "idle",
+    isFetching: pollState === "polling",
   };
 }

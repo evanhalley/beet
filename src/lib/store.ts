@@ -1,14 +1,42 @@
 import { create } from "zustand";
-import type { RateLimitInfo } from "@/lib/github/octokit";
+import type { RateLimitInfo } from "@/lib/github/rate-limit";
+import type { ActionableItem } from "@/lib/types";
 import { SETTINGS_DEFAULTS, type BeetSettings } from "@/lib/storage/settings";
 
-export interface AppStore {
-  // Server state lives in React Query. This store holds only client/UI state.
+export type PollState = "idle" | "polling" | "ok" | "error";
 
-  // rateLimit is cross-cutting: written imperatively by the Octokit response
-  // interceptor (every API call) and by token validation. No single query
-  // owns it, so the store is its canonical home.
+// Payloads emitted by the Rust poll loop (src-tauri/src/poller/poll_loop.rs).
+export interface PollResultPayload {
+  reviewRequests: ActionableItem[];
+  inFlight: ActionableItem[];
   rateLimit: RateLimitInfo | null;
+  polledAt: string;
+}
+
+export interface PollStatusPayload {
+  state: PollState;
+  error: string | null;
+  rateLimited: boolean;
+}
+
+export interface AppStore {
+  // Server state is owned by the Rust poll loop and pushed in via Tauri
+  // events (see usePollEvents); this store is its canonical home on the
+  // frontend. Everything else here is client/UI state.
+  reviewRequests: ActionableItem[];
+  inFlight: ActionableItem[];
+  // Flat lookup across every section, for resolving a selected item by id.
+  byId: Map<string, ActionableItem>;
+  pollState: PollState;
+  lastPolledAt: string | null;
+  // Error from the most recent poll cycle, if it failed. Distinct from
+  // `uiError`, which is for frontend-originated errors (clipboard, open URL).
+  pollError: string | null;
+  rateLimited: boolean;
+  rateLimit: RateLimitInfo | null;
+  // UI intent to pause polling; mirrored to the Rust loop via set_poll_paused.
+  // Session-only (not persisted) — an app restart resumes polling.
+  paused: boolean;
 
   // null = use settings.showAllApproved; true|false = session override.
   showAllReviewsOverride: boolean | null;
@@ -20,6 +48,9 @@ export interface AppStore {
   settings: BeetSettings;
   settingsHydrated: boolean;
 
+  setPollResult: (payload: PollResultPayload) => void;
+  setPollStatus: (payload: PollStatusPayload) => void;
+  setPaused: (paused: boolean) => void;
   setRateLimit: (rateLimit: RateLimitInfo | null) => void;
   setShowAllReviewsOverride: (value: boolean | null) => void;
   setUiError: (message: string | null) => void;
@@ -31,7 +62,15 @@ export interface AppStore {
 }
 
 const initialState = {
+  reviewRequests: [] as ActionableItem[],
+  inFlight: [] as ActionableItem[],
+  byId: new Map<string, ActionableItem>(),
+  pollState: "idle" as PollState,
+  lastPolledAt: null as string | null,
+  pollError: null as string | null,
+  rateLimited: false,
   rateLimit: null as RateLimitInfo | null,
+  paused: false,
   showAllReviewsOverride: null as boolean | null,
   uiError: null as string | null,
   selectedItemId: null as string | null,
@@ -41,6 +80,25 @@ const initialState = {
 
 export const useAppStore = create<AppStore>((set) => ({
   ...initialState,
+  setPollResult: (payload) => {
+    const byId = new Map<string, ActionableItem>();
+    for (const item of payload.reviewRequests) byId.set(item.id, item);
+    for (const item of payload.inFlight) byId.set(item.id, item);
+    set({
+      reviewRequests: payload.reviewRequests,
+      inFlight: payload.inFlight,
+      byId,
+      rateLimit: payload.rateLimit,
+      lastPolledAt: payload.polledAt,
+    });
+  },
+  setPollStatus: (payload) =>
+    set({
+      pollState: payload.state,
+      rateLimited: payload.rateLimited,
+      pollError: payload.state === "error" ? payload.error : null,
+    }),
+  setPaused: (paused) => set({ paused }),
   setRateLimit: (rateLimit) => set({ rateLimit }),
   setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
   setUiError: (message) => set({ uiError: message }),
@@ -48,7 +106,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),
   hydrateSettings: (settings) => set({ settings, settingsHydrated: true }),
-  reset: () => set(initialState),
+  reset: () => set({ ...initialState, byId: new Map() }),
 }));
 
 // Resolved Show-All for the Review Requests section.

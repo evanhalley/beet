@@ -3,19 +3,25 @@
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { selectShowAllReviews, useAppStore } from "@/lib/store";
-import { useReviewRequests } from "@/hooks/useReviewRequests";
+import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
 
 export function ReviewRequestsSection() {
-  const { items } = useReviewRequests();
+  const { reviewRequests: items } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
   const [collapsed, setCollapsed] = useState(false);
 
+  // Rust scores every review-request item but never filters; visibility is a
+  // frontend concern. "Show all" (session override or the persisted default)
+  // reveals approved / zero-or-negative-score items.
   const sorted = [...items].sort(
     (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
   );
+  const visible = showAll
+    ? sorted
+    : sorted.filter((it) => (it.pr?.score ?? 0) > 0);
 
   return (
     <section aria-label="Review Requests" id="section-reviews">
@@ -59,7 +65,7 @@ export function ReviewRequestsSection() {
               color: "var(--color-text-faint)",
             }}
           >
-            {sorted.length}
+            {visible.length}
           </span>
           <span
             style={{
@@ -118,7 +124,7 @@ export function ReviewRequestsSection() {
       </header>
       {!collapsed && (
         <div id="review-requests-list">
-          {sorted.length === 0 ? (
+          {visible.length === 0 ? (
             <p
               style={{
                 padding: "10px 16px 14px",
@@ -133,7 +139,7 @@ export function ReviewRequestsSection() {
               role="list"
               style={{ listStyle: "none", margin: 0, padding: 0 }}
             >
-              {sorted.map((item) => (
+              {visible.map((item) => (
                 <li role="listitem" key={item.id}>
                   <ActionableRow item={item} variant="review" />
                 </li>

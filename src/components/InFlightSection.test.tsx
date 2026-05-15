@@ -2,16 +2,11 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { InFlightSection } from "./InFlightSection";
-import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem, PrLifecycle } from "@/lib/types";
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
-}));
-
-vi.mock("@/hooks/useMyOpenPrs", () => ({
-  useMyOpenPrs: vi.fn(),
 }));
 
 interface MakeItemOpts {
@@ -63,13 +58,14 @@ function makeItem({
   };
 }
 
+// InFlightSection reads from the store (fed by the Rust poll loop in prod);
+// tests push items straight in via setPollResult.
 function seed(items: ActionableItem[]) {
-  vi.mocked(useMyOpenPrs).mockReturnValue({
-    items,
-    isLoading: false,
-    isFetching: false,
-    error: null,
-    refetch: vi.fn(),
+  useAppStore.getState().setPollResult({
+    reviewRequests: [],
+    inFlight: items,
+    rateLimit: null,
+    polledAt: "2026-05-12T00:00:00.000Z",
   });
 }
 

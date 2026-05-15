@@ -3,8 +3,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainWindowShell } from "./MainWindowShell";
-import { useReviewRequests } from "@/hooks/useReviewRequests";
-import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 
@@ -12,32 +10,26 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
 
-// Mock the two leaf data hooks; useActionableItems / useSelectedItem compose
-// them, so the shell sees real aggregation over the seeded items.
-vi.mock("@/hooks/useReviewRequests", () => ({
-  useReviewRequests: vi.fn(),
-}));
-vi.mock("@/hooks/useMyOpenPrs", () => ({
-  useMyOpenPrs: vi.fn(),
-}));
-
+// Server state lives in the store (fed by the Rust poll loop in prod);
+// useActionableItems / useSelectedItem select off it. Seed via setPollResult,
+// preserving whichever section we're not currently setting.
 function seedReviews(items: ActionableItem[]) {
-  vi.mocked(useReviewRequests).mockReturnValue({
-    items,
-    isLoading: false,
-    isFetching: false,
-    error: null,
-    refetch: vi.fn(),
+  const { inFlight } = useAppStore.getState();
+  useAppStore.getState().setPollResult({
+    reviewRequests: items,
+    inFlight,
+    rateLimit: null,
+    polledAt: "2026-05-09T10:00:00.000Z",
   });
 }
 
 function seedInFlight(items: ActionableItem[]) {
-  vi.mocked(useMyOpenPrs).mockReturnValue({
-    items,
-    isLoading: false,
-    isFetching: false,
-    error: null,
-    refetch: vi.fn(),
+  const { reviewRequests } = useAppStore.getState();
+  useAppStore.getState().setPollResult({
+    reviewRequests,
+    inFlight: items,
+    rateLimit: null,
+    polledAt: "2026-05-09T10:00:00.000Z",
   });
 }
 

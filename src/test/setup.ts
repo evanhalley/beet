@@ -1,7 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { server } from "./msw-server";
-import { __resetOctokitForTests } from "@/lib/github/octokit";
 
 // Tauri APIs aren't available in jsdom; tests use injected providers/mocks.
 // `invoke` is backed by an in-memory keychain so the secure_token commands
@@ -49,18 +48,11 @@ vi.mock("@tauri-apps/plugin-store", () => {
   };
 });
 
-vi.mock("@tauri-apps/plugin-sql", () => {
-  const fakeDb = {
-    select: vi.fn(async () => []),
-    execute: vi.fn(async () => ({ rowsAffected: 0, lastInsertId: 0 })),
-  };
-  return {
-    default: {
-      load: vi.fn(async () => fakeDb),
-    },
-    __fakeDb: fakeDb,
-  };
-});
+// Server state is pushed in via Tauri events from the Rust poll loop; tests
+// drive the store directly, so `listen` is a no-op that returns an unlisten fn.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
 
 // jsdom has no matchMedia. Default to "light" (matches: false); tests that
 // need dark can override window.matchMedia themselves.
@@ -88,7 +80,6 @@ beforeEach(async () => {
     __fakeKeychain: { __reset: () => void };
   };
   coreMod.__fakeKeychain.__reset();
-  __resetOctokitForTests();
 });
 
 afterEach(() => server.resetHandlers());

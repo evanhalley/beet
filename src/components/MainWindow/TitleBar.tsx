@@ -1,10 +1,10 @@
 "use client";
 
 import { Pause, Play, RefreshCw, Search, Settings as SettingsIcon } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { BeetMark } from "@/components/BeetMark";
 import { PollingDot } from "@/components/PollingDot";
+import { useAppStore } from "@/lib/store";
 
 export interface TitleBarProps {
   onOpenSettings: () => void;
@@ -24,11 +24,19 @@ const iconBtnBase: React.CSSProperties = {
 };
 
 export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps) {
-  const queryClient = useQueryClient();
-  const [paused, setPaused] = useState(false);
+  const paused = useAppStore((s) => s.paused);
+  const setPaused = useAppStore((s) => s.setPaused);
 
+  // Refresh / pause drive the Rust poll loop. Best-effort: a no-op in
+  // Tauri-less / test environments.
   const onRefresh = () => {
-    void queryClient.invalidateQueries({ queryKey: ["review-requests"] });
+    void invoke("refresh_now").catch(() => {});
+  };
+
+  const onTogglePause = () => {
+    const next = !paused;
+    setPaused(next);
+    void invoke("set_poll_paused", { paused: next }).catch(() => {});
   };
 
   return (
@@ -78,14 +86,19 @@ export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps
       <button
         type="button"
         onClick={onRefresh}
+        disabled={paused}
         aria-label="Refresh"
-        style={iconBtnBase}
+        style={{
+          ...iconBtnBase,
+          cursor: paused ? "default" : "pointer",
+          opacity: paused ? 0.4 : 1,
+        }}
       >
         <RefreshCw size={14} />
       </button>
       <button
         type="button"
-        onClick={() => setPaused((p) => !p)}
+        onClick={onTogglePause}
         aria-label={paused ? "Resume polling" : "Pause polling"}
         aria-pressed={paused}
         style={iconBtnBase}

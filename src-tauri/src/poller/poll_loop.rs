@@ -1,0 +1,261 @@
+//! Background poll task. Ticks on the configured interval, fetches GitHub state
+//! with a bounded fan-out, and emits two events to the frontend:
+//!
+//! - `poll:result` — finished `ActionableItem` lists + rate limit, per cycle.
+//! - `poll:status` — `polling` / `ok` / `error` lifecycle, plus rate-limit flag.
+//!
+//! Errors and rate-limit pressure cross the boundary as event payload fields;
+//! the task itself never panics out.
+
+use crate::error::BeetResult;
+use crate::github::client::{GithubClient, RateLimitInfo};
+use crate::github::models::AuthUser;
+use crate::github::prs::{
+    fetch_my_open_prs, fetch_review_requests, FetchMyOpenPrsOptions, FetchReviewRequestsOptions,
+};
+use crate::poller::config::PollConfig;
+use crate::poller::types::ActionableItem;
+use crate::secure_token::read_token;
+use crate::store::db::now_iso;
+use crate::store::Db;
+use serde::Serialize;
+use std::sync::Arc;
+use std::time::Duration;
+use tauri::{AppHandle, Emitter, Runtime};
+use tokio::sync::watch;
+use tokio_util::sync::CancellationToken;
+
+pub const EVENT_POLL_RESULT: &str = "poll:result";
+pub const EVENT_POLL_STATUS: &str = "poll:status";
+
+/// Below this many remaining core-API requests, the cycle reports rate-limit
+/// pressure (drives adaptive polling in Phase 5).
+const RATE_LIMIT_PRESSURE_THRESHOLD: i64 = 100;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PollResultPayload {
+    review_requests: Vec<ActionableItem>,
+    in_flight: Vec<ActionableItem>,
+    rate_limit: Option<RateLimitInfo>,
+    polled_at: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PollStatusPayload {
+    state: &'static str,
+    error: Option<String>,
+    rate_limited: bool,
+}
+
+/// Handle to a running poll loop. `cancel` stops the task; `config_tx` pushes
+/// live config updates; `paused_tx` toggles polling on/off.
+pub struct PollHandle {
+    pub cancel: CancellationToken,
+    pub config_tx: watch::Sender<PollConfig>,
+    pub paused_tx: watch::Sender<bool>,
+}
+
+/// Re-read settings from `config.json` and push them to the running poll loop,
+/// which wakes immediately for a fresh poll. The frontend calls this after a
+/// Settings change so interval / teams / bots / task-regex apply without a
+/// restart.
+#[tauri::command]
+pub fn update_poll_config(
+    app: tauri::AppHandle,
+    handle: tauri::State<'_, PollHandle>,
+) -> Result<(), String> {
+    let config = PollConfig::load(&app);
+    handle
+        .config_tx
+        .send(config)
+        .map_err(|e| format!("poll loop is not running: {e}"))
+}
+
+/// Wake the poll loop for an immediate cycle — backs the TitleBar refresh
+/// button. Re-sends the current config; the loop treats any watch update as a
+/// wake signal.
+#[tauri::command]
+pub fn refresh_now(handle: tauri::State<'_, PollHandle>) -> Result<(), String> {
+    let current = handle.config_tx.borrow().clone();
+    handle
+        .config_tx
+        .send(current)
+        .map_err(|e| format!("poll loop is not running: {e}"))
+}
+
+/// Pause or resume polling — backs the TitleBar pause button. While paused the
+/// loop performs no cycles until resumed.
+#[tauri::command]
+pub fn set_poll_paused(
+    paused: bool,
+    handle: tauri::State<'_, PollHandle>,
+) -> Result<(), String> {
+    handle
+        .paused_tx
+        .send(paused)
+        .map_err(|e| format!("poll loop is not running: {e}"))
+}
+
+/// Spawn the poll loop on Tauri's async runtime. Returns immediately.
+pub fn spawn<R: Runtime>(app: AppHandle<R>, db: Arc<Db>) -> PollHandle {
+    let config = PollConfig::load(&app);
+    let (config_tx, config_rx) = watch::channel(config);
+    let (paused_tx, paused_rx) = watch::channel(false);
+    let cancel = CancellationToken::new();
+    let run_cancel = cancel.clone();
+    tauri::async_runtime::spawn(async move {
+        run(app, db, config_rx, paused_rx, run_cancel).await;
+    });
+    PollHandle {
+        cancel,
+        config_tx,
+        paused_tx,
+    }
+}
+
+async fn run<R: Runtime>(
+    app: AppHandle<R>,
+    db: Arc<Db>,
+    mut config_rx: watch::Receiver<PollConfig>,
+    mut paused_rx: watch::Receiver<bool>,
+    cancel: CancellationToken,
+) {
+    // The PAT is cached in-process: reading the macOS keychain prompts the user
+    // on every access in unsigned/dev builds, so we read it once and only
+    // re-read after a failed cycle (e.g. the token was rotated or revoked).
+    let mut token: Option<String> = None;
+
+    loop {
+        // `borrow_and_update` marks the current value as seen, so the
+        // `changed()` arms below only fire on a *subsequent* update.
+        let config = config_rx.borrow_and_update().clone();
+
+        // While paused, run no cycles — just wait for resume (or shutdown).
+        if *paused_rx.borrow_and_update() {
+            tokio::select! {
+                _ = cancel.cancelled() => break,
+                changed = paused_rx.changed() => {
+                    if changed.is_err() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+
+        emit_status(&app, "polling", None, false);
+
+        if token.is_none() {
+            match read_token() {
+                Ok(t) => token = t,
+                Err(e) => emit_status(&app, "error", Some(format!("keyring error: {e}")), false),
+            }
+        }
+
+        match poll_once(&app, &db, &config, token.as_deref()).await {
+            Ok(rate_limited) => emit_status(&app, "ok", None, rate_limited),
+            Err(err) => {
+                // Drop the cached token so the next cycle re-reads it — covers
+                // a rotated/revoked PAT without re-prompting every cycle.
+                token = None;
+                emit_status(&app, "error", Some(err), false);
+            }
+        }
+
+        let interval = Duration::from_secs(config.polling_interval_sec);
+        tokio::select! {
+            _ = cancel.cancelled() => break,
+            _ = tokio::time::sleep(interval) => {}
+            // A Settings change / refresh pushed via the commands above wakes
+            // the loop immediately for a fresh poll.
+            changed = config_rx.changed() => {
+                if changed.is_err() {
+                    break; // sender dropped — app shutting down
+                }
+            }
+            // Pause toggled — loop back to the top, which re-checks paused.
+            changed = paused_rx.changed() => {
+                if changed.is_err() {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Run one poll cycle. On success emits `poll:result` and returns whether the
+/// core rate limit is under pressure.
+async fn poll_once<R: Runtime>(
+    app: &AppHandle<R>,
+    db: &Db,
+    config: &PollConfig,
+    token: Option<&str>,
+) -> Result<bool, String> {
+    let token = token.ok_or_else(|| "No GitHub token configured".to_string())?;
+
+    let client = GithubClient::new(token).map_err(|e| e.to_string())?;
+    let username = fetch_username(&client, db)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let review_opts = FetchReviewRequestsOptions {
+        username: username.clone(),
+        teams: config.teams.clone(),
+        penalized_bots: config.penalized_bots.clone(),
+        task_regex: config.task_regex.clone(),
+    };
+    let my_opts = FetchMyOpenPrsOptions {
+        username,
+        task_regex: config.task_regex.clone(),
+    };
+
+    let (reviews, mine) = tokio::join!(
+        fetch_review_requests(&client, db, &review_opts),
+        fetch_my_open_prs(&client, db, &my_opts),
+    );
+    let reviews = reviews.map_err(|e| e.to_string())?;
+    let mine = mine.map_err(|e| e.to_string())?;
+
+    // Prefer a per-PR (core bucket) reading; the search call lives in a separate
+    // rate-limit bucket and is not representative.
+    let rate_limit = mine.rate_limit.or(reviews.rate_limit);
+    let rate_limited =
+        rate_limit.is_some_and(|rl| rl.remaining < RATE_LIMIT_PRESSURE_THRESHOLD);
+
+    let payload = PollResultPayload {
+        review_requests: reviews.items,
+        in_flight: mine.items,
+        rate_limit,
+        polled_at: now_iso(),
+    };
+    let _ = app.emit(EVENT_POLL_RESULT, payload);
+    Ok(rate_limited)
+}
+
+/// The poller needs the authenticated login to build search queries. Token
+/// *validation* (scopes, etc.) stays in the JS auth flow.
+async fn fetch_username(client: &GithubClient, db: &Db) -> BeetResult<String> {
+    let url = client.url("/user");
+    let res = client
+        .beet_get::<AuthUser>(db, "user:authenticated", &url)
+        .await?;
+    Ok(res.body.login)
+}
+
+fn emit_status<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &'static str,
+    error: Option<String>,
+    rate_limited: bool,
+) {
+    let _ = app.emit(
+        EVENT_POLL_STATUS,
+        PollStatusPayload {
+            state,
+            error,
+            rate_limited,
+        },
+    );
+}
