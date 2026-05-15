@@ -7,7 +7,8 @@
 //! Errors and rate-limit pressure cross the boundary as event payload fields;
 //! the task itself never panics out.
 
-use crate::error::BeetResult;
+use crate::error::{BeetError, BeetResult};
+use crate::poller::adaptive::{effective_interval, is_on_battery, is_window_hidden, AdaptiveSignals};
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::AuthUser;
 use crate::github::prs::{
@@ -20,7 +21,6 @@ use crate::store::db::now_iso;
 use crate::store::Db;
 use serde::Serialize;
 use std::sync::Arc;
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Runtime};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -47,6 +47,9 @@ struct PollStatusPayload {
     state: &'static str,
     error: Option<String>,
     rate_limited: bool,
+    /// Seconds GitHub asked us to wait before retrying. Set on rate-limit
+    /// errors; `None` otherwise. Phase 5 will use it to stretch the interval.
+    retry_after_secs: Option<u64>,
 }
 
 /// Handle to a running poll loop. `cancel` stops the task; `config_tx` pushes
@@ -145,26 +148,49 @@ async fn run<R: Runtime>(
             continue;
         }
 
-        emit_status(&app, "polling", None, false);
+        emit_status(&app, "polling", None, false, None);
 
         if token.is_none() {
             match read_token() {
                 Ok(t) => token = t,
-                Err(e) => emit_status(&app, "error", Some(format!("keyring error: {e}")), false),
+                Err(e) => emit_status(
+                    &app,
+                    "error",
+                    Some(format!("keyring error: {e}")),
+                    false,
+                    None,
+                ),
             }
         }
 
-        match poll_once(&app, &db, &config, token.as_deref()).await {
-            Ok(rate_limited) => emit_status(&app, "ok", None, rate_limited),
-            Err(err) => {
-                // Drop the cached token so the next cycle re-reads it — covers
-                // a rotated/revoked PAT without re-prompting every cycle.
-                token = None;
-                emit_status(&app, "error", Some(err), false);
-            }
-        }
+        // Capture each cycle's rate-limit signals so the adaptive interval
+        // below can stretch backoff appropriately.
+        let (rate_limited, retry_after_secs) =
+            match poll_once(&app, &db, &config, token.as_deref()).await {
+                Ok(rate_limited) => {
+                    emit_status(&app, "ok", None, rate_limited, None);
+                    (rate_limited, None)
+                }
+                Err(err) => {
+                    // Don't re-read the keychain on every transient failure —
+                    // only when the error looks like the token itself is the
+                    // problem.
+                    if matches!(err, BeetError::Unauthorized(_) | BeetError::NoToken) {
+                        token = None;
+                    }
+                    let (message, rate_limited, retry_after_secs) = describe_error(&err);
+                    emit_status(&app, "error", Some(message), rate_limited, retry_after_secs);
+                    (rate_limited, retry_after_secs)
+                }
+            };
 
-        let interval = Duration::from_secs(config.polling_interval_sec);
+        let interval = effective_interval(&AdaptiveSignals {
+            base_secs: config.polling_interval_sec,
+            window_hidden: is_window_hidden(&app),
+            on_battery: is_on_battery(),
+            rate_limited,
+            retry_after_secs,
+        });
         tokio::select! {
             _ = cancel.cancelled() => break,
             _ = tokio::time::sleep(interval) => {}
@@ -192,13 +218,11 @@ async fn poll_once<R: Runtime>(
     db: &Db,
     config: &PollConfig,
     token: Option<&str>,
-) -> Result<bool, String> {
-    let token = token.ok_or_else(|| "No GitHub token configured".to_string())?;
+) -> BeetResult<bool> {
+    let token = token.ok_or(BeetError::NoToken)?;
 
-    let client = GithubClient::new(token).map_err(|e| e.to_string())?;
-    let username = fetch_username(&client, db)
-        .await
-        .map_err(|e| e.to_string())?;
+    let client = GithubClient::new(token)?;
+    let username = fetch_username(&client, db).await?;
 
     let review_opts = FetchReviewRequestsOptions {
         username: username.clone(),
@@ -215,8 +239,8 @@ async fn poll_once<R: Runtime>(
         fetch_review_requests(&client, db, &review_opts),
         fetch_my_open_prs(&client, db, &my_opts),
     );
-    let reviews = reviews.map_err(|e| e.to_string())?;
-    let mine = mine.map_err(|e| e.to_string())?;
+    let reviews = reviews?;
+    let mine = mine?;
 
     // Prefer a per-PR (core bucket) reading; the search call lives in a separate
     // rate-limit bucket and is not representative.
@@ -234,6 +258,26 @@ async fn poll_once<R: Runtime>(
     Ok(rate_limited)
 }
 
+/// Map a poll-cycle error into a UI-facing message + the structured signals
+/// downstream consumers (and Phase 5's adaptive interval) need.
+fn describe_error(err: &BeetError) -> (String, bool, Option<u64>) {
+    match err {
+        BeetError::RateLimited { retry_after_secs } => {
+            let message = match retry_after_secs {
+                Some(n) => format!("GitHub rate limit hit. Retry in {n}s."),
+                None => "GitHub rate limit hit.".to_string(),
+            };
+            (message, true, *retry_after_secs)
+        }
+        BeetError::Unauthorized(_) => (
+            "GitHub rejected the PAT. Re-enter it in Settings.".to_string(),
+            false,
+            None,
+        ),
+        other => (other.to_string(), false, None),
+    }
+}
+
 /// The poller needs the authenticated login to build search queries. Token
 /// *validation* (scopes, etc.) stays in the JS auth flow.
 async fn fetch_username(client: &GithubClient, db: &Db) -> BeetResult<String> {
@@ -249,6 +293,7 @@ fn emit_status<R: Runtime>(
     state: &'static str,
     error: Option<String>,
     rate_limited: bool,
+    retry_after_secs: Option<u64>,
 ) {
     let _ = app.emit(
         EVENT_POLL_STATUS,
@@ -256,6 +301,7 @@ fn emit_status<R: Runtime>(
             state,
             error,
             rate_limited,
+            retry_after_secs,
         },
     );
 }

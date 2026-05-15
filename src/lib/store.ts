@@ -17,6 +17,9 @@ export interface PollStatusPayload {
   state: PollState;
   error: string | null;
   rateLimited: boolean;
+  // Seconds GitHub asked us to wait before retrying — set on rate-limit
+  // errors, null otherwise. Available for Phase 5's adaptive polling.
+  retryAfterSecs: number | null;
 }
 
 export interface AppStore {
@@ -33,6 +36,7 @@ export interface AppStore {
   // `uiError`, which is for frontend-originated errors (clipboard, open URL).
   pollError: string | null;
   rateLimited: boolean;
+  retryAfterSecs: number | null;
   rateLimit: RateLimitInfo | null;
   // UI intent to pause polling; mirrored to the Rust loop via set_poll_paused.
   // Session-only (not persisted) — an app restart resumes polling.
@@ -69,6 +73,7 @@ const initialState = {
   lastPolledAt: null as string | null,
   pollError: null as string | null,
   rateLimited: false,
+  retryAfterSecs: null as number | null,
   rateLimit: null as RateLimitInfo | null,
   paused: false,
   showAllReviewsOverride: null as boolean | null,
@@ -96,6 +101,7 @@ export const useAppStore = create<AppStore>((set) => ({
     set({
       pollState: payload.state,
       rateLimited: payload.rateLimited,
+      retryAfterSecs: payload.retryAfterSecs,
       pollError: payload.state === "error" ? payload.error : null,
     }),
   setPaused: (paused) => set({ paused }),

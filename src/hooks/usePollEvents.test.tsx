@@ -89,14 +89,38 @@ describe("usePollEvents", () => {
     await waitFor(() => expect(listen).toHaveBeenCalledWith("poll:status", expect.any(Function)));
     const onStatus = handlerFor("poll:status");
 
-    onStatus({ payload: { state: "error", error: "GitHub request failed", rateLimited: false } });
+    onStatus({
+      payload: {
+        state: "error",
+        error: "GitHub request failed",
+        rateLimited: false,
+        retryAfterSecs: null,
+      },
+    });
     expect(useAppStore.getState().pollState).toBe("error");
     expect(useAppStore.getState().pollError).toBe("GitHub request failed");
 
     // A subsequent good cycle clears the error and reflects rate-limit pressure.
-    onStatus({ payload: { state: "ok", error: null, rateLimited: true } });
+    onStatus({
+      payload: { state: "ok", error: null, rateLimited: true, retryAfterSecs: null },
+    });
     expect(useAppStore.getState().pollState).toBe("ok");
     expect(useAppStore.getState().pollError).toBeNull();
     expect(useAppStore.getState().rateLimited).toBe(true);
+  });
+
+  test("rate-limit errors surface retryAfterSecs to the store", async () => {
+    renderHook(() => usePollEvents());
+    await waitFor(() => expect(listen).toHaveBeenCalledWith("poll:status", expect.any(Function)));
+    handlerFor("poll:status")({
+      payload: {
+        state: "error",
+        error: "GitHub rate limit hit. Retry in 60s.",
+        rateLimited: true,
+        retryAfterSecs: 60,
+      },
+    });
+    expect(useAppStore.getState().rateLimited).toBe(true);
+    expect(useAppStore.getState().retryAfterSecs).toBe(60);
   });
 });
