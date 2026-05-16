@@ -26,6 +26,7 @@ export function InFlightSection() {
           textTransform: "uppercase",
           letterSpacing: 0.06,
           color: "var(--color-text-muted)",
+          background: "var(--color-panel-2)",
         }}
       >
         <button
