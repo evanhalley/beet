@@ -1,10 +1,11 @@
 //! Task-URL extraction. Port of `src/lib/tasks.ts`.
 //!
-//! JS regexes are implicitly global; the `regex` crate's `find_iter` is always
-//! global, so the JS "force the `g` flag" workaround has no Rust equivalent —
-//! the `g` flag in `/pattern/flags` input is simply ignored.
+//! Uses `fancy-regex` (not the basic `regex` crate) so user-supplied patterns
+//! that came from the JS era — including lookaround and backreferences —
+//! still compile. The JS `g` flag is implicit here since `find_iter` is
+//! always global; it's accepted from `/pattern/flags` input and ignored.
 
-use regex::{Regex, RegexBuilder};
+use fancy_regex::Regex;
 
 pub const DEFAULT_TASK_REGEX: &str =
     r"https://your-company\.atlassian\.net/browse/[A-Z]+-\d+";
@@ -18,32 +19,28 @@ pub fn compile_task_regex(input: Option<&str>) -> Option<Regex> {
         return None;
     }
 
-    let (pattern, flags) = match parse_delimited(input) {
-        Some((p, f)) => (p, f),
-        None => (input, ""),
+    let (pattern, flag_chars) = match parse_delimited(input) {
+        Some((p, f)) => (p.to_string(), f.to_string()),
+        None => (input.to_string(), String::new()),
     };
 
-    let mut builder = RegexBuilder::new(pattern);
-    for flag in flags.chars() {
-        match flag.to_ascii_lowercase() {
-            'i' => {
-                builder.case_insensitive(true);
-            }
-            'm' => {
-                builder.multi_line(true);
-            }
-            's' => {
-                builder.dot_matches_new_line(true);
-            }
-            'x' => {
-                builder.ignore_whitespace(true);
-            }
-            // 'g' (always-global) and any other flag have no `regex`-crate
-            // equivalent — ignore rather than fail.
-            _ => {}
+    // fancy-regex doesn't expose a builder for case-insensitive etc.; the
+    // canonical way is to prepend inline flags `(?im)`. Only honor flags that
+    // map to fancy-regex features.
+    let mut inline = String::new();
+    for c in flag_chars.chars() {
+        let c = c.to_ascii_lowercase();
+        if matches!(c, 'i' | 'm' | 's' | 'x') && !inline.contains(c) {
+            inline.push(c);
         }
     }
-    builder.build().ok()
+    let full_pattern = if inline.is_empty() {
+        pattern
+    } else {
+        format!("(?{inline}){pattern}")
+    };
+
+    Regex::new(&full_pattern).ok()
 }
 
 /// Split `/pattern/flags` into its parts. Returns `None` if `input` is not in
@@ -68,7 +65,10 @@ pub fn extract_task_urls(body: Option<&str>, regex: Option<&Regex>) -> Vec<Strin
     };
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
+    // fancy-regex's find_iter yields Result<Match, Error>; a per-match error
+    // (e.g. backtrack limit) just skips that hit rather than aborting.
     for m in regex.find_iter(body) {
+        let Ok(m) = m else { continue };
         let s = m.as_str().to_string();
         if seen.insert(s.clone()) {
             out.push(s);
@@ -89,8 +89,8 @@ mod tests {
     #[test]
     fn accepts_delimited_form_with_flags() {
         let re = compile_task_regex(Some(r"/foo-\d+/i")).unwrap();
-        assert!(re.is_match("FOO-12"));
-        assert!(re.is_match("foo-12"));
+        assert!(re.is_match("FOO-12").unwrap());
+        assert!(re.is_match("foo-12").unwrap());
     }
 
     #[test]
@@ -133,5 +133,15 @@ mod tests {
         assert!(extract_task_urls(None, Some(&re)).is_empty());
         assert!(extract_task_urls(Some("anything"), None).is_empty());
         assert!(extract_task_urls(Some("just prose"), Some(&re)).is_empty());
+    }
+
+    /// JS users may have saved patterns with lookaround. The basic `regex`
+    /// crate rejects these; fancy-regex accepts them, matching JS behavior.
+    #[test]
+    fn supports_lookaround_for_js_era_patterns() {
+        // Lookbehind: match ticket IDs only when preceded by "PR:".
+        let re = compile_task_regex(Some(r"(?<=PR: )[A-Z]+-\d+")).unwrap();
+        let out = extract_task_urls(Some("note PR: PROJ-7 elsewhere PROJ-99"), Some(&re));
+        assert_eq!(out, vec!["PROJ-7".to_string()]);
     }
 }

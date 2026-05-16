@@ -31,6 +31,10 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = { version = "0.4", features = ["serde"] }
 regex = "1"
+# fancy-regex supports JS-compatible features (lookaround, backreferences)
+# the basic `regex` crate rejects. Used only for the user-supplied taskRegex
+# so saved patterns from the JS era keep working.
+fancy-regex = "0.14"
 thiserror = "1"
 starship-battery = "0.10"
 

@@ -53,11 +53,13 @@ struct PollStatusPayload {
 }
 
 /// Handle to a running poll loop. `cancel` stops the task; `config_tx` pushes
-/// live config updates; `paused_tx` toggles polling on/off.
+/// live config updates; `paused_tx` toggles polling on/off; `token_gen_tx`
+/// signals that the keychain PAT was rotated and the cache must be dropped.
 pub struct PollHandle {
     pub cancel: CancellationToken,
     pub config_tx: watch::Sender<PollConfig>,
     pub paused_tx: watch::Sender<bool>,
+    pub token_gen_tx: watch::Sender<u64>,
 }
 
 /// Re-read settings from `config.json` and push them to the running poll loop,
@@ -101,20 +103,35 @@ pub fn set_poll_paused(
         .map_err(|e| format!("poll loop is not running: {e}"))
 }
 
+/// Tell the poll loop the keychain PAT changed (rotated or cleared) so it
+/// drops its cached token and re-reads on the next cycle. Called by
+/// `storeToken` / `clearToken` on the frontend after the keychain write.
+/// Also wakes the loop for an immediate poll with the new credentials.
+#[tauri::command]
+pub fn notify_token_changed(handle: tauri::State<'_, PollHandle>) -> Result<(), String> {
+    let next = handle.token_gen_tx.borrow().wrapping_add(1);
+    handle
+        .token_gen_tx
+        .send(next)
+        .map_err(|e| format!("poll loop is not running: {e}"))
+}
+
 /// Spawn the poll loop on Tauri's async runtime. Returns immediately.
 pub fn spawn<R: Runtime>(app: AppHandle<R>, db: Arc<Db>) -> PollHandle {
     let config = PollConfig::load(&app);
     let (config_tx, config_rx) = watch::channel(config);
     let (paused_tx, paused_rx) = watch::channel(false);
+    let (token_gen_tx, token_gen_rx) = watch::channel(0u64);
     let cancel = CancellationToken::new();
     let run_cancel = cancel.clone();
     tauri::async_runtime::spawn(async move {
-        run(app, db, config_rx, paused_rx, run_cancel).await;
+        run(app, db, config_rx, paused_rx, token_gen_rx, run_cancel).await;
     });
     PollHandle {
         cancel,
         config_tx,
         paused_tx,
+        token_gen_tx,
     }
 }
 
@@ -123,17 +140,28 @@ async fn run<R: Runtime>(
     db: Arc<Db>,
     mut config_rx: watch::Receiver<PollConfig>,
     mut paused_rx: watch::Receiver<bool>,
+    mut token_gen_rx: watch::Receiver<u64>,
     cancel: CancellationToken,
 ) {
     // The PAT is cached in-process: reading the macOS keychain prompts the user
     // on every access in unsigned/dev builds, so we read it once and only
-    // re-read after a failed cycle (e.g. the token was rotated or revoked).
+    // re-read after a failed cycle, or when `notify_token_changed` bumps the
+    // generation counter (covers a rotated PAT from Settings).
     let mut token: Option<String> = None;
+    let mut last_token_gen: u64 = *token_gen_rx.borrow();
 
     loop {
         // `borrow_and_update` marks the current value as seen, so the
         // `changed()` arms below only fire on a *subsequent* update.
         let config = config_rx.borrow_and_update().clone();
+
+        // Drop the cached token if the frontend reported a rotation while we
+        // were either polling or sleeping.
+        let current_gen = *token_gen_rx.borrow_and_update();
+        if current_gen != last_token_gen {
+            token = None;
+            last_token_gen = current_gen;
+        }
 
         // While paused, run no cycles — just wait for resume (or shutdown).
         if *paused_rx.borrow_and_update() {
@@ -203,6 +231,13 @@ async fn run<R: Runtime>(
             }
             // Pause toggled — loop back to the top, which re-checks paused.
             changed = paused_rx.changed() => {
+                if changed.is_err() {
+                    break;
+                }
+            }
+            // PAT rotated/cleared — wake to drop the cached token and re-poll
+            // with the new credentials.
+            changed = token_gen_rx.changed() => {
                 if changed.is_err() {
                     break;
                 }

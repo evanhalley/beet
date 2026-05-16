@@ -1,19 +1,24 @@
 //! `resolve_team_members`: resolves `org/slug` team specs to a set of member
 //! logins, used by the scoring algorithm. Port of `src/lib/github/teams.ts`.
 
+use crate::error::BeetResult;
 use crate::github::client::GithubClient;
 use crate::github::models::TeamMember;
 use crate::store::Db;
 use std::collections::HashSet;
 
-/// Resolve every `org/slug` spec to its member logins. A spec that is malformed
-/// or fails to fetch contributes nothing — it never aborts the whole resolve,
-/// matching the JS behavior.
+/// Resolve every `org/slug` spec to its member logins.
+///
+/// Malformed specs and non-critical lookup failures (404s, etc.) contribute
+/// nothing and don't abort the whole resolve. **Critical** errors (rate-limit,
+/// auth, transient outage) DO propagate — otherwise a 429 on this endpoint
+/// would silently produce an empty team set, mis-scoring review requests and
+/// hiding rate-limit pressure from the adaptive-backoff path.
 pub async fn resolve_team_members(
     client: &GithubClient,
     db: &Db,
     teams: &[String],
-) -> HashSet<String> {
+) -> BeetResult<HashSet<String>> {
     let mut members = HashSet::new();
     for team_str in teams {
         let parts: Vec<&str> = team_str.split('/').collect();
@@ -38,10 +43,11 @@ pub async fn resolve_team_members(
                     }
                 }
             }
+            Err(e) if e.is_critical() => return Err(e),
             Err(_) => continue,
         }
     }
-    members
+    Ok(members)
 }
 
 #[cfg(test)]
@@ -84,7 +90,8 @@ mod tests {
                 "malformed".to_string(),
             ],
         )
-        .await;
+        .await
+        .unwrap();
 
         assert!(members.contains("alice"));
         assert!(members.contains("bob"));
@@ -95,7 +102,27 @@ mod tests {
     async fn empty_team_list_resolves_to_empty_set() {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         let client = GithubClient::new("tok").unwrap();
-        let members = resolve_team_members(&client, &db, &[]).await;
+        let members = resolve_team_members(&client, &db, &[]).await.unwrap();
         assert!(members.is_empty());
+    }
+
+    #[tokio::test]
+    async fn propagates_rate_limit_from_team_endpoint() {
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/orgs/acme/teams/core/members"))
+            .respond_with(
+                ResponseTemplate::new(429).insert_header("retry-after", "30"),
+            )
+            .mount(&server)
+            .await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let res = resolve_team_members(&client, &db, &["acme/core".to_string()]).await;
+        assert!(matches!(
+            res,
+            Err(crate::error::BeetError::RateLimited { retry_after_secs: Some(30) })
+        ));
     }
 }

@@ -22,6 +22,11 @@ use crate::store::lifecycle::{
 use crate::store::Db;
 use crate::tasks::{compile_task_regex, extract_task_urls};
 use futures::stream::{self, StreamExt};
+// Two different regex engines: `regex` for our own URL parsers (linear,
+// fast), `fancy_regex` for the user-supplied taskRegex (supports JS-era
+// patterns with lookaround / backreferences). Aliased here so the call
+// sites read clearly.
+use fancy_regex::Regex as TaskRegex;
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
@@ -39,6 +44,14 @@ pub struct FetchOutcome {
     pub items: Vec<ActionableItem>,
     pub rate_limit: Option<RateLimitInfo>,
 }
+
+/// One entry from the per-PR `buffer_unordered` stream. The leading `usize`
+/// is the PR's index in the original search response, used to restore search
+/// order before the (stable) score / updated_at sort.
+type AssembledItem = (
+    usize,
+    BeetResult<(Option<ActionableItem>, Option<RateLimitInfo>)>,
+);
 
 pub fn parse_repo_and_owner_from_url(url: &str) -> Option<(String, String)> {
     static GITHUB_RE: OnceLock<Regex> = OnceLock::new();
@@ -148,11 +161,12 @@ pub async fn fetch_review_requests(
     let cache_key = format!("search:review-requested:{}", opts.username);
     let url = search_url(client, &q)?;
 
-    let (search_res, team_members) = tokio::join!(
+    let (search_res, team_members_res) = tokio::join!(
         client.beet_get::<SearchResult>(db, &cache_key, &url),
         resolve_team_members(client, db, &opts.teams),
     );
     let search = search_res?.body;
+    let team_members = team_members_res?;
     if search.items.is_empty() {
         return Ok(FetchOutcome::default());
     }
@@ -162,26 +176,29 @@ pub async fn fetch_review_requests(
     let team_members = &team_members;
     let compiled_ref = compiled.as_ref();
 
-    let assembled: Vec<(Option<ActionableItem>, Option<RateLimitInfo>)> =
-        stream::iter(search.items)
-            .map(|hit| async move {
-                assemble_review_item(client, db, hit, username, team_members, compiled_ref)
-                    .await
+    // Carry the search-result index alongside each task so we can restore
+    // GitHub's search order before scoring. score_pull_requests's stable sort
+    // then preserves that order for equal-score items, eliminating the
+    // completion-order shuffle that buffer_unordered would otherwise create.
+    let assembled: Vec<AssembledItem> =
+        stream::iter(search.items.into_iter().enumerate())
+            .map(|(idx, hit)| async move {
+                let res = assemble_review_item(
+                    client,
+                    db,
+                    hit,
+                    username,
+                    team_members,
+                    compiled_ref,
+                )
+                .await;
+                (idx, res)
             })
             .buffer_unordered(MAX_PR_CONCURRENCY)
             .collect()
             .await;
 
-    let mut rate_limit = None;
-    let mut items = Vec::new();
-    for (item, rl) in assembled {
-        if rl.is_some() {
-            rate_limit = rl;
-        }
-        if let Some(item) = item {
-            items.push(item);
-        }
-    }
+    let (items, rate_limit) = collect_assembled(assembled)?;
 
     // Score every review-request item but never filter here: the frontend
     // decides visibility from the (session-overridable) "show all" toggle, so
@@ -211,39 +228,63 @@ pub async fn fetch_my_open_prs(
     let username = &opts.username;
     let compiled_ref = compiled.as_ref();
 
-    let assembled: Vec<(Option<ActionableItem>, Option<RateLimitInfo>)> =
-        stream::iter(search.items)
-            .map(|hit| async move {
-                assemble_my_pr_item(client, db, hit, username, compiled_ref).await
+    let assembled: Vec<AssembledItem> =
+        stream::iter(search.items.into_iter().enumerate())
+            .map(|(idx, hit)| async move {
+                let res =
+                    assemble_my_pr_item(client, db, hit, username, compiled_ref).await;
+                (idx, res)
             })
             .buffer_unordered(MAX_PR_CONCURRENCY)
             .collect()
             .await;
 
-    let mut rate_limit = None;
-    let mut items = Vec::new();
-    for (item, rl) in assembled {
-        if rl.is_some() {
-            rate_limit = rl;
-        }
-        if let Some(item) = item {
-            items.push(item);
-        }
-    }
+    let (mut items, rate_limit) = collect_assembled(assembled)?;
 
+    // Stable sort: equal updated_at keeps search order (set by collect_assembled).
     items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
     Ok(FetchOutcome { items, rate_limit })
 }
 
-/// Fetch detail/comments/reviews for one PR concurrently. Returns `None` if any
-/// call fails — the PR is simply dropped this cycle, matching the JS `try/catch`.
+/// Drain the `buffer_unordered` output into items + the last seen rate limit.
+///
+/// Behavior:
+/// - The **first critical** error (rate-limit, auth, transient, network)
+///   short-circuits the whole cycle so adaptive backoff and the error UI
+///   react. Non-critical per-item errors are silently dropped — one broken
+///   PR shouldn't take the whole cycle down.
+/// - Items are sorted by their original search index, so the downstream
+///   stable sort (by score / by updated_at) preserves GitHub's search order
+///   for ties.
+fn collect_assembled(
+    mut assembled: Vec<AssembledItem>,
+) -> BeetResult<(Vec<ActionableItem>, Option<RateLimitInfo>)> {
+    assembled.sort_by_key(|(idx, _)| *idx);
+
+    let mut rate_limit = None;
+    let mut items = Vec::new();
+    for (_, result) in assembled {
+        let (maybe_item, rl) = result?;
+        if rl.is_some() {
+            rate_limit = rl;
+        }
+        if let Some(item) = maybe_item {
+            items.push(item);
+        }
+    }
+    Ok((items, rate_limit))
+}
+
+/// Fetch detail/comments/reviews for one PR concurrently. Errors propagate;
+/// the *caller* (an `assemble_*` function) decides whether to swallow them
+/// (non-critical = drop this PR) or surface them (critical = abort the cycle).
 async fn fetch_pr_triple(
     client: &GithubClient,
     db: &Db,
     owner: &str,
     repo: &str,
     num: i64,
-) -> Option<(PullDetail, Vec<CommentRow>, Vec<ReviewRow>, Option<RateLimitInfo>)> {
+) -> BeetResult<(PullDetail, Vec<CommentRow>, Vec<ReviewRow>, Option<RateLimitInfo>)> {
     let detail_url = client.url(&format!("/repos/{owner}/{repo}/pulls/{num}"));
     let comments_url = client.url(&format!("/repos/{owner}/{repo}/issues/{num}/comments"));
     let reviews_url = client.url(&format!("/repos/{owner}/{repo}/pulls/{num}/reviews"));
@@ -256,11 +297,11 @@ async fn fetch_pr_triple(
         client.beet_get::<Vec<CommentRow>>(db, &comments_key, &comments_url),
         client.beet_get::<Vec<ReviewRow>>(db, &reviews_key, &reviews_url),
     );
-    let detail = detail.ok()?;
-    let comments = comments.ok()?;
-    let reviews = reviews.ok()?;
+    let detail = detail?;
+    let comments = comments?;
+    let reviews = reviews?;
     let rate_limit = detail.rate_limit;
-    Some((detail.body, comments.body, reviews.body, rate_limit))
+    Ok((detail.body, comments.body, reviews.body, rate_limit))
 }
 
 async fn assemble_review_item(
@@ -269,21 +310,24 @@ async fn assemble_review_item(
     hit: crate::github::models::SearchItem,
     username: &str,
     team_members: &HashSet<String>,
-    compiled_regex: Option<&Regex>,
-) -> (Option<ActionableItem>, Option<RateLimitInfo>) {
+    compiled_regex: Option<&TaskRegex>,
+) -> BeetResult<(Option<ActionableItem>, Option<RateLimitInfo>)> {
     let url_for_parse = hit.html_url.as_deref().unwrap_or(&hit.url);
     let Some((owner, repo)) = parse_repo_and_owner_from_url(url_for_parse) else {
-        return (None, None);
+        return Ok((None, None));
     };
     let num = hit.number;
 
-    let Some((pull, comments, reviews, rate_limit)) =
-        fetch_pr_triple(client, db, &owner, &repo, num).await
-    else {
-        return (None, None);
-    };
+    let (pull, comments, reviews, rate_limit) =
+        match fetch_pr_triple(client, db, &owner, &repo, num).await {
+            Ok(t) => t,
+            // Rate-limit, auth, transient: bubble up so the cycle reacts.
+            Err(e) if e.is_critical() => return Err(e),
+            // Per-PR failure (PR deleted, JSON skew, etc.): drop this item.
+            Err(_) => return Ok((None, None)),
+        };
     let Some(ref pull_user) = pull.user else {
-        return (None, rate_limit);
+        return Ok((None, rate_limit));
     };
 
     let author = pull_user.login.clone();
@@ -335,7 +379,7 @@ async fn assemble_review_item(
             score: 0,
         }),
     };
-    (Some(item), rate_limit)
+    Ok((Some(item), rate_limit))
 }
 
 async fn assemble_my_pr_item(
@@ -343,22 +387,23 @@ async fn assemble_my_pr_item(
     db: &Db,
     hit: crate::github::models::SearchItem,
     username: &str,
-    compiled_regex: Option<&Regex>,
-) -> (Option<ActionableItem>, Option<RateLimitInfo>) {
+    compiled_regex: Option<&TaskRegex>,
+) -> BeetResult<(Option<ActionableItem>, Option<RateLimitInfo>)> {
     let url_for_parse = hit.html_url.as_deref().unwrap_or(&hit.url);
     let Some((owner, repo)) = parse_repo_and_owner_from_url(url_for_parse) else {
-        return (None, None);
+        return Ok((None, None));
     };
     let num = hit.number;
     let pr_id = format!("pr:{owner}/{repo}#{num}");
 
-    let Some((pull, comments, reviews, rate_limit)) =
-        fetch_pr_triple(client, db, &owner, &repo, num).await
-    else {
-        return (None, None);
-    };
+    let (pull, comments, reviews, rate_limit) =
+        match fetch_pr_triple(client, db, &owner, &repo, num).await {
+            Ok(t) => t,
+            Err(e) if e.is_critical() => return Err(e),
+            Err(_) => return Ok((None, None)),
+        };
     let Some(ref pull_user) = pull.user else {
-        return (None, rate_limit);
+        return Ok((None, rate_limit));
     };
 
     let lifecycle = derive_lifecycle(&pull);
@@ -368,7 +413,7 @@ async fn assemble_my_pr_item(
     let ejected = {
         let conn = match db.lock() {
             Ok(c) => c,
-            Err(_) => return (None, rate_limit),
+            Err(_) => return Ok((None, rate_limit)),
         };
         let ejected = detect_ejection(&conn, &pr_id, lifecycle).unwrap_or(false);
         let _ = record_lifecycle(&conn, &pr_id, lifecycle);
@@ -427,7 +472,7 @@ async fn assemble_my_pr_item(
             score: 0,
         }),
     };
-    (Some(item), rate_limit)
+    Ok((Some(item), rate_limit))
 }
 
 /// Replicates the merge-queue / ejection hydration block of `fetchMyOpenPrs`
@@ -655,6 +700,55 @@ mod tests {
         // Only the failing check is kept.
         assert_eq!(checks.len(), 1);
         assert_eq!(checks[0].name, "ci/build");
+    }
+
+    #[tokio::test]
+    async fn per_pr_rate_limit_propagates_instead_of_silently_dropping() {
+        // Regression: when a per-PR detail call hits 429, the old code
+        // returned Ok with the PR missing and no rate_limit set. Now the
+        // cycle aborts so adaptive backoff + the error UI react.
+        let server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/search/issues"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{
+                    "number": 9,
+                    "html_url": "https://github.com/foo/bar/pull/9",
+                    "url": "https://api.github.com/repos/foo/bar/issues/9",
+                }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/pulls/9"))
+            .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "45"))
+            .mount(&server)
+            .await;
+        // Comments + reviews respond 200 — only the detail call rate-limits.
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/issues/9/comments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/pulls/9/reviews"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchReviewRequestsOptions {
+            username: "me".to_string(),
+            teams: vec![],
+            penalized_bots: vec![],
+            task_regex: String::new(),
+        };
+        let res = fetch_review_requests(&client, &db, &opts).await;
+        assert!(matches!(
+            res,
+            Err(crate::error::BeetError::RateLimited { retry_after_secs: Some(45) })
+        ));
     }
 
     fn pull(state: &str, merged: bool) -> PullDetail {

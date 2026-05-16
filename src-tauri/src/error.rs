@@ -58,6 +58,27 @@ impl BeetError {
             _ => false,
         }
     }
+
+    /// Errors that the whole poll cycle needs to react to — they must reach
+    /// `poll_loop` so adaptive backoff stretches the interval, the UI shows
+    /// the right message, and the user is prompted (auth) as appropriate.
+    ///
+    /// A per-item path like `assemble_review_item` swallows non-critical
+    /// errors (the PR was deleted, the JSON shape changed, etc.) so one bad
+    /// item doesn't take down the cycle — but it MUST propagate criticals.
+    pub fn is_critical(&self) -> bool {
+        match self {
+            BeetError::RateLimited { .. }
+            | BeetError::Unauthorized(_)
+            | BeetError::Transient(_)
+            | BeetError::NoToken => true,
+            BeetError::Http(e) => e.is_timeout() || e.is_connect(),
+            BeetError::Github { .. }
+            | BeetError::Db(_)
+            | BeetError::Json(_)
+            | BeetError::Other(_) => false,
+        }
+    }
 }
 
 pub type BeetResult<T> = Result<T, BeetError>;
