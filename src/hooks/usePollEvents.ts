@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import {
   useAppStore,
   type PollResultPayload,
@@ -21,6 +22,18 @@ export function usePollEvents(): void {
     const statusPromise = listen<PollStatusPayload>("poll:status", (event) => {
       setPollStatus(event.payload);
     });
+
+    // The poll loop is spawned during Tauri setup() and immediately emits its
+    // first cycle, which can fire before this hook subscribes (Tauri events
+    // aren't replayed). After both listeners are registered, poke the loop
+    // for an immediate poll so the UI populates on the first paint instead
+    // of waiting out the interval.
+    Promise.all([resultPromise, statusPromise]).then(() => {
+      invoke("refresh_now").catch(() => {
+        // No Tauri host (tests) — ignore.
+      });
+    });
+
     return () => {
       resultPromise.then((unlisten) => unlisten());
       statusPromise.then((unlisten) => unlisten());

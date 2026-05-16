@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { selectShowAllReviews, useAppStore } from "@/lib/store";
+import {
+  isReviewRequestVisible,
+  selectShowAllReviews,
+  useAppStore,
+} from "@/lib/store";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
 
@@ -19,9 +23,7 @@ export function ReviewRequestsSection() {
   const sorted = [...items].sort(
     (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
   );
-  const visible = showAll
-    ? sorted
-    : sorted.filter((it) => (it.pr?.score ?? 0) > 0);
+  const visible = sorted.filter((it) => isReviewRequestVisible(it, showAll));
 
   return (
     <section aria-label="Review Requests" id="section-reviews">

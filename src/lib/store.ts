@@ -120,3 +120,14 @@ export const useAppStore = create<AppStore>((set) => ({
 export function selectShowAllReviews(s: AppStore): boolean {
   return s.showAllReviewsOverride ?? s.settings.showAllApproved;
 }
+
+// Visibility predicate shared by the Review Requests section, the Sidebar
+// count, and selection resolution: with Show-All off, only positive-score
+// items are visible. Rust scores every review-request but never filters,
+// so this is the single point that decides what the user actually sees.
+export function isReviewRequestVisible(
+  item: ActionableItem,
+  showAll: boolean,
+): boolean {
+  return showAll || (item.pr?.score ?? 0) > 0;
+}

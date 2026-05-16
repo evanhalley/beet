@@ -12,7 +12,11 @@ import {
   Settings as Cog,
   VolumeX,
 } from "lucide-react";
-import { useAppStore } from "@/lib/store";
+import {
+  isReviewRequestVisible,
+  selectShowAllReviews,
+  useAppStore,
+} from "@/lib/store";
 import { useActionableItems } from "@/hooks/useActionableItems";
 
 interface SidebarGroupProps {
@@ -290,7 +294,12 @@ export function Sidebar({
   onSectionClick,
 }: SidebarProps) {
   const { reviewRequests, inFlight } = useActionableItems();
-  const reviewCount = reviewRequests.length;
+  const showAll = useAppStore(selectShowAllReviews);
+  // Match the predicate ReviewRequestsSection uses, so the badge here can
+  // never diverge from the count rendered above the list.
+  const reviewCount = reviewRequests.filter((it) =>
+    isReviewRequestVisible(it, showAll),
+  ).length;
   const inFlightCount = inFlight.length;
   // Standalone Runs has no fetcher yet — scaffolding only.
   const runsCount = 0;
