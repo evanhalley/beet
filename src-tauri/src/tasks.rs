@@ -25,13 +25,25 @@ pub fn compile_task_regex(input: Option<&str>) -> Option<Regex> {
     };
 
     // fancy-regex doesn't expose a builder for case-insensitive etc.; the
-    // canonical way is to prepend inline flags `(?im)`. Only honor flags that
-    // map to fancy-regex features.
+    // canonical way is to prepend inline flags `(?im)`. Honor the Rust-side
+    // flags directly, accept JS-only flags as no-ops, and reject anything
+    // else — otherwise `/foo/bar` would slip through `parse_delimited` (all
+    // alphabetic) and silently compile as a bare `foo` regex.
     let mut inline = String::new();
     for c in flag_chars.chars() {
-        let c = c.to_ascii_lowercase();
-        if matches!(c, 'i' | 'm' | 's' | 'x') && !inline.contains(c) {
-            inline.push(c);
+        let lower = c.to_ascii_lowercase();
+        match lower {
+            'i' | 'm' | 's' | 'x' => {
+                if !inline.contains(lower) {
+                    inline.push(lower);
+                }
+            }
+            // JS-valid flags with no Rust analog or implicit-on semantics:
+            // g (always global via find_iter), u (unicode is default),
+            // y (sticky), d (indices).
+            'g' | 'u' | 'y' | 'd' => {}
+            // Anything else is a misparse — JS `new RegExp` would throw.
+            _ => return None,
         }
     }
     let full_pattern = if inline.is_empty() {
@@ -101,6 +113,25 @@ mod tests {
     #[test]
     fn returns_none_on_invalid_pattern() {
         assert!(compile_task_regex(Some("[unterminated")).is_none());
+    }
+
+    /// Regression: previously any all-alphabetic suffix was treated as flags
+    /// and unknown characters were silently dropped, so `/foo/bar` compiled
+    /// as `/foo/` and started matching unintended URLs. Now unknown flags
+    /// reject the whole input, matching JS `new RegExp(..., "bar")` throwing.
+    #[test]
+    fn rejects_delimited_form_with_unknown_flags() {
+        assert!(compile_task_regex(Some("/foo/bar")).is_none());
+        assert!(compile_task_regex(Some(r"/PROJ-\d+/z")).is_none());
+    }
+
+    /// JS-valid flags with no Rust analog are accepted as no-ops so saved
+    /// patterns from the JS era keep compiling.
+    #[test]
+    fn accepts_js_only_flags_as_noops() {
+        // `g` is always-global in Rust; `u`/`y`/`d` have no per-cycle effect.
+        assert!(compile_task_regex(Some(r"/foo-\d+/giu")).is_some());
+        assert!(compile_task_regex(Some(r"/foo-\d+/yd")).is_some());
     }
 
     #[test]

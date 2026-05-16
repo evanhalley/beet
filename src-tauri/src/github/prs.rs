@@ -423,7 +423,7 @@ async fn assemble_my_pr_item(
     let merge_queue = build_merge_queue(
         client, db, &owner, &repo, &pr_id, &pull, lifecycle, ejected,
     )
-    .await;
+    .await?;
 
     let author = pull_user.login.clone();
     let is_review_requested_from_me = pull
@@ -487,26 +487,31 @@ async fn build_merge_queue(
     pull: &PullDetail,
     lifecycle: PrLifecycle,
     ejected: bool,
-) -> Option<ActionableItemMergeQueue> {
+) -> BeetResult<Option<ActionableItemMergeQueue>> {
     if ejected {
         let now = now_iso();
-        // The check-runs fetch is auxiliary: if it fails the PR must still
-        // surface, just without populated ejectedChecks. Next poll retries.
-        let mut ejected_checks: Vec<EjectedCheck> = Vec::new();
-        if let Ok(checks) =
-            fetch_failing_checks(client, db, owner, repo, &pull.head.sha).await
-        {
-            if let Ok(conn) = db.lock() {
-                let _ = record_ejection_event(&conn, pr_id, &pull.head.sha, &checks);
-            }
-            ejected_checks = checks;
-        }
-        return Some(ActionableItemMergeQueue {
+        // The check-runs fetch is auxiliary: a non-critical failure should
+        // still let the PR surface (badge without populated checks; next poll
+        // retries). Critical errors (rate-limit, auth, transient) MUST bubble
+        // up so the cycle reports them and adaptive backoff honors Retry-After.
+        let ejected_checks =
+            match fetch_failing_checks(client, db, owner, repo, &pull.head.sha).await {
+                Ok(checks) => {
+                    if let Ok(conn) = db.lock() {
+                        let _ =
+                            record_ejection_event(&conn, pr_id, &pull.head.sha, &checks);
+                    }
+                    checks
+                }
+                Err(e) if e.is_critical() => return Err(e),
+                Err(_) => Vec::new(),
+            };
+        return Ok(Some(ActionableItemMergeQueue {
             position: None,
             entered_at: now.clone(),
             last_ejection_at: Some(now),
             ejected_checks: Some(ejected_checks),
-        });
+        }));
     }
 
     if lifecycle != PrLifecycle::MergeQueue {
@@ -518,15 +523,15 @@ async fn build_merge_queue(
             .and_then(|conn| get_latest_ejection_event(&conn, pr_id).ok().flatten());
         if let Some(prior) = prior {
             if prior.head_sha == pull.head.sha {
-                return Some(ActionableItemMergeQueue {
+                return Ok(Some(ActionableItemMergeQueue {
                     position: None,
                     entered_at: prior.observed_at.clone(),
                     last_ejection_at: Some(prior.observed_at),
                     ejected_checks: Some(prior.failing_checks),
-                });
+                }));
             }
         }
-        return None;
+        return Ok(None);
     }
 
     // Currently in the merge queue. record_lifecycle only inserts on a
@@ -537,12 +542,12 @@ async fn build_merge_queue(
         .and_then(|conn| get_latest_lifecycle_row(&conn, pr_id).ok().flatten())
         .map(|row| row.observed_at)
         .unwrap_or_else(now_iso);
-    Some(ActionableItemMergeQueue {
+    Ok(Some(ActionableItemMergeQueue {
         position: None,
         entered_at,
         last_ejection_at: None,
         ejected_checks: None,
-    })
+    }))
 }
 
 #[cfg(test)]
