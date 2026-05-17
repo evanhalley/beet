@@ -72,6 +72,10 @@ pub struct ReviewRow {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CheckRun {
     pub name: String,
+    /// `"queued" | "in_progress" | "completed"`. Lets the frontend distinguish
+    /// a running check (blinking pending dot) from one that's finished.
+    #[serde(default)]
+    pub status: Option<String>,
     #[serde(default)]
     pub conclusion: Option<String>,
     #[serde(default)]

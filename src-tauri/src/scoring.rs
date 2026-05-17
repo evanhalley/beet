@@ -123,6 +123,8 @@ mod tests {
                 merge_queue: None,
                 task_urls: vec![],
                 score: 0,
+                reviewers: None,
+                check_runs: None,
             }),
         }
     }

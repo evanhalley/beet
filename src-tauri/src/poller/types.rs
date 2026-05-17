@@ -54,6 +54,32 @@ pub struct EjectedCheck {
     pub details_url: Option<String>,
 }
 
+/// One row in the DetailPane's Reviewers block. `state` is a string rather
+/// than an enum so the contract can extend cleanly (e.g. future `dismissed`)
+/// without churning frontend code.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewerEntry {
+    pub login: String,
+    /// `"approved" | "changes_requested" | "commented" | "requested" | "dismissed"`.
+    pub state: String,
+}
+
+/// One row in the DetailPane's Checks block. Carries enough for the design's
+/// CheckDot derivation (status vs conclusion) plus a click-through URL we'll
+/// wire up later.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckRunSummary {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conclusion: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub details_url: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionableItemMergeQueue {
@@ -96,6 +122,15 @@ pub struct ActionableItemPr {
     pub merge_queue: Option<ActionableItemMergeQueue>,
     pub task_urls: Vec<String>,
     pub score: i64,
+    /// Full reviewer roll-up for the DetailPane. Absent if the PR's reviews
+    /// haven't been hydrated yet (transient mid-cycle state); the frontend
+    /// then renders the empty-state line.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reviewers: Option<Vec<ReviewerEntry>>,
+    /// All check-runs for the PR's head SHA. Absent when the check-runs
+    /// fetch failed for non-critical reasons — the row still renders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub check_runs: Option<Vec<CheckRunSummary>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,6 +204,16 @@ mod tests {
                 }),
                 task_urls: vec![],
                 score: 3,
+                reviewers: Some(vec![ReviewerEntry {
+                    login: "rina".into(),
+                    state: "approved".into(),
+                }]),
+                check_runs: Some(vec![CheckRunSummary {
+                    name: "build".into(),
+                    status: Some("completed".into()),
+                    conclusion: Some("success".into()),
+                    details_url: None,
+                }]),
             }),
         }
     }
@@ -202,6 +247,7 @@ mod tests {
                 "approvalCount",
                 "author",
                 "body",
+                "checkRuns",
                 "createdAt",
                 "deletions",
                 "isAuthorOnMyTeam",
@@ -214,11 +260,14 @@ mod tests {
                 "lifecycle",
                 "mergeQueue",
                 "number",
+                "reviewers",
                 "score",
                 "taskUrls",
             ]
         );
         assert_eq!(pr["lifecycle"], "merge_queue");
+        assert_eq!(keys(&pr["reviewers"][0]), vec!["login", "state"]);
+        assert_eq!(keys(&pr["checkRuns"][0]), vec!["conclusion", "name", "status"]);
 
         let mq = &pr["mergeQueue"];
         assert_eq!(

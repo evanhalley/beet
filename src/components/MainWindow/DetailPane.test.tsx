@@ -65,6 +65,64 @@ describe("DetailPane", () => {
     expect(screen.getByLabelText("Activity")).toBeInTheDocument();
   });
 
+  test("Reviewers/Checks blocks show empty-state hints when no data is attached", () => {
+    render(<DetailPane item={pr} />);
+    expect(screen.getByText("No reviewers yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No checks reported for this commit."),
+    ).toBeInTheDocument();
+  });
+
+  test("Reviewers block renders the design's four pill mappings", () => {
+    const withReviewers: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        reviewers: [
+          { login: "alice", state: "approved" },
+          { login: "bob", state: "changes_requested" },
+          { login: "carol", state: "requested" },
+          // "commented" isn't in the design's explicit mapping → neutral pill
+          // labeled with the raw state.
+          { login: "dave", state: "commented" },
+        ],
+      },
+    };
+    render(<DetailPane item={withReviewers} />);
+    expect(screen.getByText("@alice")).toBeInTheDocument();
+    expect(screen.getByText("approved")).toBeInTheDocument();
+    expect(screen.getByText("changes requested")).toBeInTheDocument();
+    expect(screen.getByText("awaiting")).toBeInTheDocument();
+    expect(screen.getByText("commented")).toBeInTheDocument();
+  });
+
+  test("Checks block renders rows with the design's status derivation", () => {
+    const withChecks: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        checkRuns: [
+          { name: "build", status: "completed", conclusion: "success" },
+          { name: "integration", status: "completed", conclusion: "failure" },
+          { name: "deploy", status: "in_progress" },
+          { name: "lint", status: "queued" },
+        ],
+      },
+    };
+    render(<DetailPane item={withChecks} />);
+    expect(screen.getByText("build")).toBeInTheDocument();
+    expect(screen.getByText("integration")).toBeInTheDocument();
+    expect(screen.getByText("deploy")).toBeInTheDocument();
+    // In-progress row reads "running…", not the (null) conclusion.
+    expect(screen.getByText("running…")).toBeInTheDocument();
+    // Completed rows surface the raw conclusion.
+    expect(screen.getByText("success")).toBeInTheDocument();
+    expect(screen.getByText("failure")).toBeInTheDocument();
+    // Pending CheckDot is identified by its title text (one per row).
+    const pendingDots = screen.getAllByLabelText("Checks pending");
+    expect(pendingDots).toHaveLength(1); // deploy only; queued is neutral.
+  });
+
   test("Body block shows 'No description.' when pr.body is null", () => {
     render(<DetailPane item={pr} />);
     expect(screen.getByText("No description.")).toBeInTheDocument();

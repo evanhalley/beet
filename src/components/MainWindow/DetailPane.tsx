@@ -4,12 +4,18 @@ import { ExternalLink } from "lucide-react";
 import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Avatar } from "@/components/Avatar";
+import { CheckDot, deriveCheckDotState } from "@/components/CheckDot";
 import { Lifecycle } from "@/components/Lifecycle";
-import { Pill } from "@/components/Pill";
+import { Pill, type PillTone } from "@/components/Pill";
 import { ScoreBar } from "@/components/ScoreBar";
 import { useRequeueHistory } from "@/hooks/useRequeueHistory";
 import { openInBrowser } from "@/lib/openInBrowser";
-import type { ActionableItem } from "@/lib/types";
+import type {
+  ActionableItem,
+  CheckRunSummary,
+  ReviewerEntry,
+} from "@/lib/types";
 
 // Override <a> to dispatch through tauri-plugin-shell (otherwise links open
 // inside the embedded webview instead of the user's browser). Style the rest
@@ -225,6 +231,132 @@ function BodyBlock({ body }: { body: string | null }) {
   );
 }
 
+// Italic faint line used by every empty-state in the side panel — matches the
+// "No description." styling already used by BodyBlock so each block's empty
+// state feels consistent with the others.
+function EmptyHint({ children }: { children: string }) {
+  return (
+    <div
+      style={{
+        marginTop: 6,
+        fontSize: 11.5,
+        color: "var(--color-text-faint)",
+        fontStyle: "italic",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+const REVIEWER_PILL: Record<string, { tone: PillTone; label: string }> = {
+  // Literal mapping from the design (design/src/main-window.jsx:301-303).
+  approved: { tone: "success", label: "approved" },
+  changes_requested: { tone: "danger", label: "changes requested" },
+  requested: { tone: "info", label: "awaiting" },
+};
+
+function ReviewerPill({ state }: { state: string }) {
+  const known = REVIEWER_PILL[state];
+  if (known) {
+    return <Pill tone={known.tone}>{known.label}</Pill>;
+  }
+  // Real GitHub states the design doesn't enumerate (commented, dismissed,
+  // pending) fall through as neutral so we don't lose the reviewer.
+  return <Pill tone="neutral">{state}</Pill>;
+}
+
+function ReviewersBlock({ reviewers }: { reviewers: ReviewerEntry[] | undefined }) {
+  return (
+    <section
+      aria-label="Reviewers"
+      style={{
+        padding: "10px 16px",
+        borderTop: "1px solid var(--color-border)",
+      }}
+    >
+      <BlockHeader title="Reviewers" />
+      {!reviewers || reviewers.length === 0 ? (
+        <EmptyHint>No reviewers yet.</EmptyHint>
+      ) : (
+        <div
+          style={{
+            marginTop: 6,
+            display: "flex",
+            flexDirection: "column",
+            gap: 6,
+          }}
+        >
+          {reviewers.map((r) => (
+            <div
+              key={r.login}
+              style={{ display: "flex", alignItems: "center", gap: 8 }}
+            >
+              <Avatar login={r.login} size={18} />
+              <span style={{ fontSize: 12.5, fontWeight: 500 }}>@{r.login}</span>
+              <span style={{ flex: 1 }} />
+              <ReviewerPill state={r.state} />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ChecksBlock({ runs }: { runs: CheckRunSummary[] | undefined }) {
+  return (
+    <section
+      aria-label="Checks"
+      style={{
+        padding: "10px 16px",
+        borderTop: "1px solid var(--color-border)",
+      }}
+    >
+      <BlockHeader title="Checks" />
+      {!runs || runs.length === 0 ? (
+        <EmptyHint>No checks reported for this commit.</EmptyHint>
+      ) : (
+        <div
+          style={{
+            marginTop: 6,
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+          }}
+        >
+          {runs.map((r) => (
+            <div
+              key={r.name}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                padding: "5px 0",
+              }}
+            >
+              <CheckDot state={deriveCheckDotState(r.status, r.conclusion)} />
+              <span
+                className="mono"
+                style={{ fontSize: 12, color: "var(--color-text)" }}
+              >
+                {r.name}
+              </span>
+              <span style={{ flex: 1 }} />
+              <span
+                className="mono"
+                style={{ fontSize: 11, color: "var(--color-text-faint)" }}
+              >
+                {r.status === "in_progress" ? "running…" : r.conclusion ?? ""}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export interface DetailPaneProps {
   item: ActionableItem | null;
 }
@@ -386,8 +518,8 @@ export function DetailPane({ item }: DetailPaneProps) {
       </header>
 
       <BodyBlock body={pr.body} />
-      <PlaceholderBlock title="Reviewers" hint="lands in #6" />
-      <PlaceholderBlock title="Checks" hint="lands in #6" />
+      <ReviewersBlock reviewers={pr.reviewers} />
+      <ChecksBlock runs={pr.checkRuns} />
       <PlaceholderBlock title="Activity" hint="lands in #8" />
     </div>
   );
