@@ -3,17 +3,21 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppearanceTab } from "./AppearanceTab";
 import { useAppStore } from "@/lib/store";
-import { THEME_LS_KEY } from "@/lib/theme";
+import { FONT_SCALE_LS_KEY, THEME_LS_KEY } from "@/lib/theme";
 
 beforeEach(() => {
   useAppStore.getState().reset();
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.style.removeProperty("--font-scale");
   window.localStorage.removeItem(THEME_LS_KEY);
+  window.localStorage.removeItem(FONT_SCALE_LS_KEY);
 });
 
 afterEach(() => {
   document.documentElement.removeAttribute("data-theme");
+  document.documentElement.style.removeProperty("--font-scale");
   window.localStorage.removeItem(THEME_LS_KEY);
+  window.localStorage.removeItem(FONT_SCALE_LS_KEY);
 });
 
 describe("AppearanceTab", () => {
@@ -66,6 +70,28 @@ describe("AppearanceTab", () => {
     // is concrete.
     expect(useAppStore.getState().settings.theme).toBe("system");
     expect(window.localStorage.getItem(THEME_LS_KEY)).toBe("system");
+  });
+
+  test("renders the four font-size options with 'Default' selected by default", () => {
+    render(<AppearanceTab />);
+    expect(screen.getByRole("radio", { name: "Small" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Default" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Large" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Extra Large" })).not.toBeChecked();
+  });
+
+  test("selecting Large sets --font-scale on the document and updates the store", async () => {
+    const user = userEvent.setup();
+    render(<AppearanceTab />);
+    await user.click(screen.getByRole("radio", { name: "Large" }));
+
+    await waitFor(() => {
+      expect(
+        document.documentElement.style.getPropertyValue("--font-scale"),
+      ).toBe("1.15");
+    });
+    expect(useAppStore.getState().settings.fontScale).toBe(1.15);
+    expect(window.localStorage.getItem(FONT_SCALE_LS_KEY)).toBe("1.15");
   });
 
   test("selecting System resolves to dark when the OS prefers dark", async () => {

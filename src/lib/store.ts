@@ -1,20 +1,46 @@
 import { create } from "zustand";
-import type { AuthValidation } from "@/lib/github/auth";
-import type { RateLimitInfo } from "@/lib/github/octokit";
+import type { RateLimitInfo } from "@/lib/github/rate-limit";
 import type { ActionableItem } from "@/lib/types";
 import { SETTINGS_DEFAULTS, type BeetSettings } from "@/lib/storage/settings";
 
-export interface AppStore {
-  token: string | null;
-  user: { login: string } | null;
-  rateLimit: RateLimitInfo | null;
-  auth: AuthValidation | null;
+export type PollState = "idle" | "polling" | "ok" | "error";
 
-  actionableItems: Record<string, ActionableItem>;
-  reviewRequestIds: string[];
-  inFlightIds: string[];
-  standaloneRunIds: string[];
-  recentlyResolvedIds: string[];
+// Payloads emitted by the Rust poll loop (src-tauri/src/poller/poll_loop.rs).
+export interface PollResultPayload {
+  reviewRequests: ActionableItem[];
+  inFlight: ActionableItem[];
+  rateLimit: RateLimitInfo | null;
+  polledAt: string;
+}
+
+export interface PollStatusPayload {
+  state: PollState;
+  error: string | null;
+  rateLimited: boolean;
+  // Seconds GitHub asked us to wait before retrying — set on rate-limit
+  // errors, null otherwise. Available for Phase 5's adaptive polling.
+  retryAfterSecs: number | null;
+}
+
+export interface AppStore {
+  // Server state is owned by the Rust poll loop and pushed in via Tauri
+  // events (see usePollEvents); this store is its canonical home on the
+  // frontend. Everything else here is client/UI state.
+  reviewRequests: ActionableItem[];
+  inFlight: ActionableItem[];
+  // Flat lookup across every section, for resolving a selected item by id.
+  byId: Map<string, ActionableItem>;
+  pollState: PollState;
+  lastPolledAt: string | null;
+  // Error from the most recent poll cycle, if it failed. Distinct from
+  // `uiError`, which is for frontend-originated errors (clipboard, open URL).
+  pollError: string | null;
+  rateLimited: boolean;
+  retryAfterSecs: number | null;
+  rateLimit: RateLimitInfo | null;
+  // UI intent to pause polling; mirrored to the Rust loop via set_poll_paused.
+  // Session-only (not persisted) — an app restart resumes polling.
+  paused: boolean;
 
   // null = use settings.showAllApproved; true|false = session override.
   showAllReviewsOverride: boolean | null;
@@ -26,22 +52,13 @@ export interface AppStore {
   settings: BeetSettings;
   settingsHydrated: boolean;
 
-  setToken: (token: string | null) => void;
-  setUser: (user: { login: string } | null) => void;
+  setPollResult: (payload: PollResultPayload) => void;
+  setPollStatus: (payload: PollStatusPayload) => void;
+  setPaused: (paused: boolean) => void;
   setRateLimit: (rateLimit: RateLimitInfo | null) => void;
-  setAuth: (auth: AuthValidation | null) => void;
-
-  setReviewRequests: (items: ActionableItem[]) => void;
-  setInFlight: (items: ActionableItem[]) => void;
-  setStandaloneRuns: (items: ActionableItem[]) => void;
-  setRecentlyResolved: (items: ActionableItem[]) => void;
-
   setShowAllReviewsOverride: (value: boolean | null) => void;
-
   setUiError: (message: string | null) => void;
-
   setSelectedItemId: (id: string | null) => void;
-
   setSettings: (settings: Partial<BeetSettings>) => void;
   hydrateSettings: (settings: BeetSettings) => void;
 
@@ -49,15 +66,16 @@ export interface AppStore {
 }
 
 const initialState = {
-  token: null,
-  user: null,
-  rateLimit: null,
-  auth: null,
-  actionableItems: {} as Record<string, ActionableItem>,
-  reviewRequestIds: [] as string[],
-  inFlightIds: [] as string[],
-  standaloneRunIds: [] as string[],
-  recentlyResolvedIds: [] as string[],
+  reviewRequests: [] as ActionableItem[],
+  inFlight: [] as ActionableItem[],
+  byId: new Map<string, ActionableItem>(),
+  pollState: "idle" as PollState,
+  lastPolledAt: null as string | null,
+  pollError: null as string | null,
+  rateLimited: false,
+  retryAfterSecs: null as number | null,
+  rateLimit: null as RateLimitInfo | null,
+  paused: false,
   showAllReviewsOverride: null as boolean | null,
   uiError: null as string | null,
   selectedItemId: null as string | null,
@@ -65,79 +83,36 @@ const initialState = {
   settingsHydrated: false,
 };
 
-type SectionKey =
-  | "reviewRequestIds"
-  | "inFlightIds"
-  | "standaloneRunIds"
-  | "recentlyResolvedIds";
-
-const SECTION_KEYS: SectionKey[] = [
-  "reviewRequestIds",
-  "inFlightIds",
-  "standaloneRunIds",
-  "recentlyResolvedIds",
-];
-
-function applySection(
-  state: Pick<
-    AppStore,
-    | "actionableItems"
-    | "reviewRequestIds"
-    | "inFlightIds"
-    | "standaloneRunIds"
-    | "recentlyResolvedIds"
-  >,
-  section: SectionKey,
-  items: ActionableItem[],
-) {
-  const nextIds = items.map((it) => it.id);
-  const mergedItems = { ...state.actionableItems };
-  for (const item of items) {
-    mergedItems[item.id] = item;
-  }
-  const nextSectionLists = { ...state, [section]: nextIds };
-  // GC: drop any actionable item not referenced by any section list.
-  const referenced = new Set<string>();
-  for (const key of SECTION_KEYS) {
-    for (const id of nextSectionLists[key]) referenced.add(id);
-  }
-  for (const id of Object.keys(mergedItems)) {
-    if (!referenced.has(id)) delete mergedItems[id];
-  }
-  return {
-    actionableItems: mergedItems,
-    [section]: nextIds,
-  } as Partial<AppStore>;
-}
-
 export const useAppStore = create<AppStore>((set) => ({
   ...initialState,
-  setToken: (token) => set({ token }),
-  setUser: (user) => set({ user }),
+  setPollResult: (payload) => {
+    const byId = new Map<string, ActionableItem>();
+    for (const item of payload.reviewRequests) byId.set(item.id, item);
+    for (const item of payload.inFlight) byId.set(item.id, item);
+    set({
+      reviewRequests: payload.reviewRequests,
+      inFlight: payload.inFlight,
+      byId,
+      rateLimit: payload.rateLimit,
+      lastPolledAt: payload.polledAt,
+    });
+  },
+  setPollStatus: (payload) =>
+    set({
+      pollState: payload.state,
+      rateLimited: payload.rateLimited,
+      retryAfterSecs: payload.retryAfterSecs,
+      pollError: payload.state === "error" ? payload.error : null,
+    }),
+  setPaused: (paused) => set({ paused }),
   setRateLimit: (rateLimit) => set({ rateLimit }),
-  setAuth: (auth) =>
-    set({ auth, user: auth?.login ? { login: auth.login } : null }),
-
-  setReviewRequests: (items) =>
-    set((s) => applySection(s, "reviewRequestIds", items)),
-  setInFlight: (items) => set((s) => applySection(s, "inFlightIds", items)),
-  setStandaloneRuns: (items) =>
-    set((s) => applySection(s, "standaloneRunIds", items)),
-  setRecentlyResolved: (items) =>
-    set((s) => applySection(s, "recentlyResolvedIds", items)),
-
   setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
-
   setUiError: (message) => set({ uiError: message }),
-
   setSelectedItemId: (id) => set({ selectedItemId: id }),
-
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),
-  hydrateSettings: (settings) =>
-    set({ settings, settingsHydrated: true }),
-
-  reset: () => set(initialState),
+  hydrateSettings: (settings) => set({ settings, settingsHydrated: true }),
+  reset: () => set({ ...initialState, byId: new Map() }),
 }));
 
 // Resolved Show-All for the Review Requests section.
@@ -146,32 +121,13 @@ export function selectShowAllReviews(s: AppStore): boolean {
   return s.showAllReviewsOverride ?? s.settings.showAllApproved;
 }
 
-function pluckItems(s: AppStore, ids: string[]): ActionableItem[] {
-  const out: ActionableItem[] = [];
-  for (const id of ids) {
-    const it = s.actionableItems[id];
-    if (it) out.push(it);
-  }
-  return out;
-}
-
-export function selectReviewRequests(s: AppStore): ActionableItem[] {
-  return pluckItems(s, s.reviewRequestIds);
-}
-
-export function selectInFlight(s: AppStore): ActionableItem[] {
-  return pluckItems(s, s.inFlightIds);
-}
-
-export function selectStandaloneRuns(s: AppStore): ActionableItem[] {
-  return pluckItems(s, s.standaloneRunIds);
-}
-
-export function selectRecentlyResolved(s: AppStore): ActionableItem[] {
-  return pluckItems(s, s.recentlyResolvedIds);
-}
-
-export function selectSelectedItem(s: AppStore): ActionableItem | null {
-  if (!s.selectedItemId) return null;
-  return s.actionableItems[s.selectedItemId] ?? null;
+// Visibility predicate shared by the Review Requests section, the Sidebar
+// count, and selection resolution: with Show-All off, only positive-score
+// items are visible. Rust scores every review-request but never filters,
+// so this is the single point that decides what the user actually sees.
+export function isReviewRequestVisible(
+  item: ActionableItem,
+  showAll: boolean,
+): boolean {
+  return showAll || (item.pr?.score ?? 0) > 0;
 }

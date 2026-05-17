@@ -3,46 +3,14 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager,
 };
-use tauri_plugin_sql::{Migration, MigrationKind};
 
-fn migrations() -> Vec<Migration> {
-    vec![
-        Migration {
-            version: 1,
-            description: "create etag_cache table",
-            sql: "CREATE TABLE IF NOT EXISTS etag_cache (
-            cache_key  TEXT PRIMARY KEY,
-            etag       TEXT NOT NULL,
-            body_json  TEXT NOT NULL,
-            fetched_at TEXT NOT NULL
-        );",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 2,
-            description: "create pr_lifecycle_history table",
-            sql: "CREATE TABLE IF NOT EXISTS pr_lifecycle_history (
-            pr_id       TEXT NOT NULL,
-            lifecycle   TEXT NOT NULL,
-            observed_at TEXT NOT NULL,
-            PRIMARY KEY (pr_id, observed_at)
-        );",
-            kind: MigrationKind::Up,
-        },
-        Migration {
-            version: 3,
-            description: "create pr_ejection_events table",
-            sql: "CREATE TABLE IF NOT EXISTS pr_ejection_events (
-            pr_id               TEXT NOT NULL,
-            observed_at         TEXT NOT NULL,
-            head_sha            TEXT NOT NULL,
-            failing_checks_json TEXT NOT NULL,
-            PRIMARY KEY (pr_id, observed_at)
-        );",
-            kind: MigrationKind::Up,
-        },
-    ]
-}
+mod error;
+mod github;
+mod poller;
+mod scoring;
+mod secure_token;
+mod store;
+mod tasks;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -57,11 +25,15 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_window_state::Builder::default().build())
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:beet.db", migrations())
-                .build(),
-        )
+        .invoke_handler(tauri::generate_handler![
+            secure_token::store_token,
+            secure_token::get_token,
+            secure_token::clear_token,
+            poller::poll_loop::update_poll_config,
+            poller::poll_loop::refresh_now,
+            poller::poll_loop::set_poll_paused,
+            poller::poll_loop::notify_token_changed,
+        ])
         .setup(|app| {
             let open = MenuItemBuilder::with_id("open", "Open Beet").build(app)?;
             let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
@@ -84,11 +56,32 @@ pub fn run() {
                         }
                     }
                     "quit" => {
+                        // Stop the poll loop before exiting so its task winds
+                        // down cleanly.
+                        if let Some(handle) =
+                            app.try_state::<poller::poll_loop::PollHandle>()
+                        {
+                            handle.cancel.cancel();
+                        }
                         app.exit(0);
                     }
                     _ => {}
                 })
                 .build(app)?;
+
+            // Open the SQLite DB Rust now owns (same file tauri-plugin-sql uses,
+            // so existing history survives) and start the background poll loop.
+            let db_path = app.path().app_data_dir()?.join("beet.db");
+            if let Some(parent) = db_path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            let conn = store::db::open(&db_path)
+                .map_err(|e| format!("failed to open beet.db: {e}"))?;
+            let db = std::sync::Arc::new(std::sync::Mutex::new(conn));
+
+            let handle = poller::poll_loop::spawn(app.handle().clone(), db.clone());
+            app.manage(db);
+            app.manage(handle);
 
             Ok(())
         })

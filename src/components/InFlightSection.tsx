@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { ChevronDown, Rocket } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
-import { selectInFlight, useAppStore } from "@/lib/store";
+import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
 
 export function InFlightSection() {
-  const items = useAppStore(useShallow(selectInFlight));
+  const { inFlight: items } = useActionableItems();
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...items].sort((a, b) =>
@@ -27,6 +26,7 @@ export function InFlightSection() {
           textTransform: "uppercase",
           letterSpacing: 0.06,
           color: "var(--color-text-muted)",
+          background: "var(--color-panel-2)",
         }}
       >
         <button

@@ -2,20 +2,28 @@
 
 import { useState } from "react";
 import { ChevronDown } from "lucide-react";
-import { useShallow } from "zustand/react/shallow";
-import { selectReviewRequests, selectShowAllReviews, useAppStore } from "@/lib/store";
+import {
+  isReviewRequestVisible,
+  selectShowAllReviews,
+  useAppStore,
+} from "@/lib/store";
+import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
 
 export function ReviewRequestsSection() {
-  const items = useAppStore(useShallow(selectReviewRequests));
+  const { reviewRequests: items } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
   const [collapsed, setCollapsed] = useState(false);
 
+  // Rust scores every review-request item but never filters; visibility is a
+  // frontend concern. "Show all" (session override or the persisted default)
+  // reveals approved / zero-or-negative-score items.
   const sorted = [...items].sort(
     (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
   );
+  const visible = sorted.filter((it) => isReviewRequestVisible(it, showAll));
 
   return (
     <section aria-label="Review Requests" id="section-reviews">
@@ -30,6 +38,7 @@ export function ReviewRequestsSection() {
           textTransform: "uppercase",
           letterSpacing: 0.06,
           color: "var(--color-text-muted)",
+          background: "var(--color-panel-2)",
         }}
       >
         <button
@@ -59,7 +68,7 @@ export function ReviewRequestsSection() {
               color: "var(--color-text-faint)",
             }}
           >
-            {sorted.length}
+            {visible.length}
           </span>
           <span
             style={{
@@ -118,7 +127,7 @@ export function ReviewRequestsSection() {
       </header>
       {!collapsed && (
         <div id="review-requests-list">
-          {sorted.length === 0 ? (
+          {visible.length === 0 ? (
             <p
               style={{
                 padding: "10px 16px 14px",
@@ -133,7 +142,7 @@ export function ReviewRequestsSection() {
               role="list"
               style={{ listStyle: "none", margin: 0, padding: 0 }}
             >
-              {sorted.map((item) => (
+              {visible.map((item) => (
                 <li role="listitem" key={item.id}>
                   <ActionableRow item={item} variant="review" />
                 </li>

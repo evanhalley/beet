@@ -1,8 +1,28 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Sidebar } from "./Sidebar";
+import { useActionableItems } from "@/hooks/useActionableItems";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
+
+vi.mock("@/hooks/useActionableItems", () => ({
+  useActionableItems: vi.fn(),
+}));
+
+function setActionable(
+  reviewRequests: ActionableItem[],
+  inFlight: ActionableItem[] = [],
+) {
+  const byId = new Map<string, ActionableItem>();
+  for (const it of [...reviewRequests, ...inFlight]) byId.set(it.id, it);
+  vi.mocked(useActionableItems).mockReturnValue({
+    reviewRequests,
+    inFlight,
+    byId,
+    isLoading: false,
+    isFetching: false,
+  });
+}
 
 function prItem(id: string): ActionableItem {
   return {
@@ -38,14 +58,12 @@ function prItem(id: string): ActionableItem {
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  setActionable([], []);
 });
 
 describe("Sidebar", () => {
-  test("Triage counts reflect store arrays", () => {
-    const store = useAppStore.getState();
-    store.setReviewRequests([prItem("a"), prItem("b"), prItem("c")]);
-    store.setInFlight([]);
-    store.setStandaloneRuns([]);
+  test("Triage counts reflect the actionable-items hook", () => {
+    setActionable([prItem("a"), prItem("b"), prItem("c")], []);
     render(<Sidebar />);
     const reviews = screen.getByRole("button", { name: /Review Requests/ });
     expect(reviews.textContent).toContain("3");

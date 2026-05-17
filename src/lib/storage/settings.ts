@@ -1,4 +1,5 @@
 import { load } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
 import { DEFAULT_TASK_REGEX } from "@/lib/tasks";
 
 const STORE_FILE = "config.json";
@@ -10,12 +11,20 @@ export const SETTINGS_KEYS = {
   pollingIntervalSec: "pollingIntervalSec",
   showAllApproved: "showAllApproved",
   theme: "theme",
+  fontScale: "fontScale",
 } as const;
 
 export type ThemeMode = "light" | "dark" | "system";
 
 export function isThemeMode(value: unknown): value is ThemeMode {
   return value === "light" || value === "dark" || value === "system";
+}
+
+// Whole-UI zoom factor applied to the app root (see src/lib/theme.ts).
+export type FontScale = 0.9 | 1 | 1.15 | 1.3;
+
+export function isFontScale(value: unknown): value is FontScale {
+  return value === 0.9 || value === 1 || value === 1.15 || value === 1.3;
 }
 
 export interface BeetSettings {
@@ -25,6 +34,7 @@ export interface BeetSettings {
   pollingIntervalSec: number;
   showAllApproved: boolean;
   theme: ThemeMode;
+  fontScale: FontScale;
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -34,6 +44,7 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   pollingIntervalSec: 60,
   showAllApproved: false,
   theme: "system",
+  fontScale: 1,
 };
 
 async function getStore() {
@@ -56,6 +67,17 @@ async function setValue<T>(key: string, value: T): Promise<void> {
   await store.save();
 }
 
+// Tell the Rust poll loop to re-read config.json and poll immediately, so a
+// settings change takes effect without an app restart. Best-effort: a no-op in
+// Tauri-less / test environments, or before the poll loop has started.
+async function notifyPollerConfigChanged(): Promise<void> {
+  try {
+    await invoke("update_poll_config");
+  } catch {
+    // No Tauri host, or the poll loop isn't running yet — ignore.
+  }
+}
+
 export async function loadSettings(): Promise<BeetSettings> {
   const [
     teams,
@@ -64,6 +86,7 @@ export async function loadSettings(): Promise<BeetSettings> {
     pollingIntervalSec,
     showAllApproved,
     themeRaw,
+    fontScaleRaw,
   ] = await Promise.all([
     getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
     getValue<string[]>(
@@ -80,8 +103,12 @@ export async function loadSettings(): Promise<BeetSettings> {
       SETTINGS_DEFAULTS.showAllApproved,
     ),
     getValue<unknown>(SETTINGS_KEYS.theme, SETTINGS_DEFAULTS.theme),
+    getValue<unknown>(SETTINGS_KEYS.fontScale, SETTINGS_DEFAULTS.fontScale),
   ]);
   const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
+  const fontScale = isFontScale(fontScaleRaw)
+    ? fontScaleRaw
+    : SETTINGS_DEFAULTS.fontScale;
   return {
     teams,
     penalizedBots,
@@ -89,31 +116,43 @@ export async function loadSettings(): Promise<BeetSettings> {
     pollingIntervalSec,
     showAllApproved,
     theme,
+    fontScale,
   };
 }
 
+// These four feed the Rust poll loop, so each notifies it after persisting.
 export async function setTeams(value: string[]): Promise<void> {
   await setValue(SETTINGS_KEYS.teams, value);
+  await notifyPollerConfigChanged();
 }
 
 export async function setPenalizedBots(value: string[]): Promise<void> {
   await setValue(SETTINGS_KEYS.penalizedBots, value);
+  await notifyPollerConfigChanged();
 }
 
 export async function setTaskRegex(value: string): Promise<void> {
   await setValue(SETTINGS_KEYS.taskRegex, value);
+  await notifyPollerConfigChanged();
 }
 
 export async function setPollingIntervalSec(value: number): Promise<void> {
   await setValue(SETTINGS_KEYS.pollingIntervalSec, value);
+  await notifyPollerConfigChanged();
 }
 
+// showAllApproved only affects frontend visibility filtering — the poll loop
+// never sees it, so no notification is needed.
 export async function setShowAllApproved(value: boolean): Promise<void> {
   await setValue(SETTINGS_KEYS.showAllApproved, value);
 }
 
 export async function setTheme(value: ThemeMode): Promise<void> {
   await setValue(SETTINGS_KEYS.theme, value);
+}
+
+export async function setFontScale(value: FontScale): Promise<void> {
+  await setValue(SETTINGS_KEYS.fontScale, value);
 }
 
 export function parseLineList(text: string): string[] {

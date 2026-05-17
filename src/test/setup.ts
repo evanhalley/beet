@@ -1,12 +1,33 @@
 import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll, beforeEach, vi } from "vitest";
 import { server } from "./msw-server";
-import { __resetOctokitForTests } from "@/lib/github/octokit";
 
 // Tauri APIs aren't available in jsdom; tests use injected providers/mocks.
-vi.mock("@tauri-apps/api/core", () => ({
-  invoke: vi.fn(),
-}));
+// `invoke` is backed by an in-memory keychain so the secure_token commands
+// round-trip (storeToken → getToken → clearToken) like the real Rust commands.
+vi.mock("@tauri-apps/api/core", () => {
+  const keychain = new Map<string, string>();
+  const KEY = "github-pat";
+  const fakeKeychain = {
+    get: () => keychain.get(KEY),
+    __reset: () => keychain.clear(),
+  };
+  const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
+    switch (cmd) {
+      case "store_token":
+        keychain.set(KEY, String(args?.token ?? ""));
+        return undefined;
+      case "get_token":
+        return keychain.get(KEY) ?? null;
+      case "clear_token":
+        keychain.delete(KEY);
+        return undefined;
+      default:
+        return undefined;
+    }
+  });
+  return { invoke, __fakeKeychain: fakeKeychain };
+});
 
 vi.mock("@tauri-apps/plugin-store", () => {
   const memory = new Map<string, unknown>();
@@ -27,18 +48,11 @@ vi.mock("@tauri-apps/plugin-store", () => {
   };
 });
 
-vi.mock("@tauri-apps/plugin-sql", () => {
-  const fakeDb = {
-    select: vi.fn(async () => []),
-    execute: vi.fn(async () => ({ rowsAffected: 0, lastInsertId: 0 })),
-  };
-  return {
-    default: {
-      load: vi.fn(async () => fakeDb),
-    },
-    __fakeDb: fakeDb,
-  };
-});
+// Server state is pushed in via Tauri events from the Rust poll loop; tests
+// drive the store directly, so `listen` is a no-op that returns an unlisten fn.
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => {}),
+}));
 
 // jsdom has no matchMedia. Default to "light" (matches: false); tests that
 // need dark can override window.matchMedia themselves.
@@ -62,7 +76,10 @@ beforeEach(async () => {
     __fakeStore: { __reset: () => void };
   };
   storeMod.__fakeStore.__reset();
-  __resetOctokitForTests();
+  const coreMod = (await import("@tauri-apps/api/core")) as unknown as {
+    __fakeKeychain: { __reset: () => void };
+  };
+  coreMod.__fakeKeychain.__reset();
 });
 
 afterEach(() => server.resetHandlers());

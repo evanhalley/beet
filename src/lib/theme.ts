@@ -1,4 +1,4 @@
-import type { ThemeMode } from "@/lib/storage/settings";
+import type { FontScale, ThemeMode } from "@/lib/storage/settings";
 
 // Localstorage hint so the inline script in <head> can set the right
 // data-theme attribute before React mounts — avoids a flash of light content
@@ -6,6 +6,11 @@ import type { ThemeMode } from "@/lib/storage/settings";
 // truth for cross-session persistence; this is just a synchronous cache. It
 // stores the *preference* ("system" included), not the resolved value.
 export const THEME_LS_KEY = "beet.theme";
+
+// Same purpose as THEME_LS_KEY, for the whole-UI zoom factor: lets the inline
+// <head> script set --font-scale before React mounts so the UI doesn't render
+// at 100% then jump. The Tauri-store value remains the source of truth.
+export const FONT_SCALE_LS_KEY = "beet.fontScale";
 
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 
@@ -27,6 +32,22 @@ export function applyTheme(theme: ThemeMode): void {
   try {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(THEME_LS_KEY, theme);
+    }
+  } catch {
+    // localStorage may be unavailable in some embed contexts.
+  }
+}
+
+/**
+ * Apply the whole-UI zoom factor. Sets the --font-scale custom property on
+ * <html>, which globals.css consumes via `:root { zoom: var(--font-scale) }`.
+ */
+export function applyFontScale(scale: FontScale): void {
+  if (typeof document === "undefined") return;
+  document.documentElement.style.setProperty("--font-scale", String(scale));
+  try {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(FONT_SCALE_LS_KEY, String(scale));
     }
   } catch {
     // localStorage may be unavailable in some embed contexts.

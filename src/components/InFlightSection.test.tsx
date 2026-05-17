@@ -58,12 +58,20 @@ function makeItem({
   };
 }
 
+// InFlightSection reads from the store (fed by the Rust poll loop in prod);
+// tests push items straight in via setPollResult.
 function seed(items: ActionableItem[]) {
-  useAppStore.getState().setInFlight(items);
+  useAppStore.getState().setPollResult({
+    reviewRequests: [],
+    inFlight: items,
+    rateLimit: null,
+    polledAt: "2026-05-12T00:00:00.000Z",
+  });
 }
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  seed([]);
 });
 
 describe("InFlightSection", () => {

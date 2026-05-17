@@ -10,6 +10,17 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
 
+// ReviewRequestsSection reads from the store (fed by the Rust poll loop in
+// prod); tests push items straight in via setPollResult.
+function setItems(items: ActionableItem[]) {
+  useAppStore.getState().setPollResult({
+    reviewRequests: items,
+    inFlight: [],
+    rateLimit: null,
+    polledAt: "2026-05-09T10:00:00.000Z",
+  });
+}
+
 function makeItem(
   id: string,
   score: number,
@@ -48,11 +59,12 @@ function makeItem(
 }
 
 function seedItems(items: ActionableItem[]) {
-  useAppStore.getState().setReviewRequests(items);
+  setItems(items);
 }
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  setItems([]);
 });
 
 afterEach(() => {

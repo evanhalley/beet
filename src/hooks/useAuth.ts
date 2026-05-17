@@ -11,11 +11,7 @@ const AUTH_QUERY_KEY = (token: string | null) => ["auth", token] as const;
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const setToken = useAppStore((s) => s.setToken);
-  const setAuth = useAppStore((s) => s.setAuth);
   const setRateLimit = useAppStore((s) => s.setRateLimit);
-  const token = useAppStore((s) => s.token);
-  const auth = useAppStore((s) => s.auth);
 
   const tokenQuery = useQuery({
     queryKey: TOKEN_QUERY_KEY,
@@ -23,11 +19,7 @@ export function useAuth() {
     staleTime: Infinity,
   });
 
-  useEffect(() => {
-    if (tokenQuery.data !== undefined) {
-      setToken(tokenQuery.data);
-    }
-  }, [tokenQuery.data, setToken]);
+  const token = tokenQuery.data ?? null;
 
   const authQuery = useQuery<AuthValidation>({
     queryKey: AUTH_QUERY_KEY(token),
@@ -36,12 +28,13 @@ export function useAuth() {
     staleTime: 30_000,
   });
 
+  const auth = authQuery.data ?? null;
+
+  // validateToken bypasses the Octokit beetGet wrapper, so its rate-limit
+  // headers don't reach the interceptor — feed them into the store here.
   useEffect(() => {
-    if (authQuery.data) {
-      setAuth(authQuery.data);
-      if (authQuery.data.rateLimit) setRateLimit(authQuery.data.rateLimit);
-    }
-  }, [authQuery.data, setAuth, setRateLimit]);
+    if (authQuery.data?.rateLimit) setRateLimit(authQuery.data.rateLimit);
+  }, [authQuery.data, setRateLimit]);
 
   const validateAndSave = useMutation<AuthValidation, Error, string>({
     mutationFn: async (newToken) => {
@@ -53,8 +46,6 @@ export function useAuth() {
     },
     onSuccess: (result, newToken) => {
       if (!result.ok) return;
-      setToken(newToken);
-      setAuth(result);
       if (result.rateLimit) setRateLimit(result.rateLimit);
       queryClient.setQueryData(TOKEN_QUERY_KEY, newToken);
       queryClient.setQueryData(AUTH_QUERY_KEY(newToken), result);
@@ -71,7 +62,8 @@ export function useAuth() {
     token,
     auth,
     lastValidation: validateAndSave.data ?? null,
-    isLoading: tokenQuery.isLoading || authQuery.isFetching || validateAndSave.isPending,
+    isLoading:
+      tokenQuery.isLoading || authQuery.isFetching || validateAndSave.isPending,
     lastCheckedAt,
     validateAndSave: (t: string) => validateAndSave.mutateAsync(t),
     revalidate,

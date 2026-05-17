@@ -24,6 +24,7 @@ function EmptySection({ title, icon, hint }: EmptySectionProps) {
           textTransform: "uppercase",
           letterSpacing: 0.06,
           color: "var(--color-text-faint)",
+          background: "var(--color-panel-2)",
         }}
       >
         <span aria-hidden style={{ display: "inline-flex" }}>{icon}</span>

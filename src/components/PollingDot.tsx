@@ -1,7 +1,7 @@
 "use client";
 
 import { RefreshCw } from "lucide-react";
-import { useIsFetching } from "@tanstack/react-query";
+import { useAppStore } from "@/lib/store";
 
 export interface PollingDotProps {
   paused?: boolean;
@@ -9,7 +9,9 @@ export interface PollingDotProps {
 }
 
 export function PollingDot({ paused = false, label }: PollingDotProps) {
-  const fetching = useIsFetching({ queryKey: ["review-requests"] }) > 0;
+  // The Rust poll loop reports its state via the `poll:status` event, which
+  // usePollEvents funnels into the store; "polling" = a cycle is in flight.
+  const fetching = useAppStore((s) => s.pollState) === "polling";
   const spinning = !paused && fetching;
   const display = paused ? "paused" : label ?? (spinning ? "syncing" : "idle");
   const color = paused ? "var(--color-warn)" : "var(--color-text-muted)";

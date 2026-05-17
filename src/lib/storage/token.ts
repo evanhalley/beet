@@ -1,26 +1,28 @@
-import { load } from "@tauri-apps/plugin-store";
-
-const STORE_FILE = "config.json";
-const PAT_KEY = "github-pat";
-
-async function getStore() {
-  return load(STORE_FILE, { autoSave: true, defaults: {} });
-}
+import { invoke } from "@tauri-apps/api/core";
 
 export async function storeToken(token: string): Promise<void> {
-  const store = await getStore();
-  await store.set(PAT_KEY, token);
-  await store.save();
+  await invoke("store_token", { token });
+  await notifyTokenChanged();
 }
 
 export async function getToken(): Promise<string | null> {
-  const store = await getStore();
-  const value = await store.get<string>(PAT_KEY);
-  return value ?? null;
+  return (await invoke<string | null>("get_token")) ?? null;
 }
 
 export async function clearToken(): Promise<void> {
-  const store = await getStore();
-  await store.delete(PAT_KEY);
-  await store.save();
+  await invoke("clear_token");
+  await notifyTokenChanged();
 }
+
+// Tell the Rust poll loop the PAT was rotated/cleared so it drops its cached
+// token and re-polls with the new credentials. Without this signal a newly-
+// saved-but-still-valid token wouldn't take effect until an Unauthorized.
+// Best-effort: in Tauri-less / test environments this is a no-op.
+async function notifyTokenChanged(): Promise<void> {
+  try {
+    await invoke("notify_token_changed");
+  } catch {
+    // No Tauri host, or the poll loop isn't running yet — ignore.
+  }
+}
+

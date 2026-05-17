@@ -10,6 +10,29 @@ vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
 
+// Server state lives in the store (fed by the Rust poll loop in prod);
+// useActionableItems / useSelectedItem select off it. Seed via setPollResult,
+// preserving whichever section we're not currently setting.
+function seedReviews(items: ActionableItem[]) {
+  const { inFlight } = useAppStore.getState();
+  useAppStore.getState().setPollResult({
+    reviewRequests: items,
+    inFlight,
+    rateLimit: null,
+    polledAt: "2026-05-09T10:00:00.000Z",
+  });
+}
+
+function seedInFlight(items: ActionableItem[]) {
+  const { reviewRequests } = useAppStore.getState();
+  useAppStore.getState().setPollResult({
+    reviewRequests,
+    inFlight: items,
+    rateLimit: null,
+    polledAt: "2026-05-09T10:00:00.000Z",
+  });
+}
+
 function makeItem(id: string, score: number, title?: string): ActionableItem {
   return {
     id,
@@ -53,11 +76,13 @@ function renderShell() {
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  seedReviews([]);
+  seedInFlight([]);
 });
 
 describe("MainWindowShell", () => {
   test("auto-selects the top-scored review request when nothing is selected", () => {
-    useAppStore.getState().setReviewRequests([
+    seedReviews([
       makeItem("a", 3, "Low scorer"),
       makeItem("b", 9, "High scorer"),
       makeItem("c", 5, "Mid scorer"),
@@ -75,10 +100,7 @@ describe("MainWindowShell", () => {
 
   test("clicking a row updates the detail pane to that item", async () => {
     const user = userEvent.setup();
-    useAppStore.getState().setReviewRequests([
-      makeItem("a", 8, "First"),
-      makeItem("b", 4, "Second"),
-    ]);
+    seedReviews([makeItem("a", 8, "First"), makeItem("b", 4, "Second")]);
     renderShell();
     expect(
       screen.getByRole("button", { name: "Open First on GitHub" }),
@@ -92,19 +114,15 @@ describe("MainWindowShell", () => {
   });
 
   test("auto-pick is mirrored back into the store so the row highlights", async () => {
-    useAppStore.getState().setReviewRequests([
-      makeItem("a", 4, "Low"),
-      makeItem("b", 9, "High"),
-    ]);
+    seedReviews([makeItem("a", 4, "Low"), makeItem("b", 9, "High")]);
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("b");
   });
 
   test("stored selection that no longer resolves repairs to the auto-pick", async () => {
-    const store = useAppStore.getState();
-    store.setReviewRequests([makeItem("a", 7, "Only")]);
-    store.setSelectedItemId("ghost");
+    seedReviews([makeItem("a", 7, "Only")]);
+    useAppStore.getState().setSelectedItemId("ghost");
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("a");
@@ -115,7 +133,7 @@ describe("MainWindowShell", () => {
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
       open: ReturnType<typeof vi.fn>;
     };
-    useAppStore.getState().setReviewRequests([makeItem("a", 7, "Only")]);
+    seedReviews([makeItem("a", 7, "Only")]);
     renderShell();
     await user.click(screen.getByRole("button", { name: "Open Only on GitHub" }));
     expect(shellMod.open).toHaveBeenCalledWith(

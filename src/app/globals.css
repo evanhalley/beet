@@ -76,6 +76,12 @@
   --shadow-beet-lg: 0 18px 48px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
+/* Whole-UI zoom. --font-scale is set on <html> by applyFontScale() (and the
+ * pre-hydration inline script in layout.tsx); defaults to 1 when unset. */
+:root {
+  zoom: var(--font-scale, 1);
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);

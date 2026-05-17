@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { useMyOpenPrs } from "@/hooks/useMyOpenPrs";
-import { useReviewRequests } from "@/hooks/useReviewRequests";
+import { usePollEvents } from "@/hooks/usePollEvents";
 import { MissingTokenBanner, type MissingTokenReason } from "@/components/MissingTokenBanner";
 import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 import { MainWindowShell } from "@/components/MainWindow/MainWindowShell";
@@ -15,10 +14,10 @@ const ERROR_BANNER_TIMEOUT_MS = 4000;
 export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { token, auth, isLoading } = useAuth();
-  useReviewRequests();
-  useMyOpenPrs();
+  usePollEvents();
   const uiError = useAppStore((s) => s.uiError);
   const setUiError = useAppStore((s) => s.setUiError);
+  const pollError = useAppStore((s) => s.pollError);
 
   useEffect(() => {
     if (!uiError) return;
@@ -40,13 +39,32 @@ export default function Page() {
     return null;
   })();
 
-  return (
-    <div className="flex h-screen flex-col">
+  // Banners render below the TitleBar (inside MainWindowShell) so they clear
+  // the macOS traffic-light buttons, which overlay the top-left of the window.
+  const banner = (
+    <>
       {bannerReason && (
         <MissingTokenBanner
           reason={bannerReason}
           onOpenSettings={() => setSettingsOpen(true)}
         />
+      )}
+      {/* Poll-cycle error from the Rust loop. Not dismissable — a successful
+          cycle clears it. Suppressed while the missing-token banner shows, to
+          avoid restating the same problem. */}
+      {!bannerReason && pollError && (
+        <div
+          role="alert"
+          style={{
+            padding: "8px 14px",
+            background: "var(--color-danger-soft, rgba(220, 60, 60, 0.12))",
+            borderBottom: "1px solid var(--color-border)",
+            fontSize: 12,
+            color: "var(--color-text)",
+          }}
+        >
+          {pollError}
+        </div>
       )}
       {uiError && (
         <div
@@ -80,7 +98,13 @@ export default function Page() {
           </button>
         </div>
       )}
+    </>
+  );
+
+  return (
+    <div className="flex h-screen flex-col">
       <MainWindowShell
+        banner={banner}
         onOpenSettings={() => setSettingsOpen(true)}
         settingsOpen={settingsOpen}
       />

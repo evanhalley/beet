@@ -76,7 +76,7 @@ export function AccountTab() {
 
       <Field
         label="Personal access token"
-        hint="Stored locally via Tauri Store. Never sent anywhere except api.github.com."
+        hint="Stored in the macOS Keychain. Never sent anywhere except api.github.com."
       >
         <div className="flex gap-2">
           <input
