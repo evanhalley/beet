@@ -12,7 +12,13 @@ export const SETTINGS_KEYS = {
   showAllApproved: "showAllApproved",
   theme: "theme",
   fontScale: "fontScale",
+  autoRequeueEnabled: "autoRequeueEnabled",
+  autoRequeueMaxAttempts: "autoRequeueMaxAttempts",
+  autoRequeueRepos: "autoRequeueRepos",
 } as const;
+
+export const AUTO_REQUEUE_MAX_ATTEMPTS_MIN = 1;
+export const AUTO_REQUEUE_MAX_ATTEMPTS_MAX = 5;
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -35,6 +41,11 @@ export interface BeetSettings {
   showAllApproved: boolean;
   theme: ThemeMode;
   fontScale: FontScale;
+  // Issue #13. Off by default; the user must opt in via Settings → Merge Queue.
+  autoRequeueEnabled: boolean;
+  autoRequeueMaxAttempts: number;
+  // Optional `owner/repo` allowlist. Empty = all repos.
+  autoRequeueRepos: string[];
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -45,7 +56,18 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   showAllApproved: false,
   theme: "system",
   fontScale: 1,
+  autoRequeueEnabled: false,
+  autoRequeueMaxAttempts: 2,
+  autoRequeueRepos: [],
 };
+
+function clampMaxAttempts(n: number): number {
+  if (!Number.isFinite(n)) return SETTINGS_DEFAULTS.autoRequeueMaxAttempts;
+  return Math.min(
+    AUTO_REQUEUE_MAX_ATTEMPTS_MAX,
+    Math.max(AUTO_REQUEUE_MAX_ATTEMPTS_MIN, Math.round(n)),
+  );
+}
 
 async function getStore() {
   return load(STORE_FILE, { autoSave: true, defaults: {} });
@@ -87,6 +109,9 @@ export async function loadSettings(): Promise<BeetSettings> {
     showAllApproved,
     themeRaw,
     fontScaleRaw,
+    autoRequeueEnabled,
+    autoRequeueMaxAttemptsRaw,
+    autoRequeueRepos,
   ] = await Promise.all([
     getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
     getValue<string[]>(
@@ -104,6 +129,18 @@ export async function loadSettings(): Promise<BeetSettings> {
     ),
     getValue<unknown>(SETTINGS_KEYS.theme, SETTINGS_DEFAULTS.theme),
     getValue<unknown>(SETTINGS_KEYS.fontScale, SETTINGS_DEFAULTS.fontScale),
+    getValue<boolean>(
+      SETTINGS_KEYS.autoRequeueEnabled,
+      SETTINGS_DEFAULTS.autoRequeueEnabled,
+    ),
+    getValue<number>(
+      SETTINGS_KEYS.autoRequeueMaxAttempts,
+      SETTINGS_DEFAULTS.autoRequeueMaxAttempts,
+    ),
+    getValue<string[]>(
+      SETTINGS_KEYS.autoRequeueRepos,
+      SETTINGS_DEFAULTS.autoRequeueRepos,
+    ),
   ]);
   const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
   const fontScale = isFontScale(fontScaleRaw)
@@ -117,6 +154,9 @@ export async function loadSettings(): Promise<BeetSettings> {
     showAllApproved,
     theme,
     fontScale,
+    autoRequeueEnabled,
+    autoRequeueMaxAttempts: clampMaxAttempts(autoRequeueMaxAttemptsRaw),
+    autoRequeueRepos,
   };
 }
 
@@ -153,6 +193,24 @@ export async function setTheme(value: ThemeMode): Promise<void> {
 
 export async function setFontScale(value: FontScale): Promise<void> {
   await setValue(SETTINGS_KEYS.fontScale, value);
+}
+
+// Auto-requeue settings flow into the Rust poll loop's PollConfig, so each
+// setter pokes the loop after persisting (same pattern as teams/bots/etc.).
+export async function setAutoRequeueEnabled(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.autoRequeueEnabled, value);
+  await notifyPollerConfigChanged();
+}
+
+export async function setAutoRequeueMaxAttempts(value: number): Promise<void> {
+  const clamped = clampMaxAttempts(value);
+  await setValue(SETTINGS_KEYS.autoRequeueMaxAttempts, clamped);
+  await notifyPollerConfigChanged();
+}
+
+export async function setAutoRequeueRepos(value: string[]): Promise<void> {
+  await setValue(SETTINGS_KEYS.autoRequeueRepos, value);
+  await notifyPollerConfigChanged();
 }
 
 export function parseLineList(text: string): string[] {

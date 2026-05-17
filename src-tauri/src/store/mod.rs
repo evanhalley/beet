@@ -1,6 +1,7 @@
 pub mod db;
 pub mod etag_cache;
 pub mod lifecycle;
+pub mod requeue;
 
 /// Shared SQLite handle. Calls are short and synchronous — the lock is never
 /// held across an `.await`.

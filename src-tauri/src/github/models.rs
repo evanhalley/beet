@@ -33,6 +33,11 @@ pub struct PullDetail {
     #[serde(default)]
     pub body: Option<String>,
     pub html_url: String,
+    /// GitHub's GraphQL node ID — needed for the `enqueuePullRequest` mutation
+    /// the auto-requeue worker invokes (#13). Optional because some fixtures
+    /// and older responses omit it; the worker just skips PRs with no node ID.
+    #[serde(default)]
+    pub node_id: Option<String>,
     pub state: String,
     #[serde(default)]
     pub merged: bool,

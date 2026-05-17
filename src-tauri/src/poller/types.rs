@@ -63,6 +63,15 @@ pub struct ActionableItemMergeQueue {
     pub last_ejection_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ejected_checks: Option<Vec<EjectedCheck>>,
+    /// Head SHA at the time the row was assembled. Sent to the frontend so the
+    /// DetailPane can look up the per-`(prId, headSha)` requeue history (#13).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub head_sha: Option<String>,
+    /// PR's GraphQL node ID. Consumed by the auto-requeue worker to call the
+    /// `enqueuePullRequest` mutation; carried through to the frontend so it
+    /// stays close to the row it belongs to (#13).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pr_node_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -155,6 +164,8 @@ mod tests {
                         conclusion: "failure".into(),
                         details_url: None,
                     }]),
+                    head_sha: Some("deadbeef".into()),
+                    pr_node_id: Some("PR_kwDOA".into()),
                 }),
                 task_urls: vec![],
                 score: 3,
@@ -212,7 +223,14 @@ mod tests {
         let mq = &pr["mergeQueue"];
         assert_eq!(
             keys(mq),
-            vec!["ejectedChecks", "enteredAt", "lastEjectionAt", "position"]
+            vec![
+                "ejectedChecks",
+                "enteredAt",
+                "headSha",
+                "lastEjectionAt",
+                "position",
+                "prNodeId",
+            ]
         );
         assert_eq!(keys(&mq["ejectedChecks"][0]), vec!["conclusion", "detailsUrl", "name"]);
     }

@@ -33,6 +33,9 @@ pub fn run() {
             poller::poll_loop::refresh_now,
             poller::poll_loop::set_poll_paused,
             poller::poll_loop::notify_token_changed,
+            store::requeue::get_requeue_count,
+            store::requeue::get_requeue_opt_out,
+            store::requeue::set_requeue_opt_out,
         ])
         .setup(|app| {
             let open = MenuItemBuilder::with_id("open", "Open Beet").build(app)?;

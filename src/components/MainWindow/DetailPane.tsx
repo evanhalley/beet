@@ -5,7 +5,9 @@ import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Lifecycle } from "@/components/Lifecycle";
+import { Pill } from "@/components/Pill";
 import { ScoreBar } from "@/components/ScoreBar";
+import { useRequeueHistory } from "@/hooks/useRequeueHistory";
 import { openInBrowser } from "@/lib/openInBrowser";
 import type { ActionableItem } from "@/lib/types";
 
@@ -255,7 +257,18 @@ function PlaceholderBlock({ title, hint }: { title: string; hint: string }) {
 }
 
 export function DetailPane({ item }: DetailPaneProps) {
-  if (!item || !item.pr) {
+  const pr = item?.pr ?? null;
+  const headSha = pr?.mergeQueue?.headSha ?? null;
+  // Only authored PRs are ever auto-requeued, so the toggle/badge are only
+  // meaningful in that case — for review-requests, the headSha will usually
+  // be absent anyway and the hook returns the empty state. Called above the
+  // early return so the hook order stays stable across renders.
+  const requeue = useRequeueHistory(
+    item && pr?.isAuthoredByMe ? item.id : null,
+    pr?.isAuthoredByMe ? headSha : null,
+  );
+
+  if (!item || !pr) {
     return (
       <div
         aria-label="Detail"
@@ -272,8 +285,6 @@ export function DetailPane({ item }: DetailPaneProps) {
       </div>
     );
   }
-
-  const pr = item.pr;
 
   return (
     <div
@@ -325,6 +336,9 @@ export function DetailPane({ item }: DetailPaneProps) {
             state={pr.lifecycle}
             mqPos={pr.mergeQueue?.position ?? null}
           />
+          {requeue.count > 0 && (
+            <Pill tone="neutral">Auto-requeued {requeue.count}×</Pill>
+          )}
           <ScoreBar score={pr.score} width={36} />
           <span style={{ flex: 1 }} />
           <button
@@ -349,6 +363,26 @@ export function DetailPane({ item }: DetailPaneProps) {
             Open on GitHub
           </button>
         </div>
+        {pr.isAuthoredByMe && headSha && (
+          <label
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              marginTop: 10,
+              fontSize: 11.5,
+              color: "var(--color-text-muted)",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={requeue.optOut}
+              onChange={(e) => void requeue.setOptOut(e.target.checked)}
+              aria-label="Don't auto-requeue this PR"
+            />
+            Don&apos;t auto-requeue this PR
+          </label>
+        )}
       </header>
 
       <BodyBlock body={pr.body} />

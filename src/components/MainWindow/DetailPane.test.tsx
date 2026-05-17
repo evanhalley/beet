@@ -135,4 +135,72 @@ describe("DetailPane", () => {
       "https://github.com/acme/repo/pull/42",
     );
   });
+
+  test("renders 'Auto-requeued N×' badge and an opt-out toggle for authored ejected PRs", async () => {
+    const coreMod = (await import("@tauri-apps/api/core")) as unknown as {
+      invoke: ReturnType<typeof vi.fn>;
+    };
+    // Spy-route the requeue commands; fall back to the default impl for
+    // everything else so unrelated commands (e.g. shell.open) keep working.
+    let optOut = false;
+    const baseImpl = coreMod.invoke.getMockImplementation()!;
+    coreMod.invoke.mockImplementation(
+      async (cmd: string, args?: Record<string, unknown>) => {
+        switch (cmd) {
+          case "get_requeue_count":
+            return 2;
+          case "get_requeue_opt_out":
+            return optOut;
+          case "set_requeue_opt_out":
+            optOut = Boolean(args?.optOut);
+            return undefined;
+          default:
+            return baseImpl(cmd, args);
+        }
+      },
+    );
+
+    const ejected: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        isAuthoredByMe: true,
+        lifecycle: "open",
+        mergeQueue: {
+          position: null,
+          enteredAt: "2026-05-09T09:50:00Z",
+          lastEjectionAt: "2026-05-09T09:55:00Z",
+          headSha: "deadbeef",
+          prNodeId: "PR_kwDOA",
+          ejectedChecks: [
+            { name: "ci/build", conclusion: "failure" },
+          ],
+        },
+      },
+    };
+
+    render(<DetailPane item={ejected} />);
+    expect(await screen.findByText("Auto-requeued 2×")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Don't auto-requeue this PR"),
+    ).toBeInTheDocument();
+
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText("Don't auto-requeue this PR"));
+    expect(coreMod.invoke).toHaveBeenCalledWith("set_requeue_opt_out", {
+      prId: ejected.id,
+      headSha: "deadbeef",
+      optOut: true,
+    });
+  });
+
+  test("does not render the opt-out toggle for PRs the user did not author", async () => {
+    render(<DetailPane item={pr} />);
+    // Render finished — assert by absence.
+    expect(
+      screen.queryByLabelText("Don't auto-requeue this PR"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Auto-requeued/)).not.toBeInTheDocument();
+  });
 });

@@ -1,4 +1,11 @@
-export type NavIconName = "user" | "bell" | "refresh" | "mute" | "score" | "theme";
+export type NavIconName =
+  | "user"
+  | "bell"
+  | "refresh"
+  | "mute"
+  | "score"
+  | "theme"
+  | "merge";
 
 const COMMON = {
   width: 14,
@@ -52,6 +59,17 @@ export function NavIcon({ name }: { name: NavIconName }) {
         <svg {...COMMON}>
           <circle cx="8" cy="8" r="3" />
           <path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.7 3.7l1 1M11.3 11.3l1 1M3.7 12.3l1-1M11.3 4.7l1-1" />
+        </svg>
+      );
+    case "merge":
+      // Two branches feeding into one — git-merge motif.
+      return (
+        <svg {...COMMON}>
+          <circle cx="4" cy="4" r="1.5" />
+          <circle cx="4" cy="12" r="1.5" />
+          <circle cx="12" cy="8" r="1.5" />
+          <path d="M4 5.5v5" />
+          <path d="M5.5 4c0 3 2 4 5 4M5.5 12c0-3 2-4 5-4" />
         </svg>
       );
   }

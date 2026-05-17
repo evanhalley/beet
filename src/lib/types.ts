@@ -18,6 +18,11 @@ export interface ActionableItemMergeQueue {
   enteredAt: string;
   lastEjectionAt?: string;
   ejectedChecks?: EjectedCheck[];
+  // Head SHA at the time the row was assembled. Used by the DetailPane to
+  // look up per-(prId, headSha) auto-requeue history (#13).
+  headSha?: string;
+  // PR's GraphQL node ID, carried through from the Rust auto-requeue worker.
+  prNodeId?: string;
 }
 
 export interface ActionableItemPr {
