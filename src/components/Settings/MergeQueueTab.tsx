@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { useAppStore } from "@/lib/store";
 import {
@@ -65,12 +65,24 @@ function MaxAttemptsField() {
   const value = useAppStore((s) => s.settings.autoRequeueMaxAttempts);
   const setSettings = useAppStore((s) => s.setSettings);
 
-  const onChange = (next: number) => {
-    setSettings({ autoRequeueMaxAttempts: next });
-  };
+  // Local string state for the input so intermediate edits (empty field,
+  // "1.5", "-") can't poison `autoRequeueMaxAttempts` with NaN or 0 — the
+  // store and disk only receive a finite, clamped integer on blur. Initial
+  // value is whatever settings hydration produced; we don't sync on later
+  // store changes because the only other writer is `onCommit` below, which
+  // updates `draft` itself.
+  const [draft, setDraft] = useState(String(value));
 
   const onCommit = async () => {
-    await setAutoRequeueMaxAttempts(value);
+    const parsed = Number.parseInt(draft, 10);
+    const next = Number.isFinite(parsed) ? parsed : value;
+    const clamped = Math.min(
+      AUTO_REQUEUE_MAX_ATTEMPTS_MAX,
+      Math.max(AUTO_REQUEUE_MAX_ATTEMPTS_MIN, next),
+    );
+    await setAutoRequeueMaxAttempts(clamped);
+    setSettings({ autoRequeueMaxAttempts: clamped });
+    setDraft(String(clamped));
   };
 
   return (
@@ -83,8 +95,8 @@ function MaxAttemptsField() {
         min={AUTO_REQUEUE_MAX_ATTEMPTS_MIN}
         max={AUTO_REQUEUE_MAX_ATTEMPTS_MAX}
         step={1}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
         onBlur={onCommit}
         aria-label="Max retry attempts per head SHA"
         className={`${inputClass} mono`}

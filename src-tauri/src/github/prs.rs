@@ -44,8 +44,8 @@ const EJECTION_CHECK_CONCLUSIONS: &[&str] =
 
 /// Items plus the freshest core-API rate-limit reading observed while building
 /// them. The auto-requeue worker (#13) also stashes any per-item mutation
-/// errors here so the poll loop can surface them on the next `poll:status`
-/// event.
+/// errors here so the poll loop can attach them to the next `PollResultPayload`
+/// (the `auto_requeue_errors` field) — the UI surfaces those as toast banners.
 #[derive(Debug, Default)]
 pub struct FetchOutcome {
     pub items: Vec<ActionableItem>,

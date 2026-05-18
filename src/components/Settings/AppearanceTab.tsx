@@ -73,31 +73,19 @@ const ACCENT_OPTIONS: readonly AccentChipOption[] = [
   { value: "ink", label: "Ink", color: "oklch(0.32 0.025 270)" },
 ] as const;
 
-// Crude luminance check — keeps the checkmark legible on both the dark Ink
-// chip and the lighter Beet/Ocean/Forest chips by flipping to a dark stroke
-// on light backgrounds. Hard-coded per-option since the colors are oklch
-// strings we can't easily parse; the boolean matches what the design's
-// __twkIsLight() returns for each hue.
-const ACCENT_IS_LIGHT: Record<AccentColor, boolean> = {
-  beet: false,
-  ocean: false,
-  forest: false,
-  ink: false,
-};
-
 interface AccentChipsProps {
   value: AccentColor;
   onChange: (next: AccentColor) => void;
 }
 
+// White checkmark stroke works for all four accents — they're all dark enough
+// (L ≤ 0.55) that white contrasts on them. If a future accent lifts L past
+// ~0.7, swap to the design's __twkIsLight() rule and pick per-option here.
 function AccentChips({ value, onChange }: AccentChipsProps) {
   return (
     <div role="radiogroup" aria-label="Accent" style={{ display: "flex", gap: 6 }}>
       {ACCENT_OPTIONS.map((opt) => {
         const checked = opt.value === value;
-        const stroke = ACCENT_IS_LIGHT[opt.value]
-          ? "rgba(0,0,0,0.78)"
-          : "#ffffff";
         return (
           <button
             key={opt.value}
@@ -139,7 +127,7 @@ function AccentChips({ value, onChange }: AccentChipsProps) {
                 <path
                   d="M3 7.2 5.8 10 11 4.2"
                   fill="none"
-                  stroke={stroke}
+                  stroke="#ffffff"
                   strokeWidth="2.2"
                   strokeLinecap="round"
                   strokeLinejoin="round"

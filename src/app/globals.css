@@ -113,8 +113,10 @@
   --color-accent-fg: oklch(0.18 0.006 60);
 }
 
-/* Density. --row-pad-y defaults to 10px in @theme (regular); compact/comfy
- * override it. RowShell consumes the variable as its vertical padding. */
+/* Density. --row-pad-y is defined in @theme above as 10px (the "regular"
+ * default); selecting Regular leaves data-density unset and falls through to
+ * that. Compact / Comfy override the variable. RowShell consumes it as its
+ * vertical padding. */
 [data-density="compact"] { --row-pad-y: 7px; }
 [data-density="comfy"]   { --row-pad-y: 12px; }
 

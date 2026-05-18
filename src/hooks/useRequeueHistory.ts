@@ -43,8 +43,12 @@ export function useRequeueHistory(
   const [state, setState] = useState(EMPTY);
   // Track the (prId, headSha) key the current `state` belongs to. If the
   // caller flips to a different PR, reset during render rather than in an
-  // effect — keeps stale data from flashing one frame and satisfies the
-  // "no setState in effect" rule.
+  // effect. This is the React-endorsed "adjusting state when a prop changes"
+  // pattern (https://react.dev/learn/you-might-not-need-an-effect#adjusting-state-when-a-prop-changes):
+  // calling setState during render of the same component is supported, React
+  // bails out and re-renders synchronously, and there is no commit-then-effect
+  // round trip — which is the only way to avoid a one-frame flash of the
+  // previous PR's badge before the new fetch lands.
   const [stateKey, setStateKey] = useState<string | null>(null);
   if (key !== stateKey) {
     setStateKey(key);
