@@ -12,6 +12,8 @@ export const SETTINGS_KEYS = {
   showAllApproved: "showAllApproved",
   theme: "theme",
   fontScale: "fontScale",
+  accent: "accent",
+  density: "density",
   autoRequeueEnabled: "autoRequeueEnabled",
   autoRequeueMaxAttempts: "autoRequeueMaxAttempts",
   autoRequeueRepos: "autoRequeueRepos",
@@ -33,6 +35,28 @@ export function isFontScale(value: unknown): value is FontScale {
   return value === 0.9 || value === 1 || value === 1.15 || value === 1.3;
 }
 
+// Accent hue applied via [data-accent] on <html> (see src/lib/theme.ts).
+// Each value swaps --color-accent / --color-accent-soft / --color-accent-fg in
+// globals.css; "beet" is the default and is a no-op selector.
+export type AccentColor = "beet" | "ocean" | "forest" | "ink";
+
+export function isAccentColor(value: unknown): value is AccentColor {
+  return (
+    value === "beet" ||
+    value === "ocean" ||
+    value === "forest" ||
+    value === "ink"
+  );
+}
+
+// Row spacing applied via [data-density] on <html>. "regular" matches the
+// @theme default (--row-pad-y: 10px); the other two override that variable.
+export type Density = "compact" | "regular" | "comfy";
+
+export function isDensity(value: unknown): value is Density {
+  return value === "compact" || value === "regular" || value === "comfy";
+}
+
 export interface BeetSettings {
   teams: string[];
   penalizedBots: string[];
@@ -41,6 +65,8 @@ export interface BeetSettings {
   showAllApproved: boolean;
   theme: ThemeMode;
   fontScale: FontScale;
+  accent: AccentColor;
+  density: Density;
   // Issue #13. Off by default; the user must opt in via Settings → Merge Queue.
   autoRequeueEnabled: boolean;
   autoRequeueMaxAttempts: number;
@@ -56,6 +82,8 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   showAllApproved: false,
   theme: "system",
   fontScale: 1,
+  accent: "beet",
+  density: "regular",
   autoRequeueEnabled: false,
   autoRequeueMaxAttempts: 2,
   autoRequeueRepos: [],
@@ -109,6 +137,8 @@ export async function loadSettings(): Promise<BeetSettings> {
     showAllApproved,
     themeRaw,
     fontScaleRaw,
+    accentRaw,
+    densityRaw,
     autoRequeueEnabled,
     autoRequeueMaxAttemptsRaw,
     autoRequeueRepos,
@@ -129,6 +159,8 @@ export async function loadSettings(): Promise<BeetSettings> {
     ),
     getValue<unknown>(SETTINGS_KEYS.theme, SETTINGS_DEFAULTS.theme),
     getValue<unknown>(SETTINGS_KEYS.fontScale, SETTINGS_DEFAULTS.fontScale),
+    getValue<unknown>(SETTINGS_KEYS.accent, SETTINGS_DEFAULTS.accent),
+    getValue<unknown>(SETTINGS_KEYS.density, SETTINGS_DEFAULTS.density),
     getValue<boolean>(
       SETTINGS_KEYS.autoRequeueEnabled,
       SETTINGS_DEFAULTS.autoRequeueEnabled,
@@ -146,6 +178,8 @@ export async function loadSettings(): Promise<BeetSettings> {
   const fontScale = isFontScale(fontScaleRaw)
     ? fontScaleRaw
     : SETTINGS_DEFAULTS.fontScale;
+  const accent = isAccentColor(accentRaw) ? accentRaw : SETTINGS_DEFAULTS.accent;
+  const density = isDensity(densityRaw) ? densityRaw : SETTINGS_DEFAULTS.density;
   return {
     teams,
     penalizedBots,
@@ -154,6 +188,8 @@ export async function loadSettings(): Promise<BeetSettings> {
     showAllApproved,
     theme,
     fontScale,
+    accent,
+    density,
     autoRequeueEnabled,
     autoRequeueMaxAttempts: clampMaxAttempts(autoRequeueMaxAttemptsRaw),
     autoRequeueRepos,
@@ -193,6 +229,14 @@ export async function setTheme(value: ThemeMode): Promise<void> {
 
 export async function setFontScale(value: FontScale): Promise<void> {
   await setValue(SETTINGS_KEYS.fontScale, value);
+}
+
+export async function setAccent(value: AccentColor): Promise<void> {
+  await setValue(SETTINGS_KEYS.accent, value);
+}
+
+export async function setDensity(value: Density): Promise<void> {
+  await setValue(SETTINGS_KEYS.density, value);
 }
 
 // Auto-requeue settings flow into the Rust poll loop's PollConfig, so each

@@ -4,9 +4,11 @@ import {
   AUTO_REQUEUE_MAX_ATTEMPTS_MIN,
   SETTINGS_DEFAULTS,
   loadSettings,
+  setAccent,
   setAutoRequeueEnabled,
   setAutoRequeueMaxAttempts,
   setAutoRequeueRepos,
+  setDensity,
   setFontScale,
   setPenalizedBots,
   setPollingIntervalSec,
@@ -38,6 +40,8 @@ describe("settings storage", () => {
     await setShowAllApproved(true);
     await setTheme("dark");
     await setFontScale(1.15);
+    await setAccent("ocean");
+    await setDensity("compact");
 
     const settings = await loadSettings();
     expect(settings.teams).toEqual(["acme/platform", "acme/api"]);
@@ -47,6 +51,8 @@ describe("settings storage", () => {
     expect(settings.showAllApproved).toBe(true);
     expect(settings.theme).toBe("dark");
     expect(settings.fontScale).toBe(1.15);
+    expect(settings.accent).toBe("ocean");
+    expect(settings.density).toBe("compact");
   });
 
   test("round-trips the auto-requeue settings", async () => {
@@ -89,6 +95,26 @@ describe("settings storage", () => {
 
     const settings = await loadSettings();
     expect(settings.fontScale).toBe(SETTINGS_DEFAULTS.fontScale);
+  });
+
+  test("falls back to default accent when a corrupt value is stored", async () => {
+    const mod = (await import("@tauri-apps/plugin-store")) as unknown as {
+      __fakeStore: { set: (k: string, v: unknown) => Promise<void> };
+    };
+    await mod.__fakeStore.set("accent", "neon");
+
+    const settings = await loadSettings();
+    expect(settings.accent).toBe(SETTINGS_DEFAULTS.accent);
+  });
+
+  test("falls back to default density when a corrupt value is stored", async () => {
+    const mod = (await import("@tauri-apps/plugin-store")) as unknown as {
+      __fakeStore: { set: (k: string, v: unknown) => Promise<void> };
+    };
+    await mod.__fakeStore.set("density", "spacious");
+
+    const settings = await loadSettings();
+    expect(settings.density).toBe(SETTINGS_DEFAULTS.density);
   });
 });
 

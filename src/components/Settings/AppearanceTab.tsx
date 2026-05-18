@@ -1,15 +1,32 @@
 "use client";
 
-import { ALargeSmall, Monitor, Moon, Sun } from "lucide-react";
+import {
+  ALargeSmall,
+  Monitor,
+  Moon,
+  Rows2,
+  Rows3,
+  Rows4,
+  Sun,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import {
+  setAccent,
+  setDensity,
   setFontScale,
   setTheme,
+  type AccentColor,
+  type Density,
   type FontScale,
   type ThemeMode,
 } from "@/lib/storage/settings";
-import { applyFontScale, applyTheme } from "@/lib/theme";
+import {
+  applyAccent,
+  applyDensity,
+  applyFontScale,
+  applyTheme,
+} from "@/lib/theme";
 import { Field, H, Stack } from "./atoms";
 
 interface RadioOption<T extends string | number> {
@@ -37,6 +54,74 @@ const THEME_OPTIONS: readonly RadioOption<ThemeMode>[] = [
     label: "System",
     icon: <Monitor size={14} aria-hidden />,
     hint: "Match the operating system.",
+  },
+] as const;
+
+// Mirrors the swatch chips in design/src/tweaks-panel.jsx — a 12px square in
+// the option's own accent color so the choice is identifiable at a glance.
+// `background` deliberately overrides the parent <span>'s `color`, which the
+// RadioGroup uses to tint lucide-react icons.
+function AccentSwatch({ color }: { color: string }) {
+  return (
+    <span
+      aria-hidden
+      style={{
+        display: "inline-block",
+        width: 12,
+        height: 12,
+        borderRadius: 3,
+        background: color,
+        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.15)",
+      }}
+    />
+  );
+}
+
+const ACCENT_OPTIONS: readonly RadioOption<AccentColor>[] = [
+  {
+    value: "beet",
+    label: "Beet",
+    icon: <AccentSwatch color="oklch(0.52 0.16 355)" />,
+    hint: "Warm magenta — the default.",
+  },
+  {
+    value: "ocean",
+    label: "Ocean",
+    icon: <AccentSwatch color="oklch(0.55 0.14 240)" />,
+    hint: "Cool blue.",
+  },
+  {
+    value: "forest",
+    label: "Forest",
+    icon: <AccentSwatch color="oklch(0.5 0.13 145)" />,
+    hint: "Deep green.",
+  },
+  {
+    value: "ink",
+    label: "Ink",
+    icon: <AccentSwatch color="oklch(0.32 0.025 270)" />,
+    hint: "Near-neutral charcoal.",
+  },
+] as const;
+
+const DENSITY_OPTIONS: readonly RadioOption<Density>[] = [
+  {
+    value: "compact",
+    label: "Compact",
+    icon: <Rows4 size={14} aria-hidden />,
+    hint: "Tighter rows — fit more on screen.",
+  },
+  {
+    value: "regular",
+    label: "Regular",
+    icon: <Rows3 size={14} aria-hidden />,
+    hint: "The default spacing.",
+  },
+  {
+    value: "comfy",
+    label: "Comfy",
+    icon: <Rows2 size={14} aria-hidden />,
+    hint: "Roomier rows — easier to scan.",
   },
 ] as const;
 
@@ -146,6 +231,8 @@ function RadioGroup<T extends string | number>({
 export function AppearanceTab() {
   const theme = useAppStore((s) => s.settings.theme);
   const fontScale = useAppStore((s) => s.settings.fontScale);
+  const accent = useAppStore((s) => s.settings.accent);
+  const density = useAppStore((s) => s.settings.density);
   const setSettings = useAppStore((s) => s.setSettings);
 
   const onThemeChange = async (next: ThemeMode) => {
@@ -167,6 +254,28 @@ export function AppearanceTab() {
       await setFontScale(next);
     } catch {
       // Tauri-less / test environments — applyFontScale already wrote the
+      // localStorage hint and the in-memory store update.
+    }
+  };
+
+  const onAccentChange = async (next: AccentColor) => {
+    setSettings({ accent: next });
+    applyAccent(next);
+    try {
+      await setAccent(next);
+    } catch {
+      // Tauri-less / test environments — applyAccent already wrote the
+      // localStorage hint and the in-memory store update.
+    }
+  };
+
+  const onDensityChange = async (next: Density) => {
+    setSettings({ density: next });
+    applyDensity(next);
+    try {
+      await setDensity(next);
+    } catch {
+      // Tauri-less / test environments — applyDensity already wrote the
       // localStorage hint and the in-memory store update.
     }
   };
@@ -196,6 +305,30 @@ export function AppearanceTab() {
           options={FONT_SCALE_OPTIONS}
           value={fontScale}
           onChange={(next) => void onFontScaleChange(next)}
+        />
+      </Field>
+      <Field
+        label="Accent"
+        hint="Tints highlights, the unread dot, focus rings, and the sidebar selection."
+      >
+        <RadioGroup
+          name="accent"
+          ariaLabel="Accent"
+          options={ACCENT_OPTIONS}
+          value={accent}
+          onChange={(next) => void onAccentChange(next)}
+        />
+      </Field>
+      <Field
+        label="Density"
+        hint="Controls the vertical padding on list rows."
+      >
+        <RadioGroup
+          name="density"
+          ariaLabel="Density"
+          options={DENSITY_OPTIONS}
+          value={density}
+          onChange={(next) => void onDensityChange(next)}
         />
       </Field>
     </Stack>
