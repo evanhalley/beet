@@ -1,12 +1,11 @@
 name: Release
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
-  group: release-${{ github.sha }}
-  cancel-in-progress: true
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -70,9 +69,11 @@ jobs:
 
       # ── Tag + Release ─────────────────────────────────────────────────
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.TAG }}
-          name: Beet ${{ steps.version.outputs.VERSION }}
-          generate_release_notes: true
-          files: src-tauri/target/release/bundle/dmg/*.dmg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.TAG }}" \
+            --title "Beet ${{ steps.version.outputs.VERSION }}" \
+            --target "${{ github.sha }}" \
+            --generate-notes \
+            src-tauri/target/release/bundle/dmg/*.dmg
