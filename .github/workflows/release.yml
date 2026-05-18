@@ -31,13 +31,16 @@ jobs:
             NN=$(printf "%02d" $((10#$PREV_NN + 1)))
           fi
           VERSION="${YEAR}.${NN}"
-          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "TAG=v${VERSION}"    >> "$GITHUB_OUTPUT"
+          # tauri.conf.json requires semver MAJOR.MINOR.PATCH — append .0
+          # so YYYY.NN displays cleanly while keeping the Tauri validator happy.
+          echo "VERSION=${VERSION}"          >> "$GITHUB_OUTPUT"
+          echo "TAG=v${VERSION}"             >> "$GITHUB_OUTPUT"
+          echo "SEMVER=${VERSION}.0"         >> "$GITHUB_OUTPUT"
 
       # ── Patch tauri.conf.json ─────────────────────────────────────────
       - name: Patch version in tauri.conf.json
         run: |
-          jq --arg v "${{ steps.version.outputs.VERSION }}" \
+          jq --arg v "${{ steps.version.outputs.SEMVER }}" \
              '.version = $v' src-tauri/tauri.conf.json > _tmp.json
           mv _tmp.json src-tauri/tauri.conf.json
 
