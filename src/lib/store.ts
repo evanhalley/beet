@@ -5,12 +5,19 @@ import { SETTINGS_DEFAULTS, type BeetSettings } from "@/lib/storage/settings";
 
 export type PollState = "idle" | "polling" | "ok" | "error";
 
+export interface AutoRequeueError {
+  prId: string;
+  headSha: string;
+  message: string;
+}
+
 // Payloads emitted by the Rust poll loop (src-tauri/src/poller/poll_loop.rs).
 export interface PollResultPayload {
   reviewRequests: ActionableItem[];
   inFlight: ActionableItem[];
   rateLimit: RateLimitInfo | null;
   polledAt: string;
+  autoRequeueErrors?: AutoRequeueError[];
 }
 
 export interface PollStatusPayload {
@@ -46,6 +53,11 @@ export interface AppStore {
   showAllReviewsOverride: boolean | null;
 
   uiError: string | null;
+  // Set of (prId|headSha) pairs the user has already been notified about for
+  // auto-requeue failures (#13). Persisting it across poll cycles keeps a
+  // failing PR from spamming the toast every interval — one banner per
+  // distinct `(prId, headSha)` is enough.
+  autoRequeueNotified: Set<string>;
 
   selectedItemId: string | null;
 
@@ -78,23 +90,44 @@ const initialState = {
   paused: false,
   showAllReviewsOverride: null as boolean | null,
   uiError: null as string | null,
+  autoRequeueNotified: new Set<string>(),
   selectedItemId: null as string | null,
   settings: SETTINGS_DEFAULTS,
   settingsHydrated: false,
 };
 
-export const useAppStore = create<AppStore>((set) => ({
+export const useAppStore = create<AppStore>((set, get) => ({
   ...initialState,
   setPollResult: (payload) => {
     const byId = new Map<string, ActionableItem>();
     for (const item of payload.reviewRequests) byId.set(item.id, item);
     for (const item of payload.inFlight) byId.set(item.id, item);
+
+    // Dedupe auto-requeue error toasts: a failing (prId, headSha) should
+    // only surface once. The set persists across cycles; a new push (new
+    // headSha) resets the key naturally.
+    const incoming = payload.autoRequeueErrors ?? [];
+    let uiError = get().uiError;
+    let notified = get().autoRequeueNotified;
+    if (incoming.length > 0) {
+      notified = new Set(notified);
+      for (const err of incoming) {
+        const key = `${err.prId}|${err.headSha}`;
+        if (!notified.has(key)) {
+          notified.add(key);
+          uiError = `Auto-requeue failed for ${err.prId}: ${err.message}`;
+        }
+      }
+    }
+
     set({
       reviewRequests: payload.reviewRequests,
       inFlight: payload.inFlight,
       byId,
       rateLimit: payload.rateLimit,
       lastPolledAt: payload.polledAt,
+      autoRequeueNotified: notified,
+      uiError,
     });
   },
   setPollStatus: (payload) =>
@@ -112,7 +145,12 @@ export const useAppStore = create<AppStore>((set) => ({
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),
   hydrateSettings: (settings) => set({ settings, settingsHydrated: true }),
-  reset: () => set({ ...initialState, byId: new Map() }),
+  reset: () =>
+    set({
+      ...initialState,
+      byId: new Map(),
+      autoRequeueNotified: new Set(),
+    }),
 }));
 
 // Resolved Show-All for the Review Requests section.

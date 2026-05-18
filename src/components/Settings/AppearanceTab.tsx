@@ -1,15 +1,32 @@
 "use client";
 
-import { ALargeSmall, Monitor, Moon, Sun } from "lucide-react";
+import {
+  ALargeSmall,
+  Monitor,
+  Moon,
+  Rows2,
+  Rows3,
+  Rows4,
+  Sun,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { useAppStore } from "@/lib/store";
 import {
+  setAccent,
+  setDensity,
   setFontScale,
   setTheme,
+  type AccentColor,
+  type Density,
   type FontScale,
   type ThemeMode,
 } from "@/lib/storage/settings";
-import { applyFontScale, applyTheme } from "@/lib/theme";
+import {
+  applyAccent,
+  applyDensity,
+  applyFontScale,
+  applyTheme,
+} from "@/lib/theme";
 import { Field, H, Stack } from "./atoms";
 
 interface RadioOption<T extends string | number> {
@@ -37,6 +54,111 @@ const THEME_OPTIONS: readonly RadioOption<ThemeMode>[] = [
     label: "System",
     icon: <Monitor size={14} aria-hidden />,
     hint: "Match the operating system.",
+  },
+] as const;
+
+// Colored chip swatches matching the TweakColor control in
+// design/src/tweaks-panel.jsx. Each option is a flex-1 button with the accent
+// as its background and a checkmark overlaid on the selected one.
+interface AccentChipOption {
+  value: AccentColor;
+  label: string;
+  color: string;
+}
+
+const ACCENT_OPTIONS: readonly AccentChipOption[] = [
+  { value: "beet", label: "Beet", color: "oklch(0.52 0.16 355)" },
+  { value: "ocean", label: "Ocean", color: "oklch(0.55 0.14 240)" },
+  { value: "forest", label: "Forest", color: "oklch(0.5 0.13 145)" },
+  { value: "ink", label: "Ink", color: "oklch(0.32 0.025 270)" },
+] as const;
+
+interface AccentChipsProps {
+  value: AccentColor;
+  onChange: (next: AccentColor) => void;
+}
+
+// White checkmark stroke works for all four accents — they're all dark enough
+// (L ≤ 0.55) that white contrasts on them. If a future accent lifts L past
+// ~0.7, swap to the design's __twkIsLight() rule and pick per-option here.
+function AccentChips({ value, onChange }: AccentChipsProps) {
+  return (
+    <div role="radiogroup" aria-label="Accent" style={{ display: "flex", gap: 6 }}>
+      {ACCENT_OPTIONS.map((opt) => {
+        const checked = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            aria-label={opt.label}
+            title={opt.label}
+            onClick={() => onChange(opt.value)}
+            style={{
+              position: "relative",
+              flex: 1,
+              minWidth: 0,
+              height: 48,
+              padding: 0,
+              border: 0,
+              borderRadius: 8,
+              background: opt.color,
+              cursor: "pointer",
+              boxShadow: checked
+                ? "0 0 0 2px var(--color-text), 0 2px 6px rgba(0,0,0,0.15)"
+                : "0 0 0 0.5px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.08)",
+              transition: "box-shadow 120ms ease, transform 120ms ease",
+            }}
+          >
+            {checked && (
+              <svg
+                aria-hidden
+                viewBox="0 0 14 14"
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  width: 14,
+                  height: 14,
+                  filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))",
+                }}
+              >
+                <path
+                  d="M3 7.2 5.8 10 11 4.2"
+                  fill="none"
+                  stroke="#ffffff"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+const DENSITY_OPTIONS: readonly RadioOption<Density>[] = [
+  {
+    value: "compact",
+    label: "Compact",
+    icon: <Rows4 size={14} aria-hidden />,
+    hint: "Tighter rows — fit more on screen.",
+  },
+  {
+    value: "regular",
+    label: "Regular",
+    icon: <Rows3 size={14} aria-hidden />,
+    hint: "The default spacing.",
+  },
+  {
+    value: "comfy",
+    label: "Comfy",
+    icon: <Rows2 size={14} aria-hidden />,
+    hint: "Roomier rows — easier to scan.",
   },
 ] as const;
 
@@ -146,6 +268,8 @@ function RadioGroup<T extends string | number>({
 export function AppearanceTab() {
   const theme = useAppStore((s) => s.settings.theme);
   const fontScale = useAppStore((s) => s.settings.fontScale);
+  const accent = useAppStore((s) => s.settings.accent);
+  const density = useAppStore((s) => s.settings.density);
   const setSettings = useAppStore((s) => s.setSettings);
 
   const onThemeChange = async (next: ThemeMode) => {
@@ -171,6 +295,28 @@ export function AppearanceTab() {
     }
   };
 
+  const onAccentChange = async (next: AccentColor) => {
+    setSettings({ accent: next });
+    applyAccent(next);
+    try {
+      await setAccent(next);
+    } catch {
+      // Tauri-less / test environments — applyAccent already wrote the
+      // localStorage hint and the in-memory store update.
+    }
+  };
+
+  const onDensityChange = async (next: Density) => {
+    setSettings({ density: next });
+    applyDensity(next);
+    try {
+      await setDensity(next);
+    } catch {
+      // Tauri-less / test environments — applyDensity already wrote the
+      // localStorage hint and the in-memory store update.
+    }
+  };
+
   return (
     <Stack>
       <H>Appearance</H>
@@ -187,6 +333,15 @@ export function AppearanceTab() {
         />
       </Field>
       <Field
+        label="Accent"
+        hint="Tints highlights, the unread dot, focus rings, and the sidebar selection."
+      >
+        <AccentChips
+          value={accent}
+          onChange={(next) => void onAccentChange(next)}
+        />
+      </Field>
+      <Field
         label="Font size"
         hint="Scales the entire interface. Applies immediately and persists across launches."
       >
@@ -196,6 +351,18 @@ export function AppearanceTab() {
           options={FONT_SCALE_OPTIONS}
           value={fontScale}
           onChange={(next) => void onFontScaleChange(next)}
+        />
+      </Field>
+      <Field
+        label="Density"
+        hint="Controls the vertical padding on list rows."
+      >
+        <RadioGroup
+          name="density"
+          ariaLabel="Density"
+          options={DENSITY_OPTIONS}
+          value={density}
+          onChange={(next) => void onDensityChange(next)}
         />
       </Field>
     </Stack>

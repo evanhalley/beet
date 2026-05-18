@@ -7,11 +7,14 @@
 
 use crate::error::BeetResult;
 use crate::github::client::{GithubClient, RateLimitInfo};
-use crate::github::models::{CheckRunsResult, CommentRow, PullDetail, ReviewRow, SearchResult};
+use crate::github::merge_queue::enqueue_pr;
+use crate::github::models::{
+    CheckRunsResult, CommentRow, PullDetail, ReviewRow, SearchResult, UserRef,
+};
 use crate::github::teams::resolve_team_members;
 use crate::poller::types::{
-    ActionableItem, ActionableItemMergeQueue, ActionableItemPr, ActionableKind, EjectedCheck,
-    PrLifecycle,
+    ActionableItem, ActionableItemMergeQueue, ActionableItemPr, ActionableKind, CheckRunSummary,
+    EjectedCheck, PrLifecycle, ReviewerEntry,
 };
 use crate::scoring::score_pull_requests;
 use crate::store::db::now_iso;
@@ -19,8 +22,10 @@ use crate::store::lifecycle::{
     detect_ejection, get_latest_ejection_event, get_latest_lifecycle_row, record_ejection_event,
     record_lifecycle,
 };
+use crate::store::requeue::{count_attempts, is_opted_out, record_attempt};
 use crate::store::Db;
 use crate::tasks::{compile_task_regex, extract_task_urls};
+use serde::Serialize;
 use futures::stream::{self, StreamExt};
 // Two different regex engines: `regex` for our own URL parsers (linear,
 // fast), `fancy_regex` for the user-supplied taskRegex (supports JS-era
@@ -38,11 +43,25 @@ const EJECTION_CHECK_CONCLUSIONS: &[&str] =
     &["failure", "cancelled", "timed_out", "action_required"];
 
 /// Items plus the freshest core-API rate-limit reading observed while building
-/// them.
+/// them. The auto-requeue worker (#13) also stashes any per-item mutation
+/// errors here so the poll loop can attach them to the next `PollResultPayload`
+/// (the `auto_requeue_errors` field) — the UI surfaces those as toast banners.
 #[derive(Debug, Default)]
 pub struct FetchOutcome {
     pub items: Vec<ActionableItem>,
     pub rate_limit: Option<RateLimitInfo>,
+    pub auto_requeue_errors: Vec<AutoRequeueError>,
+}
+
+/// One auto-requeue mutation failure. Emitted to the frontend once per
+/// `(pr_id, head_sha)` so the user sees a single banner per failure, not one
+/// per poll cycle.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoRequeueError {
+    pub pr_id: String,
+    pub head_sha: String,
+    pub message: String,
 }
 
 /// One entry from the per-PR `buffer_unordered` stream. The leading `usize`
@@ -76,6 +95,68 @@ pub fn count_distinct_approvers(reviews: &[ReviewRow]) -> i64 {
     latest.values().filter(|s| s.as_str() == "APPROVED").count() as i64
 }
 
+/// Reviewer roll-up that powers the DetailPane's Reviewers block. For each
+/// reviewer who has submitted a review we keep their *latest* non-`PENDING`
+/// state; reviewers who were requested but have not yet submitted appear with
+/// `state = "requested"` so the block doesn't lose them.
+pub fn build_reviewers(
+    reviews: &[ReviewRow],
+    requested: Option<&[UserRef]>,
+) -> Vec<ReviewerEntry> {
+    use std::collections::BTreeMap;
+
+    // BTreeMap so the output is deterministic (alphabetical by login); the
+    // design doesn't sort, but a stable order makes tests + snapshots sane.
+    let mut latest: BTreeMap<String, String> = BTreeMap::new();
+    for r in reviews {
+        let Some(ref user) = r.user else { continue };
+        if r.state == "PENDING" {
+            continue;
+        }
+        // Insert overwrites — `reviews[]` is returned in submission order, so
+        // the last write wins, which is the most recent review.
+        latest.insert(user.login.clone(), r.state.clone());
+    }
+
+    let mut out: Vec<ReviewerEntry> = latest
+        .into_iter()
+        .map(|(login, gh_state)| ReviewerEntry {
+            login,
+            state: map_review_state(&gh_state),
+        })
+        .collect();
+
+    if let Some(requested) = requested {
+        let submitted: std::collections::HashSet<String> =
+            out.iter().map(|r| r.login.clone()).collect();
+        for r in requested {
+            if !submitted.contains(&r.login) {
+                out.push(ReviewerEntry {
+                    login: r.login.clone(),
+                    state: "requested".to_string(),
+                });
+            }
+        }
+    }
+    out.sort_by(|a, b| a.login.cmp(&b.login));
+    out
+}
+
+/// Map GitHub's REST review state enum to the contract strings the
+/// DetailPane Pill mapping expects.
+fn map_review_state(gh: &str) -> String {
+    match gh {
+        "APPROVED" => "approved",
+        "CHANGES_REQUESTED" => "changes_requested",
+        "COMMENTED" => "commented",
+        "DISMISSED" => "dismissed",
+        // Unknown future states fall through verbatim (lowercased) — the
+        // frontend will render them as a neutral pill.
+        _ => return gh.to_ascii_lowercase(),
+    }
+    .to_string()
+}
+
 pub fn derive_lifecycle(pull: &PullDetail) -> PrLifecycle {
     if pull.state == "closed" {
         return if pull.merged {
@@ -102,13 +183,15 @@ pub fn derive_lifecycle(pull: &PullDetail) -> PrLifecycle {
     PrLifecycle::Open
 }
 
-pub async fn fetch_failing_checks(
+/// Fetch every check-run for a head SHA, mapped to the contract shape the
+/// frontend renders in the DetailPane's Checks block.
+pub async fn fetch_check_runs(
     client: &GithubClient,
     db: &Db,
     owner: &str,
     repo: &str,
     head_sha: &str,
-) -> BeetResult<Vec<EjectedCheck>> {
+) -> BeetResult<Vec<CheckRunSummary>> {
     let cache_key = format!("commit:{owner}/{repo}@{head_sha}:check-runs");
     let url = client.url(&format!(
         "/repos/{owner}/{repo}/commits/{head_sha}/check-runs"
@@ -120,17 +203,30 @@ pub async fn fetch_failing_checks(
         .body
         .check_runs
         .into_iter()
+        .map(|r| CheckRunSummary {
+            name: r.name,
+            status: r.status,
+            conclusion: r.conclusion,
+            details_url: r.html_url,
+        })
+        .collect())
+}
+
+/// Filter `fetch_check_runs` output down to the checks that knocked a PR out
+/// of the merge queue. Used by `build_merge_queue`.
+pub fn ejected_checks(runs: &[CheckRunSummary]) -> Vec<EjectedCheck> {
+    runs.iter()
         .filter(|r| {
             r.conclusion
                 .as_deref()
                 .is_some_and(|c| EJECTION_CHECK_CONCLUSIONS.contains(&c))
         })
         .map(|r| EjectedCheck {
-            name: r.name,
-            conclusion: r.conclusion.unwrap_or_default(),
-            details_url: r.html_url,
+            name: r.name.clone(),
+            conclusion: r.conclusion.clone().unwrap_or_default(),
+            details_url: r.details_url.clone(),
         })
-        .collect())
+        .collect()
 }
 
 pub struct FetchReviewRequestsOptions {
@@ -143,6 +239,12 @@ pub struct FetchReviewRequestsOptions {
 pub struct FetchMyOpenPrsOptions {
     pub username: String,
     pub task_regex: String,
+    /// Auto-requeue worker config (#13). Read from PollConfig at the top of
+    /// each poll cycle.
+    pub auto_requeue_enabled: bool,
+    pub auto_requeue_max_attempts: u32,
+    /// Empty = all repos eligible; non-empty = only these `owner/repo` repos.
+    pub auto_requeue_repos: Vec<String>,
 }
 
 /// Build the `/search/issues` URL for query string `q`.
@@ -204,7 +306,11 @@ pub async fn fetch_review_requests(
     // decides visibility from the (session-overridable) "show all" toggle, so
     // the full scored list must cross the boundary.
     let items = score_pull_requests(items, true, &opts.penalized_bots);
-    Ok(FetchOutcome { items, rate_limit })
+    Ok(FetchOutcome {
+        items,
+        rate_limit,
+        auto_requeue_errors: Vec::new(),
+    })
 }
 
 pub async fn fetch_my_open_prs(
@@ -243,7 +349,97 @@ pub async fn fetch_my_open_prs(
 
     // Stable sort: equal updated_at keeps search order (set by collect_assembled).
     items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    Ok(FetchOutcome { items, rate_limit })
+
+    // Auto-requeue worker (#13). Runs after item assembly so it sees the same
+    // `(pr_id, head_sha, pr_node_id, lifecycle, ejected_checks)` the row will
+    // show — no extra GitHub roundtrip beyond the enqueue mutation itself.
+    let auto_requeue_errors = maybe_auto_requeue(client, db, opts, &items).await?;
+
+    Ok(FetchOutcome {
+        items,
+        rate_limit,
+        auto_requeue_errors,
+    })
+}
+
+/// Inspect each item for "currently ejected from the merge queue" state and
+/// fire the `enqueuePullRequest` mutation when the worker is enabled, the cap
+/// hasn't been hit, and the PR isn't opted out. Critical errors (rate-limit,
+/// auth) abort the cycle; per-PR mutation failures are recorded against the
+/// cap and returned to the caller for one-shot UI display.
+async fn maybe_auto_requeue(
+    client: &GithubClient,
+    db: &Db,
+    opts: &FetchMyOpenPrsOptions,
+    items: &[ActionableItem],
+) -> BeetResult<Vec<AutoRequeueError>> {
+    if !opts.auto_requeue_enabled {
+        return Ok(Vec::new());
+    }
+
+    let allowlist_active = !opts.auto_requeue_repos.is_empty();
+    let mut errors = Vec::new();
+
+    for item in items {
+        let Some(pr) = item.pr.as_ref() else {
+            continue;
+        };
+        // Only PRs that are *currently ejected*: an ejection event exists at
+        // the current head SHA, but the PR has dropped back out of the queue.
+        // `build_merge_queue` only attaches `ejected_checks` in that case.
+        let Some(mq) = pr.merge_queue.as_ref() else {
+            continue;
+        };
+        let Some(checks) = mq.ejected_checks.as_ref() else {
+            continue;
+        };
+        if checks.is_empty() || pr.lifecycle == PrLifecycle::MergeQueue {
+            continue;
+        }
+        if allowlist_active && !opts.auto_requeue_repos.contains(&item.repo_full_name) {
+            continue;
+        }
+        let Some(head_sha) = mq.head_sha.as_deref() else {
+            continue;
+        };
+        let Some(node_id) = mq.pr_node_id.as_deref() else {
+            continue;
+        };
+
+        // Cap + opt-out checks are cheap DB reads — do them before the network
+        // call so an over-cap PR doesn't burn a GitHub request.
+        let (count, opted_out) = {
+            let Ok(conn) = db.lock() else { continue };
+            let count = count_attempts(&conn, &item.id, head_sha).unwrap_or(0);
+            let opted_out = is_opted_out(&conn, &item.id, head_sha).unwrap_or(false);
+            (count, opted_out)
+        };
+        if opted_out || count >= opts.auto_requeue_max_attempts as i64 {
+            continue;
+        }
+
+        match enqueue_pr(client, node_id).await {
+            Ok(()) => {
+                if let Ok(conn) = db.lock() {
+                    let _ = record_attempt(&conn, &item.id, head_sha, true);
+                }
+            }
+            Err(e) if e.is_critical() => return Err(e),
+            Err(e) => {
+                let message = e.to_string();
+                if let Ok(conn) = db.lock() {
+                    let _ = record_attempt(&conn, &item.id, head_sha, false);
+                }
+                errors.push(AutoRequeueError {
+                    pr_id: item.id.clone(),
+                    head_sha: head_sha.to_string(),
+                    message,
+                });
+            }
+        }
+    }
+
+    Ok(errors)
 }
 
 /// Drain the `buffer_unordered` output into items + the last seen rate limit.
@@ -348,6 +544,12 @@ async fn assemble_review_item(
     let approval_count = count_distinct_approvers(&reviews);
     let task_urls = extract_task_urls(pull.body.as_deref(), compiled_regex);
     let lifecycle = derive_lifecycle(&pull);
+    let reviewers = build_reviewers(&reviews, pull.requested_reviewers.as_deref());
+    let check_runs = match fetch_check_runs(client, db, &owner, &repo, &pull.head.sha).await {
+        Ok(runs) => Some(runs),
+        Err(e) if e.is_critical() => return Err(e),
+        Err(_) => None,
+    };
 
     let item = ActionableItem {
         id: format!("pr:{owner}/{repo}#{num}"),
@@ -377,6 +579,8 @@ async fn assemble_review_item(
             merge_queue: None,
             task_urls,
             score: 0,
+            reviewers: Some(reviewers),
+            check_runs,
         }),
     };
     Ok((Some(item), rate_limit))
@@ -420,10 +624,23 @@ async fn assemble_my_pr_item(
         ejected
     };
 
+    // Fetch check-runs once for this PR; the merge_queue builder reuses the
+    // list to derive ejected_checks, so an ejected PR doesn't double-hit the
+    // /check-runs endpoint.
+    let check_runs = match fetch_check_runs(client, db, &owner, &repo, &pull.head.sha).await {
+        Ok(runs) => Some(runs),
+        Err(e) if e.is_critical() => return Err(e),
+        Err(_) => None,
+    };
+
     let merge_queue = build_merge_queue(
-        client, db, &owner, &repo, &pr_id, &pull, lifecycle, ejected,
-    )
-    .await?;
+        db,
+        &pr_id,
+        &pull,
+        lifecycle,
+        ejected,
+        check_runs.as_deref(),
+    )?;
 
     let author = pull_user.login.clone();
     let is_review_requested_from_me = pull
@@ -441,6 +658,7 @@ async fn assemble_my_pr_item(
     });
     let approval_count = count_distinct_approvers(&reviews);
     let task_urls = extract_task_urls(pull.body.as_deref(), compiled_regex);
+    let reviewers = build_reviewers(&reviews, pull.requested_reviewers.as_deref());
 
     let item = ActionableItem {
         id: pr_id,
@@ -470,47 +688,42 @@ async fn assemble_my_pr_item(
             merge_queue,
             task_urls,
             score: 0,
+            reviewers: Some(reviewers),
+            check_runs,
         }),
     };
     Ok((Some(item), rate_limit))
 }
 
 /// Replicates the merge-queue / ejection hydration block of `fetchMyOpenPrs`
-/// (prs.ts:304-359).
-#[allow(clippy::too_many_arguments)]
-async fn build_merge_queue(
-    client: &GithubClient,
+/// (prs.ts:304-359). `check_runs` is supplied by the caller — the assembler
+/// already fetched it for the DetailPane's Checks block, so this function
+/// derives the ejected subset from that list instead of re-hitting GitHub.
+fn build_merge_queue(
     db: &Db,
-    owner: &str,
-    repo: &str,
     pr_id: &str,
     pull: &PullDetail,
     lifecycle: PrLifecycle,
     ejected: bool,
+    check_runs: Option<&[CheckRunSummary]>,
 ) -> BeetResult<Option<ActionableItemMergeQueue>> {
     if ejected {
         let now = now_iso();
-        // The check-runs fetch is auxiliary: a non-critical failure should
-        // still let the PR surface (badge without populated checks; next poll
-        // retries). Critical errors (rate-limit, auth, transient) MUST bubble
-        // up so the cycle reports them and adaptive backoff honors Retry-After.
-        let ejected_checks =
-            match fetch_failing_checks(client, db, owner, repo, &pull.head.sha).await {
-                Ok(checks) => {
-                    if let Ok(conn) = db.lock() {
-                        let _ =
-                            record_ejection_event(&conn, pr_id, &pull.head.sha, &checks);
-                    }
-                    checks
-                }
-                Err(e) if e.is_critical() => return Err(e),
-                Err(_) => Vec::new(),
-            };
+        // When the prior check-runs fetch failed (non-critical), record an
+        // empty failing-checks list rather than crashing — matches the
+        // pre-refactor behavior where a check-runs failure left the badge
+        // populated but the checks empty.
+        let failing_checks = check_runs.map(ejected_checks).unwrap_or_default();
+        if let Ok(conn) = db.lock() {
+            let _ = record_ejection_event(&conn, pr_id, &pull.head.sha, &failing_checks);
+        }
         return Ok(Some(ActionableItemMergeQueue {
             position: None,
             entered_at: now.clone(),
             last_ejection_at: Some(now),
-            ejected_checks: Some(ejected_checks),
+            ejected_checks: Some(failing_checks),
+            head_sha: Some(pull.head.sha.clone()),
+            pr_node_id: pull.node_id.clone(),
         }));
     }
 
@@ -528,6 +741,8 @@ async fn build_merge_queue(
                     entered_at: prior.observed_at.clone(),
                     last_ejection_at: Some(prior.observed_at),
                     ejected_checks: Some(prior.failing_checks),
+                    head_sha: Some(pull.head.sha.clone()),
+                    pr_node_id: pull.node_id.clone(),
                 }));
             }
         }
@@ -547,6 +762,8 @@ async fn build_merge_queue(
         entered_at,
         last_ejection_at: None,
         ejected_checks: None,
+        head_sha: Some(pull.head.sha.clone()),
+        pr_node_id: pull.node_id.clone(),
     }))
 }
 
@@ -690,6 +907,9 @@ mod tests {
         let opts = FetchMyOpenPrsOptions {
             username: "me".to_string(),
             task_regex: String::new(),
+            auto_requeue_enabled: false,
+            auto_requeue_max_attempts: 2,
+            auto_requeue_repos: vec![],
         };
         let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
         assert_eq!(outcome.items.len(), 1);
@@ -705,6 +925,208 @@ mod tests {
         // Only the failing check is kept.
         assert_eq!(checks.len(), 1);
         assert_eq!(checks[0].name, "ci/build");
+    }
+
+    /// Helper for the auto-requeue worker tests. Seeds the same mocks the
+    /// detect-ejection test uses, plus a `pulls.get` body that includes
+    /// `node_id` (needed for the GraphQL mutation) and a `head_sha` of the
+    /// caller's choice.
+    async fn seed_my_open_prs_with_ejection(
+        server: &MockServer,
+        head_sha: &str,
+        node_id: &str,
+    ) {
+        Mock::given(method("GET"))
+            .and(path("/search/issues"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{
+                    "number": 7,
+                    "html_url": "https://github.com/foo/bar/pull/7",
+                    "url": "https://api.github.com/repos/foo/bar/issues/7",
+                }]
+            })))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/pulls/7"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "title": "My PR",
+                "body": null,
+                "html_url": "https://github.com/foo/bar/pull/7",
+                "node_id": node_id,
+                "state": "open",
+                "user": { "login": "me" },
+                "head": { "sha": head_sha },
+                "additions": 1,
+                "deletions": 1,
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "updated_at": "2026-01-02T00:00:00.000Z",
+            })))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/issues/7/comments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/pulls/7/reviews"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path(format!("/repos/foo/bar/commits/{head_sha}/check-runs")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "check_runs": [
+                    { "name": "ci/build", "conclusion": "failure" },
+                ]
+            })))
+            .mount(server)
+            .await;
+    }
+
+    #[tokio::test]
+    async fn auto_requeue_fires_when_enabled_and_within_cap() {
+        let server = MockServer::start().await;
+        seed_my_open_prs_with_ejection(&server, "sha-r1", "PR_kwDOA").await;
+        // Worker should POST one GraphQL mutation with the node_id.
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "enqueuePullRequest": { "mergeQueueEntry": { "position": 4 } } }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        {
+            let conn = db.lock().unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+        }
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchMyOpenPrsOptions {
+            username: "me".to_string(),
+            task_regex: String::new(),
+            auto_requeue_enabled: true,
+            auto_requeue_max_attempts: 2,
+            auto_requeue_repos: vec![],
+        };
+        let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        assert!(outcome.auto_requeue_errors.is_empty());
+        let conn = db.lock().unwrap();
+        assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r1").unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn auto_requeue_skips_when_disabled() {
+        let server = MockServer::start().await;
+        seed_my_open_prs_with_ejection(&server, "sha-r2", "PR_kwDOB").await;
+        // No /graphql mock — if the worker fires, the call would 404 and the
+        // worker would push an entry to auto_requeue_errors.
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        {
+            let conn = db.lock().unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+        }
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchMyOpenPrsOptions {
+            username: "me".to_string(),
+            task_regex: String::new(),
+            auto_requeue_enabled: false,
+            auto_requeue_max_attempts: 2,
+            auto_requeue_repos: vec![],
+        };
+        let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        assert!(outcome.auto_requeue_errors.is_empty());
+        let conn = db.lock().unwrap();
+        assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r2").unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn auto_requeue_respects_cap_across_cycles() {
+        let server = MockServer::start().await;
+        seed_my_open_prs_with_ejection(&server, "sha-r3", "PR_kwDOC").await;
+        // Worker should only call once even though we run the cycle twice —
+        // the second cycle hits the cap (max_attempts = 1).
+        Mock::given(method("POST"))
+            .and(path("/graphql"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "data": { "enqueuePullRequest": { "mergeQueueEntry": { "position": 1 } } }
+            })))
+            .expect(1)
+            .mount(&server)
+            .await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        {
+            let conn = db.lock().unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+        }
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchMyOpenPrsOptions {
+            username: "me".to_string(),
+            task_regex: String::new(),
+            auto_requeue_enabled: true,
+            auto_requeue_max_attempts: 1,
+            auto_requeue_repos: vec![],
+        };
+        // Cycle 1 — fires the mutation.
+        fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        // Cycle 2 — already at the cap.
+        fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        let conn = db.lock().unwrap();
+        assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r3").unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn auto_requeue_respects_opt_out() {
+        use crate::store::requeue::set_opt_out;
+        let server = MockServer::start().await;
+        seed_my_open_prs_with_ejection(&server, "sha-r4", "PR_kwDOD").await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        {
+            let conn = db.lock().unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+            set_opt_out(&conn, "pr:foo/bar#7", "sha-r4", true).unwrap();
+        }
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchMyOpenPrsOptions {
+            username: "me".to_string(),
+            task_regex: String::new(),
+            auto_requeue_enabled: true,
+            auto_requeue_max_attempts: 2,
+            auto_requeue_repos: vec![],
+        };
+        fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        let conn = db.lock().unwrap();
+        assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r4").unwrap(), 0);
+    }
+
+    #[tokio::test]
+    async fn auto_requeue_respects_repo_allowlist() {
+        let server = MockServer::start().await;
+        seed_my_open_prs_with_ejection(&server, "sha-r5", "PR_kwDOE").await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        {
+            let conn = db.lock().unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+        }
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchMyOpenPrsOptions {
+            username: "me".to_string(),
+            task_regex: String::new(),
+            auto_requeue_enabled: true,
+            auto_requeue_max_attempts: 2,
+            // Allowlist active but doesn't include foo/bar → skip.
+            auto_requeue_repos: vec!["other/repo".to_string()],
+        };
+        fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        let conn = db.lock().unwrap();
+        assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r5").unwrap(), 0);
     }
 
     #[tokio::test]
@@ -761,6 +1183,7 @@ mod tests {
             title: "t".into(),
             body: None,
             html_url: "u".into(),
+            node_id: None,
             state: state.into(),
             merged,
             auto_merge: None,
@@ -806,6 +1229,142 @@ mod tests {
         assert_eq!(derive_lifecycle(&p), PrLifecycle::InReview);
 
         assert_eq!(derive_lifecycle(&pull("open", false)), PrLifecycle::Open);
+    }
+
+    #[test]
+    fn build_reviewers_collapses_to_latest_per_login() {
+        // alice: approved -> changes_requested -> approved (final approved).
+        // bob: approved then PENDING (PENDING is ignored, bob stays approved).
+        // carol: commented only.
+        let reviews = vec![
+            ReviewRow {
+                user: Some(UserRef { login: "alice".into() }),
+                state: "APPROVED".into(),
+            },
+            ReviewRow {
+                user: Some(UserRef { login: "alice".into() }),
+                state: "CHANGES_REQUESTED".into(),
+            },
+            ReviewRow {
+                user: Some(UserRef { login: "alice".into() }),
+                state: "APPROVED".into(),
+            },
+            ReviewRow {
+                user: Some(UserRef { login: "bob".into() }),
+                state: "APPROVED".into(),
+            },
+            ReviewRow {
+                user: Some(UserRef { login: "bob".into() }),
+                state: "PENDING".into(),
+            },
+            ReviewRow {
+                user: Some(UserRef { login: "carol".into() }),
+                state: "COMMENTED".into(),
+            },
+        ];
+        let out = build_reviewers(&reviews, None);
+        assert_eq!(out.len(), 3);
+        // Output is alphabetical by login.
+        assert_eq!(out[0].login, "alice");
+        assert_eq!(out[0].state, "approved");
+        assert_eq!(out[1].login, "bob");
+        assert_eq!(out[1].state, "approved");
+        assert_eq!(out[2].login, "carol");
+        assert_eq!(out[2].state, "commented");
+    }
+
+    #[test]
+    fn build_reviewers_includes_requested_with_no_submitted_review() {
+        let reviews = vec![ReviewRow {
+            user: Some(UserRef { login: "alice".into() }),
+            state: "APPROVED".into(),
+        }];
+        // bob was requested but hasn't reviewed yet → appears with state
+        // "requested". alice already submitted → no duplicate row for her.
+        let requested = vec![
+            UserRef { login: "alice".into() },
+            UserRef { login: "bob".into() },
+        ];
+        let out = build_reviewers(&reviews, Some(&requested));
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].login, "alice");
+        assert_eq!(out[0].state, "approved");
+        assert_eq!(out[1].login, "bob");
+        assert_eq!(out[1].state, "requested");
+    }
+
+    #[tokio::test]
+    async fn assemble_my_pr_item_attaches_full_check_runs() {
+        // Same fixture shape as `fetch_my_open_prs_detects_merge_queue_ejection`
+        // but checks span success + failure + in_progress to assert the full
+        // list (not just failing) reaches the row.
+        let server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/search/issues"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "items": [{
+                    "number": 11,
+                    "html_url": "https://github.com/foo/bar/pull/11",
+                    "url": "https://api.github.com/repos/foo/bar/issues/11",
+                }]
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/pulls/11"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "title": "My PR",
+                "body": null,
+                "html_url": "https://github.com/foo/bar/pull/11",
+                "state": "open",
+                "user": { "login": "me" },
+                "head": { "sha": "sha-c" },
+                "additions": 1,
+                "deletions": 1,
+                "created_at": "2026-01-01T00:00:00.000Z",
+                "updated_at": "2026-01-02T00:00:00.000Z",
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/issues/11/comments"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/pulls/11/reviews"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(&server)
+            .await;
+        Mock::given(method("GET"))
+            .and(path("/repos/foo/bar/commits/sha-c/check-runs"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "check_runs": [
+                    { "name": "build", "status": "completed", "conclusion": "success" },
+                    { "name": "integration", "status": "completed", "conclusion": "failure" },
+                    { "name": "deploy", "status": "in_progress", "conclusion": null },
+                ]
+            })))
+            .mount(&server)
+            .await;
+
+        let db: Db = Mutex::new(open_in_memory().unwrap());
+        let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+        let opts = FetchMyOpenPrsOptions {
+            username: "me".to_string(),
+            task_regex: String::new(),
+            auto_requeue_enabled: false,
+            auto_requeue_max_attempts: 2,
+            auto_requeue_repos: vec![],
+        };
+        let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
+        let pr = outcome.items[0].pr.as_ref().unwrap();
+        let runs = pr.check_runs.as_ref().expect("check_runs should be populated");
+        assert_eq!(runs.len(), 3);
+        assert_eq!(runs[0].name, "build");
+        assert_eq!(runs[0].conclusion.as_deref(), Some("success"));
+        assert_eq!(runs[2].status.as_deref(), Some("in_progress"));
     }
 
     #[test]

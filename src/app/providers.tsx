@@ -4,7 +4,13 @@ import { useEffect, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { loadSettings } from "@/lib/storage/settings";
-import { applyFontScale, applyTheme, watchSystemTheme } from "@/lib/theme";
+import {
+  applyAccent,
+  applyDensity,
+  applyFontScale,
+  applyTheme,
+  watchSystemTheme,
+} from "@/lib/theme";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [client] = useState(
@@ -27,6 +33,8 @@ export function Providers({ children }: { children: ReactNode }) {
         useAppStore.getState().hydrateSettings(settings);
         applyTheme(settings.theme);
         applyFontScale(settings.fontScale);
+        applyAccent(settings.accent);
+        applyDensity(settings.density);
       })
       .catch(() => {
         // Tauri-less / test environments fall back to defaults already in the store.

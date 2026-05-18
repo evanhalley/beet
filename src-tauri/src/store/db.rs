@@ -31,6 +31,18 @@ const MIGRATIONS: &[&str] = &[
         failing_checks_json TEXT NOT NULL,
         PRIMARY KEY (pr_id, observed_at)
     );",
+    // v4: create pr_requeue_attempts table. Records each auto-requeue attempt
+    // per (pr_id, head_sha) so the cap survives app restarts. The same table
+    // doubles as the per-PR opt-out store: a sentinel row with attempted_at =
+    // 'opt-out' carries opt_out = 1 and is excluded from cap counting.
+    "CREATE TABLE IF NOT EXISTS pr_requeue_attempts (
+        pr_id        TEXT NOT NULL,
+        head_sha     TEXT NOT NULL,
+        attempted_at TEXT NOT NULL,
+        succeeded    INTEGER NOT NULL,
+        opt_out      INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (pr_id, head_sha, attempted_at)
+    );",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.
@@ -81,8 +93,13 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 3);
-        for table in ["etag_cache", "pr_lifecycle_history", "pr_ejection_events"] {
+        assert_eq!(version, 4);
+        for table in [
+            "etag_cache",
+            "pr_lifecycle_history",
+            "pr_ejection_events",
+            "pr_requeue_attempts",
+        ] {
             let count: i64 = conn
                 .query_row(
                     "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1",
@@ -102,7 +119,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
     }
 
     #[test]
@@ -123,7 +140,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

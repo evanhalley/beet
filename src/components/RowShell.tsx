@@ -40,7 +40,9 @@ export function RowShell({
           gridTemplateColumns: "auto 1fr auto",
           gap: 10,
           alignItems: "center",
-          padding: active ? "10px 16px 10px 14px" : "10px 16px",
+          padding: active
+            ? "var(--row-pad-y, 10px) 16px var(--row-pad-y, 10px) 14px"
+            : "var(--row-pad-y, 10px) 16px",
           background: active ? "var(--color-accent-soft)" : "transparent",
           borderTop: "1px solid var(--color-border)",
           borderLeft: active

@@ -65,6 +65,64 @@ describe("DetailPane", () => {
     expect(screen.getByLabelText("Activity")).toBeInTheDocument();
   });
 
+  test("Reviewers/Checks blocks show empty-state hints when no data is attached", () => {
+    render(<DetailPane item={pr} />);
+    expect(screen.getByText("No reviewers yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText("No checks reported for this commit."),
+    ).toBeInTheDocument();
+  });
+
+  test("Reviewers block renders the design's four pill mappings", () => {
+    const withReviewers: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        reviewers: [
+          { login: "alice", state: "approved" },
+          { login: "bob", state: "changes_requested" },
+          { login: "carol", state: "requested" },
+          // "commented" isn't in the design's explicit mapping → neutral pill
+          // labeled with the raw state.
+          { login: "dave", state: "commented" },
+        ],
+      },
+    };
+    render(<DetailPane item={withReviewers} />);
+    expect(screen.getByText("@alice")).toBeInTheDocument();
+    expect(screen.getByText("approved")).toBeInTheDocument();
+    expect(screen.getByText("changes requested")).toBeInTheDocument();
+    expect(screen.getByText("awaiting")).toBeInTheDocument();
+    expect(screen.getByText("commented")).toBeInTheDocument();
+  });
+
+  test("Checks block renders rows with the design's status derivation", () => {
+    const withChecks: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        checkRuns: [
+          { name: "build", status: "completed", conclusion: "success" },
+          { name: "integration", status: "completed", conclusion: "failure" },
+          { name: "deploy", status: "in_progress" },
+          { name: "lint", status: "queued" },
+        ],
+      },
+    };
+    render(<DetailPane item={withChecks} />);
+    expect(screen.getByText("build")).toBeInTheDocument();
+    expect(screen.getByText("integration")).toBeInTheDocument();
+    expect(screen.getByText("deploy")).toBeInTheDocument();
+    // In-progress row reads "running…", not the (null) conclusion.
+    expect(screen.getByText("running…")).toBeInTheDocument();
+    // Completed rows surface the raw conclusion.
+    expect(screen.getByText("success")).toBeInTheDocument();
+    expect(screen.getByText("failure")).toBeInTheDocument();
+    // Pending CheckDot is identified by its title text (one per row).
+    const pendingDots = screen.getAllByLabelText("Checks pending");
+    expect(pendingDots).toHaveLength(1); // deploy only; queued is neutral.
+  });
+
   test("Body block shows 'No description.' when pr.body is null", () => {
     render(<DetailPane item={pr} />);
     expect(screen.getByText("No description.")).toBeInTheDocument();
@@ -134,5 +192,73 @@ describe("DetailPane", () => {
     expect(shellMod.open).toHaveBeenCalledWith(
       "https://github.com/acme/repo/pull/42",
     );
+  });
+
+  test("renders 'Auto-requeued N×' badge and an opt-out toggle for authored ejected PRs", async () => {
+    const coreMod = (await import("@tauri-apps/api/core")) as unknown as {
+      invoke: ReturnType<typeof vi.fn>;
+    };
+    // Spy-route the requeue commands; fall back to the default impl for
+    // everything else so unrelated commands (e.g. shell.open) keep working.
+    let optOut = false;
+    const baseImpl = coreMod.invoke.getMockImplementation()!;
+    coreMod.invoke.mockImplementation(
+      async (cmd: string, args?: Record<string, unknown>) => {
+        switch (cmd) {
+          case "get_requeue_count":
+            return 2;
+          case "get_requeue_opt_out":
+            return optOut;
+          case "set_requeue_opt_out":
+            optOut = Boolean(args?.optOut);
+            return undefined;
+          default:
+            return baseImpl(cmd, args);
+        }
+      },
+    );
+
+    const ejected: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        isAuthoredByMe: true,
+        lifecycle: "open",
+        mergeQueue: {
+          position: null,
+          enteredAt: "2026-05-09T09:50:00Z",
+          lastEjectionAt: "2026-05-09T09:55:00Z",
+          headSha: "deadbeef",
+          prNodeId: "PR_kwDOA",
+          ejectedChecks: [
+            { name: "ci/build", conclusion: "failure" },
+          ],
+        },
+      },
+    };
+
+    render(<DetailPane item={ejected} />);
+    expect(await screen.findByText("Auto-requeued 2×")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Don't auto-requeue this PR"),
+    ).toBeInTheDocument();
+
+    const userEvent = (await import("@testing-library/user-event")).default;
+    const user = userEvent.setup();
+    await user.click(screen.getByLabelText("Don't auto-requeue this PR"));
+    expect(coreMod.invoke).toHaveBeenCalledWith("set_requeue_opt_out", {
+      prId: ejected.id,
+      headSha: "deadbeef",
+      optOut: true,
+    });
+  });
+
+  test("does not render the opt-out toggle for PRs the user did not author", async () => {
+    render(<DetailPane item={pr} />);
+    // Render finished — assert by absence.
+    expect(
+      screen.queryByLabelText("Don't auto-requeue this PR"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Auto-requeued/)).not.toBeInTheDocument();
   });
 });

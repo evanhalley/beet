@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import { BeetMark } from "@/components/BeetMark";
 import { AccountTab } from "./AccountTab";
 import { AppearanceTab } from "./AppearanceTab";
+import { MergeQueueTab } from "./MergeQueueTab";
 import { ScoringTab } from "./ScoringTab";
 import { PollingTab } from "./PollingTab";
 import { NavIcon, type NavIconName } from "./NavIcon";
 
 interface NavItem {
-  id: "account" | "scoring" | "polling" | "appearance";
+  id: "account" | "scoring" | "polling" | "appearance" | "merge-queue";
   label: string;
   icon: NavIconName;
 }
@@ -19,6 +20,7 @@ const ITEMS: readonly NavItem[] = [
   { id: "appearance", label: "Appearance", icon: "theme" },
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
+  { id: "merge-queue", label: "Merge Queue", icon: "merge" },
 ] as const;
 
 function useAppVersion(): string | null {
@@ -135,6 +137,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {tab === "scoring" && <ScoringTab />}
           {tab === "polling" && <PollingTab />}
           {tab === "appearance" && <AppearanceTab />}
+          {tab === "merge-queue" && <MergeQueueTab />}
         </div>
       </div>
     </div>

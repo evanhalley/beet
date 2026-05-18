@@ -3,21 +3,31 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AppearanceTab } from "./AppearanceTab";
 import { useAppStore } from "@/lib/store";
-import { FONT_SCALE_LS_KEY, THEME_LS_KEY } from "@/lib/theme";
+import {
+  ACCENT_LS_KEY,
+  DENSITY_LS_KEY,
+  FONT_SCALE_LS_KEY,
+  THEME_LS_KEY,
+} from "@/lib/theme";
+
+function resetDom() {
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-accent");
+  document.documentElement.removeAttribute("data-density");
+  document.documentElement.style.removeProperty("--font-scale");
+  window.localStorage.removeItem(THEME_LS_KEY);
+  window.localStorage.removeItem(FONT_SCALE_LS_KEY);
+  window.localStorage.removeItem(ACCENT_LS_KEY);
+  window.localStorage.removeItem(DENSITY_LS_KEY);
+}
 
 beforeEach(() => {
   useAppStore.getState().reset();
-  document.documentElement.removeAttribute("data-theme");
-  document.documentElement.style.removeProperty("--font-scale");
-  window.localStorage.removeItem(THEME_LS_KEY);
-  window.localStorage.removeItem(FONT_SCALE_LS_KEY);
+  resetDom();
 });
 
 afterEach(() => {
-  document.documentElement.removeAttribute("data-theme");
-  document.documentElement.style.removeProperty("--font-scale");
-  window.localStorage.removeItem(THEME_LS_KEY);
-  window.localStorage.removeItem(FONT_SCALE_LS_KEY);
+  resetDom();
 });
 
 describe("AppearanceTab", () => {
@@ -92,6 +102,63 @@ describe("AppearanceTab", () => {
     });
     expect(useAppStore.getState().settings.fontScale).toBe(1.15);
     expect(window.localStorage.getItem(FONT_SCALE_LS_KEY)).toBe("1.15");
+  });
+
+  test("renders the four accent options with 'Beet' selected by default", () => {
+    render(<AppearanceTab />);
+    expect(screen.getByRole("radio", { name: "Beet" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Ocean" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Forest" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Ink" })).not.toBeChecked();
+  });
+
+  test("selecting Ocean sets data-accent on the document and updates the store", async () => {
+    const user = userEvent.setup();
+    render(<AppearanceTab />);
+    await user.click(screen.getByRole("radio", { name: "Ocean" }));
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-accent")).toBe("ocean");
+    });
+    expect(useAppStore.getState().settings.accent).toBe("ocean");
+    expect(window.localStorage.getItem(ACCENT_LS_KEY)).toBe("ocean");
+  });
+
+  test("renders the three density options with 'Regular' selected by default", () => {
+    render(<AppearanceTab />);
+    expect(screen.getByRole("radio", { name: "Compact" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Regular" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Comfy" })).not.toBeChecked();
+  });
+
+  test("selecting Compact sets data-density on the document and updates the store", async () => {
+    const user = userEvent.setup();
+    render(<AppearanceTab />);
+    await user.click(screen.getByRole("radio", { name: "Compact" }));
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute("data-density")).toBe(
+        "compact",
+      );
+    });
+    expect(useAppStore.getState().settings.density).toBe("compact");
+    expect(window.localStorage.getItem(DENSITY_LS_KEY)).toBe("compact");
+  });
+
+  test("selecting Regular removes the data-density attribute so CSS falls back to default", async () => {
+    const user = userEvent.setup();
+    // Start in Comfy so clicking Regular has something to unset.
+    useAppStore.getState().setSettings({ density: "comfy" });
+    document.documentElement.setAttribute("data-density", "comfy");
+    render(<AppearanceTab />);
+
+    await user.click(screen.getByRole("radio", { name: "Regular" }));
+
+    await waitFor(() => {
+      expect(document.documentElement.hasAttribute("data-density")).toBe(false);
+    });
+    expect(useAppStore.getState().settings.density).toBe("regular");
+    expect(window.localStorage.getItem(DENSITY_LS_KEY)).toBe("regular");
   });
 
   test("selecting System resolves to dark when the OS prefers dark", async () => {

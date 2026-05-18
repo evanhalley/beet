@@ -35,6 +35,8 @@
 
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --row-pad-y: 10px;
 }
 
 /* Dark theme tokens. The active theme is resolved in JS (see src/lib/theme.ts):
@@ -76,6 +78,48 @@
   --shadow-beet-lg: 0 18px 48px rgba(0, 0, 0, 0.6), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
+/* Accent — light theme variants. The `beet` default already lives in @theme;
+ * this block lets the user swap hue via [data-accent] on <html>. Chroma/L is
+ * locked across variants so swapping hue stays coherent in either theme. */
+[data-accent="ocean"]  {
+  --color-accent: oklch(0.55 0.14 240);
+  --color-accent-soft: oklch(0.95 0.04 240);
+  --color-accent-fg: #ffffff;
+}
+[data-accent="forest"] {
+  --color-accent: oklch(0.5 0.13 145);
+  --color-accent-soft: oklch(0.95 0.04 145);
+  --color-accent-fg: #ffffff;
+}
+[data-accent="ink"]    {
+  --color-accent: oklch(0.32 0.025 270);
+  --color-accent-soft: oklch(0.94 0.01 270);
+  --color-accent-fg: #ffffff;
+}
+
+/* Accent — dark-theme overrides. Lifts L and adjusts soft/fg for legibility on
+ * the dark background, matching the dark tokens for beet in the block above. */
+:root[data-theme="dark"][data-accent="ocean"]  {
+  --color-accent: oklch(0.72 0.14 240);
+  --color-accent-soft: oklch(0.32 0.08 240);
+}
+:root[data-theme="dark"][data-accent="forest"] {
+  --color-accent: oklch(0.7 0.13 145);
+  --color-accent-soft: oklch(0.32 0.07 145);
+}
+:root[data-theme="dark"][data-accent="ink"]    {
+  --color-accent: oklch(0.78 0.012 270);
+  --color-accent-soft: oklch(0.32 0.005 270);
+  --color-accent-fg: oklch(0.18 0.006 60);
+}
+
+/* Density. --row-pad-y is defined in @theme above as 10px (the "regular"
+ * default); selecting Regular leaves data-density unset and falls through to
+ * that. Compact / Comfy override the variable. RowShell consumes it as its
+ * vertical padding. */
+[data-density="compact"] { --row-pad-y: 7px; }
+[data-density="comfy"]   { --row-pad-y: 12px; }
+
 /* Whole-UI zoom. --font-scale is set on <html> by applyFontScale() (and the
  * pre-hydration inline script in layout.tsx); defaults to 1 when unset. */
 :root {
@@ -100,5 +144,15 @@ body {
 @keyframes beet-spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes beet-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
   }
 }
