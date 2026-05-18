@@ -2,6 +2,7 @@
 
 import { BeetMark } from "@/components/BeetMark";
 import { useAppVersion } from "@/hooks/useAppVersion";
+import { openInBrowser } from "@/lib/openInBrowser";
 
 export function AboutTab() {
   const version = useAppVersion();
@@ -35,9 +36,7 @@ export function AboutTab() {
         style={{ fontSize: 12.5, color: "var(--color-accent)" }}
         onClick={(e) => {
           e.preventDefault();
-          import("@tauri-apps/plugin-shell").then(({ open }) =>
-            open("https://beet.sh")
-          );
+          void openInBrowser("https://beet.sh");
         }}
       >
         beet.sh
