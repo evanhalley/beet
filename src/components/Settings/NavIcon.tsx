@@ -5,7 +5,8 @@ export type NavIconName =
   | "mute"
   | "score"
   | "theme"
-  | "merge";
+  | "merge"
+  | "info";
 
 const COMMON = {
   width: 14,
@@ -70,6 +71,14 @@ export function NavIcon({ name }: { name: NavIconName }) {
           <circle cx="12" cy="8" r="1.5" />
           <path d="M4 5.5v5" />
           <path d="M5.5 4c0 3 2 4 5 4M5.5 12c0-3 2-4 5-4" />
+        </svg>
+      );
+    case "info":
+      return (
+        <svg {...COMMON}>
+          <circle cx="8" cy="8" r="5.5" />
+          <path d="M8 7.5v4" />
+          <path d="M8 5.2v.8" strokeWidth={2} />
         </svg>
       );
   }

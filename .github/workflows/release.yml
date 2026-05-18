@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: macos-latest
+    permissions:
+      contents: write   # required to create releases + push tags
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed for tag enumeration
+
+      # ── Compute next YYYY.NN version ──────────────────────────────────
+      - name: Compute version
+        id: version
+        run: |
+          YEAR=$(date +%Y)
+          LATEST=$(git tag --list "v${YEAR}.*" --sort=-version:refname | head -1)
+          if [ -z "$LATEST" ]; then
+            NN=01
+          else
+            PREV_NN="${LATEST##*.}"
+            NN=$(printf "%02d" $((10#$PREV_NN + 1)))
+          fi
+          VERSION="${YEAR}.${NN}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "TAG=v${VERSION}"    >> "$GITHUB_OUTPUT"
+
+      # ── Patch tauri.conf.json ─────────────────────────────────────────
+      - name: Patch version in tauri.conf.json
+        run: |
+          jq --arg v "${{ steps.version.outputs.VERSION }}" \
+             '.version = $v' src-tauri/tauri.conf.json > _tmp.json
+          mv _tmp.json src-tauri/tauri.conf.json
+
+      # ── Node + Rust toolchain (mirrors ci.yml) ────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # dtolnay/rust-toolchain only appends ~/.cargo/bin to PATH when it
+      # bootstraps rustup itself; on pre-imaged runners `cargo` resolves
+      # to the rustup shim instead. Add it explicitly (mirrors ci.yml).
+      - name: Put cargo on PATH
+        run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: npm ci
+
+      # ── Build ─────────────────────────────────────────────────────────
+      - name: Build Tauri app
+        run: npm run tauri build
+        # TODO(#10): add updater bundle signature step here using the
+        # private key from CI secrets once tauri-plugin-updater is wired up.
+
+      # ── Tag + Release ─────────────────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: Beet ${{ steps.version.outputs.VERSION }}
+          generate_release_notes: true
+          files: src-tauri/target/release/bundle/dmg/*.dmg

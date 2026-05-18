@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { BeetMark } from "@/components/BeetMark";
+import { useAppVersion } from "@/hooks/useAppVersion";
+import { AboutTab } from "./AboutTab";
 import { AccountTab } from "./AccountTab";
 import { AppearanceTab } from "./AppearanceTab";
 import { MergeQueueTab } from "./MergeQueueTab";
@@ -10,7 +12,7 @@ import { PollingTab } from "./PollingTab";
 import { NavIcon, type NavIconName } from "./NavIcon";
 
 interface NavItem {
-  id: "account" | "scoring" | "polling" | "appearance" | "merge-queue";
+  id: "account" | "scoring" | "polling" | "appearance" | "merge-queue" | "about";
   label: string;
   icon: NavIconName;
 }
@@ -21,26 +23,8 @@ const ITEMS: readonly NavItem[] = [
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
   { id: "merge-queue", label: "Merge Queue", icon: "merge" },
+  { id: "about", label: "About", icon: "info" },
 ] as const;
-
-function useAppVersion(): string | null {
-  const [version, setVersion] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    import("@tauri-apps/api/app")
-      .then(({ getVersion }) => getVersion())
-      .then((v) => {
-        if (!cancelled) setVersion(v);
-      })
-      .catch(() => {
-        // Not running in Tauri (e.g. browser dev, tests) — leave blank.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-  return version;
-}
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [tab, setTab] = useState<NavItem["id"]>("account");
@@ -138,6 +122,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {tab === "polling" && <PollingTab />}
           {tab === "appearance" && <AppearanceTab />}
           {tab === "merge-queue" && <MergeQueueTab />}
+          {tab === "about" && <AboutTab />}
         </div>
       </div>
     </div>
