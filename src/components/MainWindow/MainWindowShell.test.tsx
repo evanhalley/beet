@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MainWindowShell } from "./MainWindowShell";
@@ -139,5 +139,34 @@ describe("MainWindowShell", () => {
     expect(shellMod.open).toHaveBeenCalledWith(
       "https://github.com/acme/repo/pull/a",
     );
+  });
+
+  test("⌘K toggles the search palette open and closed", () => {
+    seedReviews([makeItem("a", 7, "Only")]);
+    renderShell();
+    expect(screen.queryByRole("dialog", { name: "Search" })).toBeNull();
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(
+      screen.getByRole("dialog", { name: "Search" }),
+    ).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(screen.queryByRole("dialog", { name: "Search" })).toBeNull();
+  });
+
+  test("⌘K is suppressed while focus is in an unrelated input", () => {
+    seedReviews([makeItem("a", 7, "Only")]);
+    renderShell();
+
+    const stray = document.createElement("input");
+    document.body.appendChild(stray);
+    stray.focus();
+    expect(document.activeElement).toBe(stray);
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(screen.queryByRole("dialog", { name: "Search" })).toBeNull();
+
+    document.body.removeChild(stray);
   });
 });

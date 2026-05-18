@@ -1,5 +1,6 @@
 "use client";
 
+import type { Ref } from "react";
 import { Pause, Play, RefreshCw, Search, Settings as SettingsIcon } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { BeetMark } from "@/components/BeetMark";
@@ -9,6 +10,8 @@ import { useAppStore } from "@/lib/store";
 export interface TitleBarProps {
   onOpenSettings: () => void;
   settingsOpen?: boolean;
+  onOpenSearch?: () => void;
+  searchButtonRef?: Ref<HTMLButtonElement>;
 }
 
 const iconBtnBase: React.CSSProperties = {
@@ -23,7 +26,12 @@ const iconBtnBase: React.CSSProperties = {
   cursor: "pointer",
 };
 
-export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps) {
+export function TitleBar({
+  onOpenSettings,
+  settingsOpen = false,
+  onOpenSearch,
+  searchButtonRef,
+}: TitleBarProps) {
   const paused = useAppStore((s) => s.paused);
   const setPaused = useAppStore((s) => s.setPaused);
 
@@ -59,8 +67,11 @@ export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps
       <BeetMark size={18} />
       <span style={{ fontWeight: 600, fontSize: 13, letterSpacing: -0.2 }}>Beet</span>
       <span style={{ flex: 1 }} />
-      <div
-        aria-hidden
+      <button
+        ref={searchButtonRef}
+        type="button"
+        onClick={() => onOpenSearch?.()}
+        aria-label="Search"
         style={{
           display: "flex",
           alignItems: "center",
@@ -72,6 +83,8 @@ export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps
           color: "var(--color-text-faint)",
           fontSize: 11.5,
           minWidth: 220,
+          cursor: "pointer",
+          textAlign: "left",
         }}
       >
         <Search size={12} />
@@ -80,7 +93,7 @@ export function TitleBar({ onOpenSettings, settingsOpen = false }: TitleBarProps
         <span className="mono" style={{ fontSize: 10, opacity: 0.6 }}>
           ⌘K
         </span>
-      </div>
+      </button>
       <span style={{ flex: 1 }} />
       <PollingDot paused={paused} />
       <button

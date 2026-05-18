@@ -16,6 +16,7 @@ import { ListPane } from "./ListPane";
 import { DetailPane } from "./DetailPane";
 import { TitleBar } from "./TitleBar";
 import { Splitter } from "./Splitter";
+import { SearchPalette } from "@/components/SearchPalette";
 
 export interface MainWindowShellProps {
   onOpenSettings: () => void;
@@ -77,8 +78,33 @@ export function MainWindowShell({
   }, [selected, reviewRequests, showAll, selectedItemId, setSelectedItemId]);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
+  const searchButtonRef = useRef<HTMLButtonElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [detailWidth, setDetailWidth] = useState<number>(DETAIL_WIDTH_DEFAULT);
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
+
+  // Global ⌘K toggles the search palette. Ignore when focus is in an unrelated
+  // input/textarea so we don't hijack a user's keystrokes; the palette's own
+  // input is exempt via the `[data-search-palette]` ancestor check.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const cmdK =
+        (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k" && !e.altKey;
+      if (!cmdK) return;
+      const ae = document.activeElement as HTMLElement | null;
+      const inForeignInput =
+        !!ae &&
+        (ae.tagName === "INPUT" ||
+          ae.tagName === "TEXTAREA" ||
+          ae.isContentEditable);
+      const insidePalette = ae?.closest("[data-search-palette]") != null;
+      if (inForeignInput && !insidePalette) return;
+      e.preventDefault();
+      setSearchOpen((v) => !v);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Hydrate persisted layout state from localStorage on mount.
   // Kept in an effect (not a lazy initializer) so SSR/static-build markup
@@ -130,7 +156,12 @@ export function MainWindowShell({
         background: "var(--color-bg)",
       }}
     >
-      <TitleBar onOpenSettings={onOpenSettings} settingsOpen={settingsOpen} />
+      <TitleBar
+        onOpenSettings={onOpenSettings}
+        settingsOpen={settingsOpen}
+        onOpenSearch={() => setSearchOpen(true)}
+        searchButtonRef={searchButtonRef}
+      />
       {banner}
       <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
         <div
@@ -169,6 +200,13 @@ export function MainWindowShell({
           <DetailPane item={selected} />
         </div>
       </div>
+      <SearchPalette
+        open={searchOpen}
+        onClose={() => {
+          setSearchOpen(false);
+          searchButtonRef.current?.focus();
+        }}
+      />
     </div>
   );
 }

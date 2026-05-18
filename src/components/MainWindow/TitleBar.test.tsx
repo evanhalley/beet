@@ -42,4 +42,14 @@ describe("TitleBar", () => {
     await user.click(refresh);
     expect(invoke).not.toHaveBeenCalledWith("refresh_now");
   });
+
+  test("clicking the Search button invokes onOpenSearch", async () => {
+    const user = userEvent.setup();
+    const onOpenSearch = vi.fn();
+    render(
+      <TitleBar onOpenSettings={() => {}} onOpenSearch={onOpenSearch} />,
+    );
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(onOpenSearch).toHaveBeenCalledTimes(1);
+  });
 });
