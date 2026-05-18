@@ -57,52 +57,101 @@ const THEME_OPTIONS: readonly RadioOption<ThemeMode>[] = [
   },
 ] as const;
 
-// Mirrors the swatch chips in design/src/tweaks-panel.jsx — a 12px square in
-// the option's own accent color so the choice is identifiable at a glance.
-// `background` deliberately overrides the parent <span>'s `color`, which the
-// RadioGroup uses to tint lucide-react icons.
-function AccentSwatch({ color }: { color: string }) {
-  return (
-    <span
-      aria-hidden
-      style={{
-        display: "inline-block",
-        width: 12,
-        height: 12,
-        borderRadius: 3,
-        background: color,
-        boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.15)",
-      }}
-    />
-  );
+// Colored chip swatches matching the TweakColor control in
+// design/src/tweaks-panel.jsx. Each option is a flex-1 button with the accent
+// as its background and a checkmark overlaid on the selected one.
+interface AccentChipOption {
+  value: AccentColor;
+  label: string;
+  color: string;
 }
 
-const ACCENT_OPTIONS: readonly RadioOption<AccentColor>[] = [
-  {
-    value: "beet",
-    label: "Beet",
-    icon: <AccentSwatch color="oklch(0.52 0.16 355)" />,
-    hint: "Warm magenta — the default.",
-  },
-  {
-    value: "ocean",
-    label: "Ocean",
-    icon: <AccentSwatch color="oklch(0.55 0.14 240)" />,
-    hint: "Cool blue.",
-  },
-  {
-    value: "forest",
-    label: "Forest",
-    icon: <AccentSwatch color="oklch(0.5 0.13 145)" />,
-    hint: "Deep green.",
-  },
-  {
-    value: "ink",
-    label: "Ink",
-    icon: <AccentSwatch color="oklch(0.32 0.025 270)" />,
-    hint: "Near-neutral charcoal.",
-  },
+const ACCENT_OPTIONS: readonly AccentChipOption[] = [
+  { value: "beet", label: "Beet", color: "oklch(0.52 0.16 355)" },
+  { value: "ocean", label: "Ocean", color: "oklch(0.55 0.14 240)" },
+  { value: "forest", label: "Forest", color: "oklch(0.5 0.13 145)" },
+  { value: "ink", label: "Ink", color: "oklch(0.32 0.025 270)" },
 ] as const;
+
+// Crude luminance check — keeps the checkmark legible on both the dark Ink
+// chip and the lighter Beet/Ocean/Forest chips by flipping to a dark stroke
+// on light backgrounds. Hard-coded per-option since the colors are oklch
+// strings we can't easily parse; the boolean matches what the design's
+// __twkIsLight() returns for each hue.
+const ACCENT_IS_LIGHT: Record<AccentColor, boolean> = {
+  beet: false,
+  ocean: false,
+  forest: false,
+  ink: false,
+};
+
+interface AccentChipsProps {
+  value: AccentColor;
+  onChange: (next: AccentColor) => void;
+}
+
+function AccentChips({ value, onChange }: AccentChipsProps) {
+  return (
+    <div role="radiogroup" aria-label="Accent" style={{ display: "flex", gap: 6 }}>
+      {ACCENT_OPTIONS.map((opt) => {
+        const checked = opt.value === value;
+        const stroke = ACCENT_IS_LIGHT[opt.value]
+          ? "rgba(0,0,0,0.78)"
+          : "#ffffff";
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            aria-label={opt.label}
+            title={opt.label}
+            onClick={() => onChange(opt.value)}
+            style={{
+              position: "relative",
+              flex: 1,
+              minWidth: 0,
+              height: 48,
+              padding: 0,
+              border: 0,
+              borderRadius: 8,
+              background: opt.color,
+              cursor: "pointer",
+              boxShadow: checked
+                ? "0 0 0 2px var(--color-text), 0 2px 6px rgba(0,0,0,0.15)"
+                : "0 0 0 0.5px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.08)",
+              transition: "box-shadow 120ms ease, transform 120ms ease",
+            }}
+          >
+            {checked && (
+              <svg
+                aria-hidden
+                viewBox="0 0 14 14"
+                style={{
+                  position: "absolute",
+                  top: 8,
+                  left: 8,
+                  width: 14,
+                  height: 14,
+                  filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.35))",
+                }}
+              >
+                <path
+                  d="M3 7.2 5.8 10 11 4.2"
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const DENSITY_OPTIONS: readonly RadioOption<Density>[] = [
   {
@@ -296,6 +345,15 @@ export function AppearanceTab() {
         />
       </Field>
       <Field
+        label="Accent"
+        hint="Tints highlights, the unread dot, focus rings, and the sidebar selection."
+      >
+        <AccentChips
+          value={accent}
+          onChange={(next) => void onAccentChange(next)}
+        />
+      </Field>
+      <Field
         label="Font size"
         hint="Scales the entire interface. Applies immediately and persists across launches."
       >
@@ -305,18 +363,6 @@ export function AppearanceTab() {
           options={FONT_SCALE_OPTIONS}
           value={fontScale}
           onChange={(next) => void onFontScaleChange(next)}
-        />
-      </Field>
-      <Field
-        label="Accent"
-        hint="Tints highlights, the unread dot, focus rings, and the sidebar selection."
-      >
-        <RadioGroup
-          name="accent"
-          ariaLabel="Accent"
-          options={ACCENT_OPTIONS}
-          value={accent}
-          onChange={(next) => void onAccentChange(next)}
         />
       </Field>
       <Field
