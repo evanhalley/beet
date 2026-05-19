@@ -43,6 +43,31 @@ const MIGRATIONS: &[&str] = &[
         opt_out      INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (pr_id, head_sha, attempted_at)
     );",
+    // v5: create run_completion_events table (#6). Records each workflow run
+    // we've seen reach a terminal status, so the Recently Resolved section
+    // survives restarts and #9's "run finished" notification can dedupe on
+    // (run_id, conclusion).
+    "CREATE TABLE IF NOT EXISTS run_completion_events (
+        run_id         INTEGER PRIMARY KEY,
+        repo           TEXT NOT NULL,
+        workflow_name  TEXT NOT NULL,
+        conclusion     TEXT,
+        concluded_at   TEXT NOT NULL,
+        pr_number      INTEGER
+    );",
+    // v6: snapshot the bits of a run / PR we need to faithfully render its
+    // Recently Resolved row without going back to the API after the source
+    // PR / run is no longer in the live poll set. Nullable so existing rows
+    // upgrade in place; renderers fall back when a snapshot is missing.
+    "ALTER TABLE pr_lifecycle_history ADD COLUMN title TEXT;
+     ALTER TABLE pr_lifecycle_history ADD COLUMN author TEXT;
+     ALTER TABLE pr_lifecycle_history ADD COLUMN url TEXT;
+     ALTER TABLE run_completion_events ADD COLUMN event TEXT;
+     ALTER TABLE run_completion_events ADD COLUMN sha TEXT;
+     ALTER TABLE run_completion_events ADD COLUMN run_number INTEGER;
+     ALTER TABLE run_completion_events ADD COLUMN actor_login TEXT;
+     ALTER TABLE run_completion_events ADD COLUMN run_url TEXT;
+     ALTER TABLE run_completion_events ADD COLUMN branch TEXT;",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.
@@ -93,12 +118,13 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 6);
         for table in [
             "etag_cache",
             "pr_lifecycle_history",
             "pr_ejection_events",
             "pr_requeue_attempts",
+            "run_completion_events",
         ] {
             let count: i64 = conn
                 .query_row(
@@ -119,7 +145,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -140,7 +166,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 6);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

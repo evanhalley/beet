@@ -15,11 +15,19 @@ use crate::github::prs::{
     fetch_my_open_prs, fetch_review_requests, AutoRequeueError, FetchMyOpenPrsOptions,
     FetchReviewRequestsOptions,
 };
+use crate::github::runs::{
+    apply_standalone_allowlist, build_recently_resolved, collapse_runs, dedupe_standalone,
+    fetch_runs_for_repos, iso_window_start, record_completed_runs, RunWithRepo,
+    RECENTLY_RESOLVED_WINDOW_HOURS,
+};
 use crate::poller::config::PollConfig;
 use crate::poller::types::ActionableItem;
 use crate::secure_token::read_token;
 use crate::store::db::now_iso;
+use crate::store::lifecycle::{list_recently_resolved_pr_ids, PrSnapshot, ResolvedPrRow};
+use crate::store::runs::prune_completions_older_than;
 use crate::store::Db;
+use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Runtime};
@@ -38,6 +46,12 @@ const RATE_LIMIT_PRESSURE_THRESHOLD: i64 = 100;
 struct PollResultPayload {
     review_requests: Vec<ActionableItem>,
     in_flight: Vec<ActionableItem>,
+    /// Workflow runs the user triggered that did *not* collapse into a
+    /// tracked PR (#6 / SPECS §7). Includes push-event runs without a PR.
+    standalone_runs: Vec<ActionableItem>,
+    /// Merged/closed PRs + completed runs from the last 24h (#6 / SPECS §5).
+    /// Capped at `RECENTLY_RESOLVED_MAX`.
+    recently_resolved: Vec<ActionableItem>,
     rate_limit: Option<RateLimitInfo>,
     polled_at: String,
     /// Per-cycle auto-requeue mutation failures (#13). Empty in the common
@@ -272,7 +286,7 @@ async fn poll_once<R: Runtime>(
         task_regex: config.task_regex.clone(),
     };
     let my_opts = FetchMyOpenPrsOptions {
-        username,
+        username: username.clone(),
         task_regex: config.task_regex.clone(),
         auto_requeue_enabled: config.auto_requeue_enabled,
         auto_requeue_max_attempts: config.auto_requeue_max_attempts,
@@ -284,23 +298,183 @@ async fn poll_once<R: Runtime>(
         fetch_my_open_prs(&client, db, &my_opts),
     );
     let reviews = reviews?;
-    let mine = mine?;
+    let mut mine = mine?;
+    let mut reviews_items = reviews.items;
+
+    // Run pass (#6). Scope the repo scan to repos already represented in the
+    // current PR set — push-event runs in those repos surface as Standalone,
+    // collapse-eligible runs attach to their PR. This bounds the API cost
+    // without an explicit pinned-repo list (which lands in #9).
+    let tracked_repos: Vec<String> = {
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut out = Vec::new();
+        for item in reviews_items.iter().chain(mine.items.iter()) {
+            if seen.insert(item.repo_full_name.clone()) {
+                out.push(item.repo_full_name.clone());
+            }
+        }
+        out
+    };
+    let tracked_prs: HashMap<String, (String, String, i64)> = reviews_items
+        .iter()
+        .chain(mine.items.iter())
+        .filter_map(|item| {
+            let pr = item.pr.as_ref()?;
+            let (owner, repo) = item.repo_full_name.split_once('/')?;
+            Some((item.id.clone(), (owner.to_string(), repo.to_string(), pr.number)))
+        })
+        .collect();
+
+    let (collapsed, runs_rate_limit) = if tracked_repos.is_empty() {
+        (
+            crate::github::runs::CollapseOutcome::default(),
+            None,
+        )
+    } else {
+        let outcome = fetch_runs_for_repos(&client, db, &tracked_repos, &username).await;
+        let rl = outcome.rate_limit;
+
+        // Persist completion snapshots before collapse consumes the runs.
+        let runs_for_record: Vec<(RunWithRepo, Option<i64>)> = outcome
+            .runs
+            .iter()
+            .map(|r| {
+                let pr_num = r
+                    .run
+                    .pull_requests
+                    .as_deref()
+                    .and_then(|prs| prs.first().map(|p| p.number));
+                (r.clone(), pr_num)
+            })
+            .collect();
+        record_completed_runs(db, &runs_for_record);
+
+        let collapsed = collapse_runs(outcome.runs, &tracked_prs, &username);
+        (collapsed, rl)
+    };
+
+    // Attach associated_runs to PRs in both sections.
+    for item in reviews_items.iter_mut().chain(mine.items.iter_mut()) {
+        if let Some(runs) = collapsed.attached.get(&item.id) {
+            if let Some(pr) = item.pr.as_mut() {
+                pr.associated_runs = Some(runs.clone());
+            }
+        }
+    }
+
+    // Standalone-runs noise control: always dedupe to most-recent per
+    // (repo, workflow); then apply the user's optional per-repo allowlist.
+    let standalone_runs = apply_standalone_allowlist(
+        dedupe_standalone(collapsed.standalone),
+        &config.standalone_runs_allowlist,
+    );
+
+    // Recently Resolved: merged/closed PRs in window + completed runs not
+    // already represented by their parent PR. The in-memory PR set only
+    // holds *open* PRs by construction — rebuild a closed-PR row from the
+    // lifecycle snapshot captured at transition time (#6 follow-up).
+    let since = iso_window_start(RECENTLY_RESOLVED_WINDOW_HOURS);
+    // Sweep `run_completion_events` rows older than the window — they're
+    // unreferenced, and otherwise the table grows monotonically for the
+    // lifetime of the install.
+    if let Ok(conn) = db.lock() {
+        let _ = prune_completions_older_than(&conn, &since);
+    }
+    let resolved_pr_rows: Vec<ResolvedPrRow> = match db.lock() {
+        Ok(conn) => list_recently_resolved_pr_ids(&conn, &since).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+    let resolved_prs: Vec<(ActionableItem, String)> = resolved_pr_rows
+        .into_iter()
+        .filter_map(|row| {
+            let resolved_at = row.resolved_at.clone();
+            synthesize_resolved_pr_row(&row.pr_id, row.lifecycle, &resolved_at, &row.snapshot)
+                .map(|item| (item, resolved_at))
+        })
+        .collect();
+    let recently_resolved = build_recently_resolved(resolved_prs, db, &since);
 
     // Prefer a per-PR (core bucket) reading; the search call lives in a separate
-    // rate-limit bucket and is not representative.
-    let rate_limit = mine.rate_limit.or(reviews.rate_limit);
+    // rate-limit bucket and is not representative. Runs also use the core bucket.
+    let rate_limit = mine
+        .rate_limit
+        .or(reviews.rate_limit)
+        .or(runs_rate_limit);
     let rate_limited =
         rate_limit.is_some_and(|rl| rl.remaining < RATE_LIMIT_PRESSURE_THRESHOLD);
 
     let payload = PollResultPayload {
-        review_requests: reviews.items,
+        review_requests: reviews_items,
         in_flight: mine.items,
+        standalone_runs,
+        recently_resolved,
         rate_limit,
         polled_at: now_iso(),
         auto_requeue_errors: mine.auto_requeue_errors,
     };
     let _ = app.emit(EVENT_POLL_RESULT, payload);
     Ok(rate_limited)
+}
+
+/// Build an ActionableItem for a PR we only know from `pr_lifecycle_history`,
+/// using the snapshot captured at the moment of transition. Snapshot fields
+/// may be `None` for legacy rows written before migration v6 — the renderer
+/// falls back to an "#N"-style title and an empty author in that case.
+fn synthesize_resolved_pr_row(
+    pr_id: &str,
+    lifecycle: crate::poller::types::PrLifecycle,
+    resolved_at: &str,
+    snapshot: &PrSnapshot,
+) -> Option<ActionableItem> {
+    use crate::poller::types::{ActionableItemPr, ActionableKind};
+    // pr_id format: `pr:{owner}/{repo}#{num}`
+    let rest = pr_id.strip_prefix("pr:")?;
+    let (repo_full_name, num_str) = rest.rsplit_once('#')?;
+    let number: i64 = num_str.parse().ok()?;
+    let (owner, repo) = repo_full_name.split_once('/')?;
+    let url = snapshot
+        .url
+        .clone()
+        .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}/pull/{number}"));
+    let title = snapshot
+        .title
+        .clone()
+        .unwrap_or_else(|| format!("#{number}"));
+    let author = snapshot.author.clone().unwrap_or_default();
+    Some(ActionableItem {
+        id: pr_id.to_string(),
+        kind: ActionableKind::Pr,
+        title,
+        url,
+        repo_full_name: repo_full_name.to_string(),
+        updated_at: resolved_at.to_string(),
+        unread: false,
+        dismissed_until_fingerprint: None,
+        pr: Some(ActionableItemPr {
+            number,
+            author,
+            body: None,
+            is_authored_by_me: false,
+            is_review_requested_from_me: false,
+            is_author_on_my_team: false,
+            ive_commented: false,
+            ive_reviewed: false,
+            ive_approved: false,
+            approval_count: 0,
+            is_draft: false,
+            additions: 0,
+            deletions: 0,
+            created_at: resolved_at.to_string(),
+            lifecycle,
+            merge_queue: None,
+            task_urls: Vec::new(),
+            score: 0,
+            reviewers: None,
+            check_runs: None,
+            associated_runs: None,
+        }),
+        run: None,
+    })
 }
 
 /// Map a poll-cycle error into a UI-facing message + the structured signals

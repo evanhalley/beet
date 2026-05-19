@@ -1,7 +1,12 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { DetailPane } from "./DetailPane";
+import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
+
+beforeEach(() => {
+  useAppStore.getState().reset();
+});
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
@@ -42,9 +47,17 @@ const pr: ActionableItem = {
 };
 
 describe("DetailPane", () => {
-  test("renders 'Select an item.' when item is null", () => {
+  test("renders 'Select an item.' when item is null and a poll has completed", () => {
+    useAppStore.setState({ pollState: "ok" });
     render(<DetailPane item={null} />);
     expect(screen.getByText("Select an item.")).toBeInTheDocument();
+  });
+
+  test("renders a 'Loading…' indicator during cold start (idle pollState)", () => {
+    // Default pollState is "idle" — no poll cycle has completed yet.
+    render(<DetailPane item={null} />);
+    expect(screen.getByText("Loading…")).toBeInTheDocument();
+    expect(screen.queryByText("Select an item.")).toBeNull();
   });
 
   test("renders the PR header with repo, number, title, and Open on GitHub button", () => {

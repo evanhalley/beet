@@ -15,6 +15,13 @@ export interface AutoRequeueError {
 export interface PollResultPayload {
   reviewRequests: ActionableItem[];
   inFlight: ActionableItem[];
+  // Workflow runs the user triggered that didn't collapse into a tracked PR
+  // (#6 / SPECS §7). Includes push-event runs without a PR. Optional on the
+  // type so older test fixtures and pre-#6 payloads still type-check; the
+  // store coerces missing values to an empty array.
+  standaloneRuns?: ActionableItem[];
+  // Merged/closed PRs + completed runs from the last 24h (#6 / SPECS §5).
+  recentlyResolved?: ActionableItem[];
   rateLimit: RateLimitInfo | null;
   polledAt: string;
   autoRequeueErrors?: AutoRequeueError[];
@@ -35,6 +42,8 @@ export interface AppStore {
   // frontend. Everything else here is client/UI state.
   reviewRequests: ActionableItem[];
   inFlight: ActionableItem[];
+  standaloneRuns: ActionableItem[];
+  recentlyResolved: ActionableItem[];
   // Flat lookup across every section, for resolving a selected item by id.
   byId: Map<string, ActionableItem>;
   pollState: PollState;
@@ -80,6 +89,8 @@ export interface AppStore {
 const initialState = {
   reviewRequests: [] as ActionableItem[],
   inFlight: [] as ActionableItem[],
+  standaloneRuns: [] as ActionableItem[],
+  recentlyResolved: [] as ActionableItem[],
   byId: new Map<string, ActionableItem>(),
   pollState: "idle" as PollState,
   lastPolledAt: null as string | null,
@@ -99,9 +110,18 @@ const initialState = {
 export const useAppStore = create<AppStore>((set, get) => ({
   ...initialState,
   setPollResult: (payload) => {
+    const standaloneRuns = payload.standaloneRuns ?? [];
+    const recentlyResolved = payload.recentlyResolved ?? [];
     const byId = new Map<string, ActionableItem>();
     for (const item of payload.reviewRequests) byId.set(item.id, item);
     for (const item of payload.inFlight) byId.set(item.id, item);
+    for (const item of standaloneRuns) byId.set(item.id, item);
+    // Recently-Resolved rows are reconstructed from a stored snapshot (the
+    // PR/run has rotated out of the live poll set). If the same id is still
+    // present in a live section, that richer row wins — don't overwrite.
+    for (const item of recentlyResolved) {
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    }
 
     // Dedupe auto-requeue error toasts: a failing (prId, headSha) should
     // only surface once. The set persists across cycles; a new push (new
@@ -123,6 +143,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({
       reviewRequests: payload.reviewRequests,
       inFlight: payload.inFlight,
+      standaloneRuns,
+      recentlyResolved,
       byId,
       rateLimit: payload.rateLimit,
       lastPolledAt: payload.polledAt,

@@ -17,6 +17,7 @@ export const SETTINGS_KEYS = {
   autoRequeueEnabled: "autoRequeueEnabled",
   autoRequeueMaxAttempts: "autoRequeueMaxAttempts",
   autoRequeueRepos: "autoRequeueRepos",
+  standaloneRunsAllowlist: "standaloneRunsAllowlist",
 } as const;
 
 export const AUTO_REQUEUE_MAX_ATTEMPTS_MIN = 1;
@@ -72,6 +73,11 @@ export interface BeetSettings {
   autoRequeueMaxAttempts: number;
   // Optional `owner/repo` allowlist. Empty = all repos.
   autoRequeueRepos: string[];
+  // Per-repo workflow allowlist for the Standalone Runs section (#6 noise
+  // control). Key = `owner/repo`, value = workflow names. Missing repo or
+  // empty list = show all (already deduped per workflow). Non-empty list =
+  // restrict that repo's standalone runs to just the listed workflows.
+  standaloneRunsAllowlist: Record<string, string[]>;
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -87,6 +93,7 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   autoRequeueEnabled: false,
   autoRequeueMaxAttempts: 2,
   autoRequeueRepos: [],
+  standaloneRunsAllowlist: {},
 };
 
 function clampMaxAttempts(n: number): number {
@@ -142,6 +149,7 @@ export async function loadSettings(): Promise<BeetSettings> {
     autoRequeueEnabled,
     autoRequeueMaxAttemptsRaw,
     autoRequeueRepos,
+    standaloneRunsAllowlistRaw,
   ] = await Promise.all([
     getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
     getValue<string[]>(
@@ -173,6 +181,10 @@ export async function loadSettings(): Promise<BeetSettings> {
       SETTINGS_KEYS.autoRequeueRepos,
       SETTINGS_DEFAULTS.autoRequeueRepos,
     ),
+    getValue<unknown>(
+      SETTINGS_KEYS.standaloneRunsAllowlist,
+      SETTINGS_DEFAULTS.standaloneRunsAllowlist,
+    ),
   ]);
   const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
   const fontScale = isFontScale(fontScaleRaw)
@@ -193,7 +205,24 @@ export async function loadSettings(): Promise<BeetSettings> {
     autoRequeueEnabled,
     autoRequeueMaxAttempts: clampMaxAttempts(autoRequeueMaxAttemptsRaw),
     autoRequeueRepos,
+    standaloneRunsAllowlist: sanitizeStandaloneRunsAllowlist(
+      standaloneRunsAllowlistRaw,
+    ),
   };
+}
+
+/// Coerce arbitrary stored JSON back into `Record<string, string[]>` so a
+/// hand-edited config.json (or an older shape) can't crash the loader.
+export function sanitizeStandaloneRunsAllowlist(
+  raw: unknown,
+): Record<string, string[]> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [repo, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(value)) continue;
+    out[repo] = value.filter((v): v is string => typeof v === "string");
+  }
+  return out;
 }
 
 // These four feed the Rust poll loop, so each notifies it after persisting.
@@ -254,6 +283,13 @@ export async function setAutoRequeueMaxAttempts(value: number): Promise<void> {
 
 export async function setAutoRequeueRepos(value: string[]): Promise<void> {
   await setValue(SETTINGS_KEYS.autoRequeueRepos, value);
+  await notifyPollerConfigChanged();
+}
+
+export async function setStandaloneRunsAllowlist(
+  value: Record<string, string[]>,
+): Promise<void> {
+  await setValue(SETTINGS_KEYS.standaloneRunsAllowlist, value);
   await notifyPollerConfigChanged();
 }
 

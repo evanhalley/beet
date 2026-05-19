@@ -18,6 +18,8 @@ function setActionable(
   vi.mocked(useActionableItems).mockReturnValue({
     reviewRequests,
     inFlight,
+    standaloneRuns: [],
+    recentlyResolved: [],
     byId,
     isLoading: false,
     isFetching: false,

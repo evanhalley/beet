@@ -293,7 +293,7 @@ export function Sidebar({
   onToggleCollapsed,
   onSectionClick,
 }: SidebarProps) {
-  const { reviewRequests, inFlight } = useActionableItems();
+  const { reviewRequests, inFlight, standaloneRuns } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   // Match the predicate ReviewRequestsSection uses, so the badge here can
   // never diverge from the count rendered above the list.
@@ -301,8 +301,7 @@ export function Sidebar({
     isReviewRequestVisible(it, showAll),
   ).length;
   const inFlightCount = inFlight.length;
-  // Standalone Runs has no fetcher yet — scaffolding only.
-  const runsCount = 0;
+  const runsCount = standaloneRuns.length;
 
   const toggleButton = onToggleCollapsed ? (
     <button
@@ -380,16 +379,15 @@ export function Sidebar({
           active={activeSection === "runs"}
           current={activeSection === "runs"}
           collapsed={collapsed}
-          disabled={activeSection !== "runs"}
+          onClick={() => onSectionClick?.("runs")}
         />
         <SidebarItem
           icon={<CheckCircle2 size={12} />}
           label="Recently Resolved"
-          muted
           active={activeSection === "recent"}
           current={activeSection === "recent"}
           collapsed={collapsed}
-          disabled={activeSection !== "recent"}
+          onClick={() => onSectionClick?.("recent")}
         />
       </SidebarGroup>
 

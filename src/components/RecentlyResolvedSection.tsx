@@ -1,21 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Rocket } from "lucide-react";
+import { CheckCircle2, ChevronDown } from "lucide-react";
 import { useActionableItems } from "@/hooks/useActionableItems";
+import type { ActionableItem } from "@/lib/types";
 import { ActionableRow } from "./ActionableRow";
-import { SkeletonRows } from "./SkeletonRow";
+import { RunRow } from "./RunRow";
 
-export function InFlightSection() {
-  const { inFlight: items, isLoading } = useActionableItems();
-  const [collapsed, setCollapsed] = useState(false);
+// Recently Resolved is a mixed-kind list (PRs + standalone runs). Dispatch
+// on `kind` so each item picks the row component built for its shape.
+function ResolvedRow({ item }: { item: ActionableItem }) {
+  if (item.kind === "pr") {
+    return <ActionableRow item={item} variant="inflight" />;
+  }
+  return <RunRow item={item} />;
+}
 
-  const sorted = [...items].sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt),
-  );
+export function RecentlyResolvedSection() {
+  const { recentlyResolved: items } = useActionableItems();
+  // Collapsed by default per SPECS §5 — this section is reference, not
+  // primary action surface.
+  const [collapsed, setCollapsed] = useState(true);
 
   return (
-    <section aria-label="In Flight" id="section-inflight">
+    <section aria-label="Recently Resolved" id="section-recent">
       <header
         style={{
           display: "flex",
@@ -34,7 +42,7 @@ export function InFlightSection() {
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          aria-controls="in-flight-list"
+          aria-controls="recently-resolved-list"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -45,8 +53,8 @@ export function InFlightSection() {
             padding: 0,
           }}
         >
-          <Rocket size={12} aria-hidden />
-          <span>In Flight</span>
+          <CheckCircle2 size={12} aria-hidden />
+          <span>Recently Resolved</span>
           <span
             className="mono"
             style={{
@@ -57,7 +65,7 @@ export function InFlightSection() {
               color: "var(--color-text-faint)",
             }}
           >
-            {sorted.length}
+            {items.length}
           </span>
           <span
             style={{
@@ -70,12 +78,22 @@ export function InFlightSection() {
             <ChevronDown size={12} />
           </span>
         </button>
+        <span style={{ flex: 1 }} />
+        <span
+          style={{
+            fontSize: 10.5,
+            fontWeight: 500,
+            textTransform: "none",
+            letterSpacing: 0,
+            color: "var(--color-text-faint)",
+          }}
+        >
+          last 24h
+        </span>
       </header>
       {!collapsed && (
-        <div id="in-flight-list">
-          {isLoading && sorted.length === 0 ? (
-            <SkeletonRows count={2} />
-          ) : sorted.length === 0 ? (
+        <div id="recently-resolved-list">
+          {items.length === 0 ? (
             <p
               style={{
                 padding: "10px 16px 14px",
@@ -83,16 +101,13 @@ export function InFlightSection() {
                 color: "var(--color-text-faint)",
               }}
             >
-              No PRs in flight right now.
+              Nothing resolved in the last 24 hours.
             </p>
           ) : (
-            <ul
-              role="list"
-              style={{ listStyle: "none", margin: 0, padding: 0 }}
-            >
-              {sorted.map((item) => (
+            <ul role="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+              {items.map((item) => (
                 <li role="listitem" key={item.id}>
-                  <ActionableRow item={item} variant="inflight" />
+                  <ResolvedRow item={item} />
                 </li>
               ))}
             </ul>

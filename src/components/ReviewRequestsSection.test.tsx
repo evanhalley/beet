@@ -84,8 +84,17 @@ describe("ReviewRequestsSection", () => {
   });
 
   test("renders empty state when no items", () => {
+    // Cold-start renders skeleton rows; empty-state copy is for the
+    // "we polled, nothing came back" case.
+    useAppStore.setState({ pollState: "ok" });
     render(<ReviewRequestsSection />);
     expect(screen.getByText(/no review requests right now/i)).toBeInTheDocument();
+  });
+
+  test("renders skeleton rows during cold start", () => {
+    render(<ReviewRequestsSection />);
+    expect(screen.queryByText(/no review requests right now/i)).toBeNull();
+    expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
   });
 
   test("rows have aria-pressed reflecting selection", () => {

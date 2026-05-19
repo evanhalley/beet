@@ -45,6 +45,45 @@ export interface ActionableItemMergeQueue {
   prNodeId?: string;
 }
 
+// One workflow run rolled up into a PR's `associatedRuns` (#6). Only the
+// most-recent run per workflow name is kept; the DetailPane Checks block
+// renders these next to the per-commit `checkRuns`.
+export interface AssociatedRun {
+  workflowName: string;
+  status: string;          // "queued" | "in_progress" | "completed"
+  conclusion?: string;     // "success" | "failure" | ... ; absent while running
+  runUrl: string;
+  completedAt: string | null;
+}
+
+// One job inside a workflow run. Fetched on-demand by the RunDetail view via
+// the `fetch_run_jobs_command` Tauri command (#6 follow-up).
+export interface WorkflowJobSummary {
+  id: number;
+  name: string;
+  status: string;          // "queued" | "in_progress" | "completed"
+  conclusion?: string;
+  startedAt?: string;
+  completedAt?: string;
+  htmlUrl?: string;
+}
+
+// Workflow-run payload for the Standalone Runs section and the run half of
+// Recently Resolved. Carried on `ActionableItem.run`.
+export interface ActionableItemRun {
+  workflowName: string;
+  event: string;           // "push" | "pull_request" | "workflow_dispatch" | ...
+  status: string;
+  conclusion?: string;
+  branch: string | null;
+  sha: string;
+  runNumber: number;
+  actorLogin: string;
+  runUrl: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
 export interface ActionableItemPr {
   number: number;
   author: string;
@@ -66,6 +105,7 @@ export interface ActionableItemPr {
   score: number;
   reviewers?: ReviewerEntry[];
   checkRuns?: CheckRunSummary[];
+  associatedRuns?: AssociatedRun[];
 }
 
 export interface ActionableItem {
@@ -78,4 +118,7 @@ export interface ActionableItem {
   unread: boolean;
   dismissedUntilFingerprint: string | null;
   pr?: ActionableItemPr;
+  // Set for `kind = "standalone_run"` items (Standalone Runs section and
+  // the run half of Recently Resolved). Absent for PR rows.
+  run?: ActionableItemRun;
 }

@@ -100,3 +100,78 @@ pub struct TeamMember {
 pub struct AuthUser {
     pub login: String,
 }
+
+/// Minimal PR reference inside a workflow run's `pull_requests[]`. Only the
+/// `number` is needed to match against the user's tracked PRs (the repo is
+/// implied by the run's owning repo).
+#[derive(Debug, Clone, Deserialize)]
+pub struct RunPullRequestRef {
+    pub number: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowRunActor {
+    #[serde(default)]
+    pub login: Option<String>,
+}
+
+/// `GET /repos/{owner}/{repo}/actions/runs` row (#6). Only the fields the
+/// poller actually reads are declared.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowRun {
+    pub id: i64,
+    /// `name` is the workflow's display name (e.g. "CI"); `null` for some
+    /// composite runs.
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub display_title: Option<String>,
+    pub status: String,
+    #[serde(default)]
+    pub conclusion: Option<String>,
+    pub event: String,
+    pub html_url: String,
+    pub created_at: String,
+    pub updated_at: String,
+    #[serde(default)]
+    pub run_started_at: Option<String>,
+    #[serde(default)]
+    pub head_branch: Option<String>,
+    pub head_sha: String,
+    pub run_number: i64,
+    #[serde(default)]
+    pub actor: Option<WorkflowRunActor>,
+    #[serde(default)]
+    pub pull_requests: Option<Vec<RunPullRequestRef>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowRunsResult {
+    #[serde(default)]
+    pub workflow_runs: Vec<WorkflowRun>,
+}
+
+/// `GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs` row. Used by the
+/// on-demand jobs fetcher in `runs.rs` to populate the RunDetail Jobs block
+/// (#6 follow-up). Only the fields the UI renders are declared.
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowJob {
+    pub id: i64,
+    pub name: String,
+    /// `"queued" | "in_progress" | "completed"`.
+    pub status: String,
+    #[serde(default)]
+    pub conclusion: Option<String>,
+    #[serde(default)]
+    pub started_at: Option<String>,
+    #[serde(default)]
+    pub completed_at: Option<String>,
+    #[serde(default)]
+    pub html_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WorkflowJobsResult {
+    #[serde(default)]
+    pub jobs: Vec<WorkflowJob>,
+}

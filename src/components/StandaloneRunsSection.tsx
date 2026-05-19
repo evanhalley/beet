@@ -1,21 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Rocket } from "lucide-react";
+import { ChevronDown, Cog } from "lucide-react";
 import { useActionableItems } from "@/hooks/useActionableItems";
-import { ActionableRow } from "./ActionableRow";
+import { RunRow } from "./RunRow";
 import { SkeletonRows } from "./SkeletonRow";
 
-export function InFlightSection() {
-  const { inFlight: items, isLoading } = useActionableItems();
+export function StandaloneRunsSection() {
+  const { standaloneRuns: items, isLoading } = useActionableItems();
   const [collapsed, setCollapsed] = useState(false);
 
+  // Newest first by completion / update time. Stable sort preserves the order
+  // the poller delivered for ties.
   const sorted = [...items].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
 
   return (
-    <section aria-label="In Flight" id="section-inflight">
+    <section aria-label="Standalone Runs" id="section-runs">
       <header
         style={{
           display: "flex",
@@ -34,7 +36,7 @@ export function InFlightSection() {
           type="button"
           onClick={() => setCollapsed((c) => !c)}
           aria-expanded={!collapsed}
-          aria-controls="in-flight-list"
+          aria-controls="standalone-runs-list"
           style={{
             display: "inline-flex",
             alignItems: "center",
@@ -45,8 +47,8 @@ export function InFlightSection() {
             padding: 0,
           }}
         >
-          <Rocket size={12} aria-hidden />
-          <span>In Flight</span>
+          <Cog size={12} aria-hidden />
+          <span>Standalone Runs</span>
           <span
             className="mono"
             style={{
@@ -72,7 +74,7 @@ export function InFlightSection() {
         </button>
       </header>
       {!collapsed && (
-        <div id="in-flight-list">
+        <div id="standalone-runs-list">
           {isLoading && sorted.length === 0 ? (
             <SkeletonRows count={2} />
           ) : sorted.length === 0 ? (
@@ -83,16 +85,13 @@ export function InFlightSection() {
                 color: "var(--color-text-faint)",
               }}
             >
-              No PRs in flight right now.
+              No standalone workflow runs right now.
             </p>
           ) : (
-            <ul
-              role="list"
-              style={{ listStyle: "none", margin: 0, padding: 0 }}
-            >
+            <ul role="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {sorted.map((item) => (
                 <li role="listitem" key={item.id}>
-                  <ActionableRow item={item} variant="inflight" />
+                  <RunRow item={item} />
                 </li>
               ))}
             </ul>

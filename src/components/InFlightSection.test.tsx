@@ -160,8 +160,17 @@ describe("InFlightSection", () => {
   });
 
   test("empty state when no items", () => {
+    // Cold-start renders skeleton rows; the empty-state line only shows
+    // once the poll loop has come back at least once.
+    useAppStore.setState({ pollState: "ok" });
     render(<InFlightSection />);
     expect(screen.getByText(/no prs in flight right now/i)).toBeInTheDocument();
+  });
+
+  test("renders skeleton rows during cold start", () => {
+    render(<InFlightSection />);
+    expect(screen.queryByText(/no prs in flight right now/i)).toBeNull();
+    expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
   });
 
   test("copy-link button writes the PR URL to the clipboard without selecting the row", async () => {

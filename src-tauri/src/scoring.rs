@@ -125,7 +125,9 @@ mod tests {
                 score: 0,
                 reviewers: None,
                 check_runs: None,
+                associated_runs: None,
             }),
+            run: None,
         }
     }
 

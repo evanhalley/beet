@@ -23,6 +23,10 @@ function buildHaystack(item: ActionableItem): string {
       if (id) parts.push(id);
     }
   }
+  if (item.run) {
+    parts.push(item.run.workflowName, item.run.actorLogin);
+    if (item.run.branch) parts.push(item.run.branch);
+  }
   return parts.join(" ").toLowerCase();
 }
 

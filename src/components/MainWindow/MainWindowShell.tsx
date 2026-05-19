@@ -63,7 +63,7 @@ export function MainWindowShell({
   const { reviewRequests } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const [activeSection, setActiveSection] =
-    useState<"reviews" | "inflight">("reviews");
+    useState<"reviews" | "inflight" | "runs" | "recent">("reviews");
 
   // When no item is currently resolved (either nothing selected, or the
   // stored id is a ghost), auto-pick the top-scored Review Request and
@@ -179,7 +179,14 @@ export function MainWindowShell({
             collapsed={sidebarCollapsed}
             onToggleCollapsed={toggleSidebar}
             onSectionClick={(section) => {
-              if (section !== "reviews" && section !== "inflight") return;
+              if (
+                section !== "reviews" &&
+                section !== "inflight" &&
+                section !== "runs" &&
+                section !== "recent"
+              ) {
+                return;
+              }
               setActiveSection(section);
               const el = document.getElementById(`section-${section}`);
               el?.scrollIntoView({ behavior: "smooth", block: "start" });

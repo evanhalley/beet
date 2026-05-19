@@ -4,6 +4,7 @@
 
 use crate::tasks::DEFAULT_TASK_REGEX;
 use serde_json::Value;
+use std::collections::HashMap;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_store::StoreExt;
 
@@ -35,6 +36,12 @@ pub struct PollConfig {
     pub auto_requeue_max_attempts: u32,
     /// Optional allowlist of `owner/repo` strings. Empty = all repos.
     pub auto_requeue_repos: Vec<String>,
+    /// Per-repo allowlist of workflow names for the Standalone Runs section
+    /// (#6 noise control). Key = `owner/repo`, value = workflow display names.
+    /// Empty map / missing repo = show all (still deduped per workflow);
+    /// non-empty entry = restrict that repo's standalone runs to just the
+    /// listed workflows.
+    pub standalone_runs_allowlist: HashMap<String, Vec<String>>,
 }
 
 impl Default for PollConfig {
@@ -47,6 +54,7 @@ impl Default for PollConfig {
             auto_requeue_enabled: false,
             auto_requeue_max_attempts: AUTO_REQUEUE_MAX_ATTEMPTS_DEFAULT,
             auto_requeue_repos: Vec::new(),
+            standalone_runs_allowlist: HashMap::new(),
         }
     }
 }
@@ -86,6 +94,10 @@ impl PollConfig {
             ),
             auto_requeue_repos: string_array(store.get("autoRequeueRepos"))
                 .unwrap_or(defaults.auto_requeue_repos),
+            standalone_runs_allowlist: string_array_map(
+                store.get("standaloneRunsAllowlist"),
+            )
+            .unwrap_or(defaults.standalone_runs_allowlist),
         }
     }
 }
@@ -109,6 +121,24 @@ fn string_array(value: Option<Value>) -> Option<Vec<String>> {
             .filter_map(|v| v.as_str().map(String::from))
             .collect(),
     )
+}
+
+/// Parse `{ "owner/repo": ["WorkflowA", "WorkflowB"], ... }` shape.
+/// Non-array values are dropped; empty-string and empty-array entries are
+/// kept as-is (the caller treats an empty list as "no filter for this repo").
+fn string_array_map(value: Option<Value>) -> Option<HashMap<String, Vec<String>>> {
+    let obj = value?;
+    let obj = obj.as_object()?;
+    let mut out = HashMap::with_capacity(obj.len());
+    for (k, v) in obj {
+        let Some(arr) = v.as_array() else { continue };
+        let list: Vec<String> = arr
+            .iter()
+            .filter_map(|item| item.as_str().map(String::from))
+            .collect();
+        out.insert(k.clone(), list);
+    }
+    Some(out)
 }
 
 #[cfg(test)]
@@ -138,5 +168,30 @@ mod tests {
         );
         assert_eq!(string_array(None), None);
         assert_eq!(string_array(Some(serde_json::json!("notarray"))), None);
+    }
+
+    #[test]
+    fn string_array_map_parses_object_of_string_lists() {
+        let v = serde_json::json!({
+            "foo/bar": ["Deploy", "Release"],
+            "baz/qux": [],
+            "skipped/non-array": "nope",
+        });
+        let parsed = string_array_map(Some(v)).unwrap();
+        assert_eq!(
+            parsed.get("foo/bar").unwrap(),
+            &vec!["Deploy".to_string(), "Release".to_string()]
+        );
+        // Empty array is preserved (caller treats as "no filter for this repo").
+        assert_eq!(parsed.get("baz/qux").unwrap(), &Vec::<String>::new());
+        // Non-array value is dropped entirely.
+        assert!(!parsed.contains_key("skipped/non-array"));
+    }
+
+    #[test]
+    fn string_array_map_handles_missing_and_non_object() {
+        assert!(string_array_map(None).is_none());
+        assert!(string_array_map(Some(serde_json::json!("notobj"))).is_none());
+        assert!(string_array_map(Some(serde_json::json!([1, 2]))).is_none());
     }
 }

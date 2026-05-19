@@ -1,9 +1,42 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { selectShowAllReviews, useAppStore } from "./store";
+import type { ActionableItem } from "./types";
 
 beforeEach(() => {
   useAppStore.getState().reset();
 });
+
+function prItem(id: string, title: string, author: string): ActionableItem {
+  return {
+    id,
+    kind: "pr",
+    title,
+    url: `https://github.com/${id.replace("pr:", "")}`,
+    repoFullName: id.replace("pr:", "").split("#")[0],
+    updatedAt: "2026-05-19T00:00:00.000Z",
+    unread: false,
+    dismissedUntilFingerprint: null,
+    pr: {
+      number: Number(id.split("#")[1]),
+      author,
+      body: null,
+      isAuthoredByMe: false,
+      isReviewRequestedFromMe: false,
+      isAuthorOnMyTeam: false,
+      iveCommented: false,
+      iveReviewed: false,
+      iveApproved: false,
+      approvalCount: 0,
+      isDraft: false,
+      additions: 0,
+      deletions: 0,
+      createdAt: "2026-05-19T00:00:00.000Z",
+      lifecycle: "merged",
+      taskUrls: [],
+      score: 0,
+    },
+  };
+}
 
 describe("app store (client/UI state)", () => {
   test("setSelectedItemId updates the selection", () => {
@@ -36,6 +69,24 @@ describe("app store (client/UI state)", () => {
       .getState()
       .setRateLimit({ remaining: 4200, limit: 5000, reset: 1700000000 });
     expect(useAppStore.getState().rateLimit?.remaining).toBe(4200);
+  });
+
+  test("recentlyResolved does not overwrite a live PR entry in byId", () => {
+    // Regression: when a PR is also present as a live in-flight row, the
+    // snapshot-backed resolved row must not stomp the richer live data.
+    const live = prItem("pr:acme/repo#1", "Live title", "rina");
+    const resolved = prItem("pr:acme/repo#1", "Stale snapshot", "");
+    useAppStore.getState().setPollResult({
+      reviewRequests: [],
+      inFlight: [live],
+      standaloneRuns: [],
+      recentlyResolved: [resolved],
+      rateLimit: null,
+      polledAt: "2026-05-19T00:00:00.000Z",
+    });
+    const hit = useAppStore.getState().byId.get("pr:acme/repo#1");
+    expect(hit?.title).toBe("Live title");
+    expect(hit?.pr?.author).toBe("rina");
   });
 
   test("reset restores initial state", () => {
