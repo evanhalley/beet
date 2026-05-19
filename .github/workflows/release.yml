@@ -2,6 +2,13 @@ name: Release
 
 on:
   workflow_dispatch:
+    inputs:
+      bump:
+        description: "Which semver component to bump"
+        type: choice
+        required: true
+        default: patch
+        options: [patch, minor, major]
 
 concurrency:
   group: release
@@ -11,28 +18,39 @@ jobs:
   release:
     runs-on: macos-latest
     permissions:
-      contents: write   # required to create releases + push tags
+      contents: write   # required to create releases, push tags, and commit version bump
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # full history needed for tag enumeration
+      # ── Guard: only release from main ────────────────────────────────
+      # workflow_dispatch can be triggered from any ref. The bump commit
+      # and tag must come from main, so fail fast on anything else.
+      - name: Ensure dispatched from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Release workflow must be dispatched from main (got ${{ github.ref }})"
+          exit 1
 
-      # ── Compute next YYYY.NN version ──────────────────────────────────
-      - name: Compute version
+      - uses: actions/checkout@v4
+        # Need write access to push the version bump commit back to main.
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
+
+      # ── Bump version from tauri.conf.json ─────────────────────────────
+      - name: Compute next version
         id: version
         run: |
-          YEAR=$(date +%Y)
-          LATEST=$(git tag --list "v${YEAR}.*" --sort=-version:refname | head -1)
-          if [ -z "$LATEST" ]; then
-            NN=01
-          else
-            PREV_NN="${LATEST##*.}"
-            NN=$(printf "%02d" $((10#$PREV_NN + 1)))
-          fi
-          VERSION="${YEAR}.${NN}"
+          CURRENT=$(jq -r '.version' src-tauri/tauri.conf.json)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          case "${{ inputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          VERSION="${MAJOR}.${MINOR}.${PATCH}"
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "TAG=v${VERSION}"    >> "$GITHUB_OUTPUT"
+          echo "Bumping ${CURRENT} → ${VERSION} (${{ inputs.bump }})"
 
       # ── Patch tauri.conf.json ─────────────────────────────────────────
       - name: Patch version in tauri.conf.json
@@ -67,6 +85,24 @@ jobs:
         # TODO(#10): add updater bundle signature step here using the
         # private key from CI secrets once tauri-plugin-updater is wired up.
 
+      # ── Commit the version bump back to main ──────────────────────────
+      # Re-check that main hasn't advanced during the build; if it has,
+      # bail out so the tag never points at code we didn't build.
+      - name: Commit version bump
+        run: |
+          git fetch origin main
+          LOCAL=$(git rev-parse HEAD)
+          REMOTE=$(git rev-parse origin/main)
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "::error::main advanced from $LOCAL to $REMOTE during the build — re-run the release."
+            exit 1
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src-tauri/tauri.conf.json
+          git commit -m "chore(release): ${{ steps.version.outputs.TAG }}"
+          git push origin HEAD:main
+
       # ── Tag + Release ─────────────────────────────────────────────────
       - name: Create GitHub Release
         env:
@@ -74,6 +110,6 @@ jobs:
         run: |
           gh release create "${{ steps.version.outputs.TAG }}" \
             --title "Beet ${{ steps.version.outputs.VERSION }}" \
-            --target "${{ github.sha }}" \
+            --target "$(git rev-parse HEAD)" \
             --generate-notes \
             src-tauri/target/release/bundle/dmg/*.dmg
