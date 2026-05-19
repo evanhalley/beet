@@ -21,10 +21,20 @@ jobs:
       contents: write   # required to create releases, push tags, and commit version bump
 
     steps:
+      # ── Guard: only release from main ────────────────────────────────
+      # workflow_dispatch can be triggered from any ref. The bump commit
+      # and tag must come from main, so fail fast on anything else.
+      - name: Ensure dispatched from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Release workflow must be dispatched from main (got ${{ github.ref }})"
+          exit 1
+
       - uses: actions/checkout@v4
         # Need write access to push the version bump commit back to main.
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
 
       # ── Bump version from tauri.conf.json ─────────────────────────────
       - name: Compute next version
@@ -76,13 +86,22 @@ jobs:
         # private key from CI secrets once tauri-plugin-updater is wired up.
 
       # ── Commit the version bump back to main ──────────────────────────
+      # Re-check that main hasn't advanced during the build; if it has,
+      # bail out so the tag never points at code we didn't build.
       - name: Commit version bump
         run: |
+          git fetch origin main
+          LOCAL=$(git rev-parse HEAD)
+          REMOTE=$(git rev-parse origin/main)
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "::error::main advanced from $LOCAL to $REMOTE during the build — re-run the release."
+            exit 1
+          fi
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src-tauri/tauri.conf.json
           git commit -m "chore(release): ${{ steps.version.outputs.TAG }}"
-          git push origin HEAD:${{ github.ref_name }}
+          git push origin HEAD:main
 
       # ── Tag + Release ─────────────────────────────────────────────────
       - name: Create GitHub Release
