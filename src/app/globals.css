@@ -157,13 +157,15 @@ body {
   }
 }
 
-/* Skeleton-row shimmer for the cold-start "we're loading" state. */
-@keyframes beet-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
+/* Skeleton-row shimmer for the cold-start "we're loading" state. Each blob
+ * paints a moving highlight band across its width. Background-position is
+ * animated rather than the gradient itself so the GPU can keep the work on
+ * the compositor. */
+@keyframes beet-shimmer {
+  0% {
+    background-position: 200% 0;
   }
-  50% {
-    opacity: 0.85;
+  100% {
+    background-position: -200% 0;
   }
 }
