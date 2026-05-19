@@ -581,7 +581,9 @@ async fn assemble_review_item(
             score: 0,
             reviewers: Some(reviewers),
             check_runs,
+            associated_runs: None,
         }),
+        run: None,
     };
     Ok((Some(item), rate_limit))
 }
@@ -690,7 +692,9 @@ async fn assemble_my_pr_item(
             score: 0,
             reviewers: Some(reviewers),
             check_runs,
+            associated_runs: None,
         }),
+        run: None,
     };
     Ok((Some(item), rate_limit))
 }

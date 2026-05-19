@@ -16,12 +16,23 @@ export function useSelectedItem(): ActionableItem | null {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
   const reviewRequests = useAppStore((s) => s.reviewRequests);
   const inFlight = useAppStore((s) => s.inFlight);
+  const standaloneRuns = useAppStore((s) => s.standaloneRuns);
+  const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const showAll = useAppStore(selectShowAllReviews);
   if (!selectedItemId) return null;
 
   // In-flight items are always visible — no filter applies here.
   const inFlightHit = inFlight.find((it) => it.id === selectedItemId);
   if (inFlightHit) return inFlightHit;
+
+  // Standalone Runs and Recently Resolved are also unconditionally visible —
+  // no Show-All gate. Without these branches a run-row click resolves to
+  // null and MainWindowShell's auto-pick effect snaps the selection back
+  // to a review request (#6 follow-up).
+  const runHit = standaloneRuns.find((it) => it.id === selectedItemId);
+  if (runHit) return runHit;
+  const resolvedHit = recentlyResolved.find((it) => it.id === selectedItemId);
+  if (resolvedHit) return resolvedHit;
 
   // Review-requests honor the same visibility predicate as the rendered list.
   const reviewHit = reviewRequests.find((it) => it.id === selectedItemId);

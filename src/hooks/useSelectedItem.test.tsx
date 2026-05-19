@@ -93,4 +93,47 @@ describe("useSelectedItem", () => {
     const { result } = renderHook(() => useSelectedItem());
     expect(result.current?.id).toBe("approved");
   });
+
+  test("resolves a standalone-run selection from the runs section", () => {
+    // Regression for the run-row click no-op (#6 follow-up). Before the fix,
+    // useSelectedItem only checked reviewRequests + inFlight and returned
+    // null for run-kind selections, causing the auto-pick effect to snap
+    // the selection back to a PR.
+    useAppStore.getState().setPollResult({
+      reviewRequests: [],
+      inFlight: [],
+      standaloneRuns: [
+        {
+          id: "run:foo/bar#42",
+          kind: "standalone_run",
+          title: "Deploy",
+          url: "https://github.com/foo/bar/actions/runs/42",
+          repoFullName: "foo/bar",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+          unread: true,
+          dismissedUntilFingerprint: null,
+          run: {
+            workflowName: "Deploy",
+            event: "workflow_dispatch",
+            status: "completed",
+            conclusion: "success",
+            branch: "main",
+            sha: "deadbeef",
+            runNumber: 42,
+            actorLogin: "evan",
+            runUrl: "https://github.com/foo/bar/actions/runs/42",
+            startedAt: "2026-01-01T00:00:00.000Z",
+            completedAt: "2026-01-01T00:01:00.000Z",
+          },
+        },
+      ],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:02:00.000Z",
+    });
+    useAppStore.setState({ selectedItemId: "run:foo/bar#42" });
+    const { result } = renderHook(() => useSelectedItem());
+    expect(result.current?.id).toBe("run:foo/bar#42");
+    expect(result.current?.run?.workflowName).toBe("Deploy");
+  });
 });

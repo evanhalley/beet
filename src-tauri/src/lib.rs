@@ -36,6 +36,7 @@ pub fn run() {
             store::requeue::get_requeue_count,
             store::requeue::get_requeue_opt_out,
             store::requeue::set_requeue_opt_out,
+            github::runs::fetch_run_jobs_command,
         ])
         .setup(|app| {
             let open = MenuItemBuilder::with_id("open", "Open Beet").build(app)?;

@@ -98,6 +98,35 @@ pub fn record_ejection_event(
     Ok(())
 }
 
+/// PR ids whose latest recorded lifecycle is `merged` or `closed`, observed
+/// since `since_iso`. Powers the PR half of Recently Resolved (#6).
+pub fn list_recently_resolved_pr_ids(
+    conn: &Connection,
+    since_iso: &str,
+) -> rusqlite::Result<Vec<(String, PrLifecycle, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT pr_id, lifecycle, MAX(observed_at) AS resolved_at
+         FROM pr_lifecycle_history
+         WHERE lifecycle IN ('merged', 'closed') AND observed_at >= ?1
+         GROUP BY pr_id
+         ORDER BY resolved_at DESC",
+    )?;
+    let rows = stmt.query_map([since_iso], |r| {
+        let pr_id: String = r.get(0)?;
+        let lifecycle: String = r.get(1)?;
+        let observed_at: String = r.get(2)?;
+        Ok((pr_id, lifecycle, observed_at))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (pr_id, lifecycle, observed_at) = row?;
+        if let Some(lc) = PrLifecycle::from_db_str(&lifecycle) {
+            out.push((pr_id, lc, observed_at));
+        }
+    }
+    Ok(out)
+}
+
 pub fn get_latest_ejection_event(
     conn: &Connection,
     pr_id: &str,
@@ -194,5 +223,36 @@ mod tests {
     fn get_latest_ejection_event_none_when_absent() {
         let conn = open_in_memory().unwrap();
         assert_eq!(get_latest_ejection_event(&conn, "nope").unwrap(), None);
+    }
+
+    #[test]
+    fn list_recently_resolved_excludes_open_and_old_rows() {
+        let conn = open_in_memory().unwrap();
+        // pr 1: closed today -> included
+        conn.execute(
+            "INSERT INTO pr_lifecycle_history (pr_id, lifecycle, observed_at)
+             VALUES ('pr:foo/bar#1', 'merged', '2026-05-18T12:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        // pr 2: open today -> excluded (not merged/closed)
+        conn.execute(
+            "INSERT INTO pr_lifecycle_history (pr_id, lifecycle, observed_at)
+             VALUES ('pr:foo/bar#2', 'open', '2026-05-18T12:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        // pr 3: merged a week ago -> excluded by since filter
+        conn.execute(
+            "INSERT INTO pr_lifecycle_history (pr_id, lifecycle, observed_at)
+             VALUES ('pr:foo/bar#3', 'merged', '2026-05-10T12:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let rows =
+            list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].0, "pr:foo/bar#1");
+        assert_eq!(rows[0].1, PrLifecycle::Merged);
     }
 }

@@ -29,11 +29,18 @@ export function SearchPalette({ open, onClose }: SearchPaletteProps) {
 function PaletteContent({ onClose }: { onClose: () => void }) {
   const reviewRequests = useAppStore((s) => s.reviewRequests);
   const inFlight = useAppStore((s) => s.inFlight);
+  const standaloneRuns = useAppStore((s) => s.standaloneRuns);
+  const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
 
   const corpus = useMemo(
-    () => [...inFlight, ...reviewRequests],
-    [inFlight, reviewRequests],
+    () => [
+      ...inFlight,
+      ...reviewRequests,
+      ...standaloneRuns,
+      ...recentlyResolved,
+    ],
+    [inFlight, reviewRequests, standaloneRuns, recentlyResolved],
   );
 
   const [query, setQuery] = useState("");
@@ -189,8 +196,8 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
             >
               <div style={{ fontWeight: 500, marginBottom: 4 }}>No matches</div>
               <div style={{ fontSize: 11.5, color: "var(--color-text-faint)" }}>
-                Coverage expands as Standalone Runs, Recently Resolved, and
-                Mentions come online.
+                Searches review requests, in-flight PRs, standalone runs, and
+                recently resolved. Mentions land in #8.
               </div>
             </div>
           ) : (

@@ -6,6 +6,7 @@ export type NavIconName =
   | "score"
   | "theme"
   | "merge"
+  | "runs"
   | "info";
 
 const COMMON = {
@@ -71,6 +72,15 @@ export function NavIcon({ name }: { name: NavIconName }) {
           <circle cx="12" cy="8" r="1.5" />
           <path d="M4 5.5v5" />
           <path d="M5.5 4c0 3 2 4 5 4M5.5 12c0-3 2-4 5-4" />
+        </svg>
+      );
+    case "runs":
+      // Simple gear/cog motif — matches the Cog icon used in the Sidebar
+      // Standalone Runs row, but as an inline SVG to fit the NavIcon set.
+      return (
+        <svg {...COMMON}>
+          <circle cx="8" cy="8" r="2.5" />
+          <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4" />
         </svg>
       );
     case "info":

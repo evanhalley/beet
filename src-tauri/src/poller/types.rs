@@ -100,6 +100,48 @@ pub struct ActionableItemMergeQueue {
     pub pr_node_id: Option<String>,
 }
 
+/// One workflow run attached to a PR's `associated_runs`. The DetailPane's
+/// Checks block renders these alongside `check_runs` so a PR's CI surface
+/// includes both the per-commit check-suites and the user-triggered runs
+/// (which can include things check-runs don't, like deploys).
+///
+/// Only the most-recent run per workflow name is kept (#6 / SPECS §5).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssociatedRun {
+    pub workflow_name: String,
+    /// `"queued" | "in_progress" | "completed"`.
+    pub status: String,
+    /// Final verdict; `None` while still running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conclusion: Option<String>,
+    pub run_url: String,
+    pub completed_at: Option<String>,
+}
+
+/// Standalone-run payload — the run-side analogue of `ActionableItemPr`.
+/// Carried on `ActionableItem.run` for both Standalone Runs and the run
+/// half of Recently Resolved.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActionableItemRun {
+    pub workflow_name: String,
+    /// `push`, `pull_request`, `workflow_dispatch`, `schedule`, etc.
+    pub event: String,
+    /// `"queued" | "in_progress" | "completed"`.
+    pub status: String,
+    /// Final verdict; `None` while still running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conclusion: Option<String>,
+    pub branch: Option<String>,
+    pub sha: String,
+    pub run_number: i64,
+    pub actor_login: String,
+    pub run_url: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionableItemPr {
@@ -131,6 +173,11 @@ pub struct ActionableItemPr {
     /// fetch failed for non-critical reasons — the row still renders.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub check_runs: Option<Vec<CheckRunSummary>>,
+    /// Workflow runs for this PR, one per workflow name (most recent kept),
+    /// attached by the run-collapse pass (#6 / SPECS §7). Absent when no
+    /// runs matched — the PR row still renders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub associated_runs: Option<Vec<AssociatedRun>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +193,10 @@ pub struct ActionableItem {
     pub dismissed_until_fingerprint: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pr: Option<ActionableItemPr>,
+    /// Set for `kind = "standalone_run"` items (Standalone Runs section and
+    /// the run half of Recently Resolved). `None` for PR rows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<ActionableItemRun>,
 }
 
 #[cfg(test)]
@@ -214,7 +265,9 @@ mod tests {
                     conclusion: Some("success".into()),
                     details_url: None,
                 }]),
+                associated_runs: None,
             }),
+            run: None,
         }
     }
 
@@ -305,6 +358,93 @@ mod tests {
     #[test]
     fn actionable_item_round_trips() {
         let item = full_item();
+        let json = serde_json::to_string(&item).unwrap();
+        let back: ActionableItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(item, back);
+    }
+
+    fn full_run_item() -> ActionableItem {
+        ActionableItem {
+            id: "run:foo/bar#42".into(),
+            kind: ActionableKind::StandaloneRun,
+            title: "deploy.yml".into(),
+            url: "https://github.com/foo/bar/actions/runs/42".into(),
+            repo_full_name: "foo/bar".into(),
+            updated_at: "2026-01-01T00:00:00.000Z".into(),
+            unread: true,
+            dismissed_until_fingerprint: None,
+            pr: None,
+            run: Some(ActionableItemRun {
+                workflow_name: "Deploy".into(),
+                event: "workflow_dispatch".into(),
+                status: "completed".into(),
+                conclusion: Some("success".into()),
+                branch: Some("main".into()),
+                sha: "deadbeef".into(),
+                run_number: 7,
+                actor_login: "evan".into(),
+                run_url: "https://github.com/foo/bar/actions/runs/42".into(),
+                started_at: Some("2026-01-01T00:00:00.000Z".into()),
+                completed_at: Some("2026-01-01T00:01:00.000Z".into()),
+            }),
+        }
+    }
+
+    #[test]
+    fn run_item_serializes_with_camel_case_run_payload() {
+        let json = serde_json::to_value(full_run_item()).unwrap();
+        assert_eq!(json["kind"], "standalone_run");
+        assert!(json.as_object().unwrap().get("pr").is_none());
+
+        let run = &json["run"];
+        assert_eq!(
+            keys(run),
+            vec![
+                "actorLogin",
+                "branch",
+                "completedAt",
+                "conclusion",
+                "event",
+                "runNumber",
+                "runUrl",
+                "sha",
+                "startedAt",
+                "status",
+                "workflowName",
+            ]
+        );
+        assert_eq!(run["workflowName"], "Deploy");
+    }
+
+    #[test]
+    fn associated_runs_serializes_as_camel_case() {
+        let mut item = full_item();
+        if let Some(pr) = item.pr.as_mut() {
+            pr.associated_runs = Some(vec![AssociatedRun {
+                workflow_name: "CI".into(),
+                status: "completed".into(),
+                conclusion: Some("success".into()),
+                run_url: "https://github.com/foo/bar/actions/runs/9".into(),
+                completed_at: Some("2026-01-01T00:00:00.000Z".into()),
+            }]);
+        }
+        let json = serde_json::to_value(&item).unwrap();
+        let ar = &json["pr"]["associatedRuns"][0];
+        assert_eq!(
+            keys(ar),
+            vec![
+                "completedAt",
+                "conclusion",
+                "runUrl",
+                "status",
+                "workflowName",
+            ]
+        );
+    }
+
+    #[test]
+    fn run_item_round_trips() {
+        let item = full_run_item();
         let json = serde_json::to_string(&item).unwrap();
         let back: ActionableItem = serde_json::from_str(&json).unwrap();
         assert_eq!(item, back);

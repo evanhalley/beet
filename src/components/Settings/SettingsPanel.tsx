@@ -7,12 +7,20 @@ import { AboutTab } from "./AboutTab";
 import { AccountTab } from "./AccountTab";
 import { AppearanceTab } from "./AppearanceTab";
 import { MergeQueueTab } from "./MergeQueueTab";
+import { RunsTab } from "./RunsTab";
 import { ScoringTab } from "./ScoringTab";
 import { PollingTab } from "./PollingTab";
 import { NavIcon, type NavIconName } from "./NavIcon";
 
 interface NavItem {
-  id: "account" | "scoring" | "polling" | "appearance" | "merge-queue" | "about";
+  id:
+    | "account"
+    | "scoring"
+    | "polling"
+    | "appearance"
+    | "merge-queue"
+    | "runs"
+    | "about";
   label: string;
   icon: NavIconName;
 }
@@ -22,6 +30,7 @@ const ITEMS: readonly NavItem[] = [
   { id: "appearance", label: "Appearance", icon: "theme" },
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
+  { id: "runs", label: "Runs", icon: "runs" },
   { id: "merge-queue", label: "Merge Queue", icon: "merge" },
   { id: "about", label: "About", icon: "info" },
 ] as const;
@@ -121,6 +130,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {tab === "scoring" && <ScoringTab />}
           {tab === "polling" && <PollingTab />}
           {tab === "appearance" && <AppearanceTab />}
+          {tab === "runs" && <RunsTab />}
           {tab === "merge-queue" && <MergeQueueTab />}
           {tab === "about" && <AboutTab />}
         </div>
