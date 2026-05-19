@@ -17,14 +17,15 @@ use crate::github::prs::{
 };
 use crate::github::runs::{
     apply_standalone_allowlist, build_recently_resolved, collapse_runs, dedupe_standalone,
-    fetch_runs_for_repos, iso_window_start, record_completed_runs,
+    fetch_runs_for_repos, iso_window_start, record_completed_runs, RunWithRepo,
     RECENTLY_RESOLVED_WINDOW_HOURS,
 };
 use crate::poller::config::PollConfig;
 use crate::poller::types::ActionableItem;
 use crate::secure_token::read_token;
 use crate::store::db::now_iso;
-use crate::store::lifecycle::list_recently_resolved_pr_ids;
+use crate::store::lifecycle::{list_recently_resolved_pr_ids, PrSnapshot, ResolvedPrRow};
+use crate::store::runs::prune_completions_older_than;
 use crate::store::Db;
 use std::collections::{HashMap, HashSet};
 use serde::Serialize;
@@ -333,35 +334,22 @@ async fn poll_once<R: Runtime>(
         let outcome = fetch_runs_for_repos(&client, db, &tracked_repos, &username).await;
         let rl = outcome.rate_limit;
 
-        // Index runs by (repo, run.id, pr_number) before consuming for
-        // collapse so the completion recorder can still see them.
-        let runs_for_record: Vec<(String, crate::github::models::WorkflowRun, Option<i64>)> =
-            outcome
-                .runs
-                .iter()
-                .map(|r| {
-                    let pr_num = r
-                        .pull_requests
-                        .as_deref()
-                        .and_then(|prs| prs.first().map(|p| p.number));
-                    (
-                        derive_repo_full_name(r).unwrap_or_default(),
-                        r.clone(),
-                        pr_num,
-                    )
-                })
-                .collect();
-        record_completed_runs(db, &runs_for_record);
-
-        let collapse_input: Vec<(String, crate::github::models::WorkflowRun, String)> = outcome
+        // Persist completion snapshots before collapse consumes the runs.
+        let runs_for_record: Vec<(RunWithRepo, Option<i64>)> = outcome
             .runs
-            .into_iter()
+            .iter()
             .map(|r| {
-                let repo = derive_repo_full_name(&r).unwrap_or_default();
-                (repo, r, username.clone())
+                let pr_num = r
+                    .run
+                    .pull_requests
+                    .as_deref()
+                    .and_then(|prs| prs.first().map(|p| p.number));
+                (r.clone(), pr_num)
             })
             .collect();
-        let collapsed = collapse_runs(collapse_input, &tracked_prs);
+        record_completed_runs(db, &runs_for_record);
+
+        let collapsed = collapse_runs(outcome.runs, &tracked_prs, &username);
         (collapsed, rl)
     };
 
@@ -382,20 +370,25 @@ async fn poll_once<R: Runtime>(
     );
 
     // Recently Resolved: merged/closed PRs in window + completed runs not
-    // already represented by their parent PR. We need full ActionableItems
-    // for the PR half, but the in-memory PR set only contains *open* PRs by
-    // construction — synthesize a minimal closed-PR row from the lifecycle
-    // table when needed.
+    // already represented by their parent PR. The in-memory PR set only
+    // holds *open* PRs by construction — rebuild a closed-PR row from the
+    // lifecycle snapshot captured at transition time (#6 follow-up).
     let since = iso_window_start(RECENTLY_RESOLVED_WINDOW_HOURS);
-    let resolved_pr_ids: Vec<(String, crate::poller::types::PrLifecycle, String)> =
-        match db.lock() {
-            Ok(conn) => list_recently_resolved_pr_ids(&conn, &since).unwrap_or_default(),
-            Err(_) => Vec::new(),
-        };
-    let resolved_prs: Vec<(ActionableItem, String)> = resolved_pr_ids
+    // Sweep `run_completion_events` rows older than the window — they're
+    // unreferenced, and otherwise the table grows monotonically for the
+    // lifetime of the install.
+    if let Ok(conn) = db.lock() {
+        let _ = prune_completions_older_than(&conn, &since);
+    }
+    let resolved_pr_rows: Vec<ResolvedPrRow> = match db.lock() {
+        Ok(conn) => list_recently_resolved_pr_ids(&conn, &since).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+    let resolved_prs: Vec<(ActionableItem, String)> = resolved_pr_rows
         .into_iter()
-        .filter_map(|(pr_id, lifecycle, resolved_at)| {
-            synthesize_resolved_pr_row(&pr_id, lifecycle, &resolved_at)
+        .filter_map(|row| {
+            let resolved_at = row.resolved_at.clone();
+            synthesize_resolved_pr_row(&row.pr_id, row.lifecycle, &resolved_at, &row.snapshot)
                 .map(|item| (item, resolved_at))
         })
         .collect();
@@ -423,26 +416,15 @@ async fn poll_once<R: Runtime>(
     Ok(rate_limited)
 }
 
-/// Pull `owner/repo` out of a workflow run's html_url. The runs endpoint
-/// does not return the owning repo directly; the URL is the cheapest way
-/// to recover it without threading the per-repo context all the way through
-/// `fetch_runs_for_repos`.
-fn derive_repo_full_name(run: &crate::github::models::WorkflowRun) -> Option<String> {
-    let url = &run.html_url;
-    let after_host = url.split("github.com/").nth(1)?;
-    let mut parts = after_host.splitn(3, '/');
-    let owner = parts.next()?;
-    let repo = parts.next()?;
-    Some(format!("{owner}/{repo}"))
-}
-
-/// Build a minimal ActionableItem for a PR we only know from
-/// `pr_lifecycle_history` — its id, terminal lifecycle, and resolution time.
-/// Enough for the Recently Resolved row to render without a fresh PR fetch.
+/// Build an ActionableItem for a PR we only know from `pr_lifecycle_history`,
+/// using the snapshot captured at the moment of transition. Snapshot fields
+/// may be `None` for legacy rows written before migration v6 — the renderer
+/// falls back to an "#N"-style title and an empty author in that case.
 fn synthesize_resolved_pr_row(
     pr_id: &str,
     lifecycle: crate::poller::types::PrLifecycle,
     resolved_at: &str,
+    snapshot: &PrSnapshot,
 ) -> Option<ActionableItem> {
     use crate::poller::types::{ActionableItemPr, ActionableKind};
     // pr_id format: `pr:{owner}/{repo}#{num}`
@@ -450,11 +432,19 @@ fn synthesize_resolved_pr_row(
     let (repo_full_name, num_str) = rest.rsplit_once('#')?;
     let number: i64 = num_str.parse().ok()?;
     let (owner, repo) = repo_full_name.split_once('/')?;
-    let url = format!("https://github.com/{owner}/{repo}/pull/{number}");
+    let url = snapshot
+        .url
+        .clone()
+        .unwrap_or_else(|| format!("https://github.com/{owner}/{repo}/pull/{number}"));
+    let title = snapshot
+        .title
+        .clone()
+        .unwrap_or_else(|| format!("#{number}"));
+    let author = snapshot.author.clone().unwrap_or_default();
     Some(ActionableItem {
         id: pr_id.to_string(),
         kind: ActionableKind::Pr,
-        title: format!("#{number}"),
+        title,
         url,
         repo_full_name: repo_full_name.to_string(),
         updated_at: resolved_at.to_string(),
@@ -462,7 +452,7 @@ fn synthesize_resolved_pr_row(
         dismissed_until_fingerprint: None,
         pr: Some(ActionableItemPr {
             number,
-            author: String::new(),
+            author,
             body: None,
             is_authored_by_me: false,
             is_review_requested_from_me: false,

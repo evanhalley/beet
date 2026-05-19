@@ -15,6 +15,15 @@ pub struct RunCompletionEvent {
     pub conclusion: Option<String>,
     pub concluded_at: String,
     pub pr_number: Option<i64>,
+    /// Snapshot fields (migration v6) — let Recently Resolved render the run
+    /// row faithfully after the run is no longer in the live poll set.
+    /// `None` for rows written before the migration; renderers fall back.
+    pub event: Option<String>,
+    pub sha: Option<String>,
+    pub run_number: Option<i64>,
+    pub actor_login: Option<String>,
+    pub run_url: Option<String>,
+    pub branch: Option<String>,
 }
 
 /// Upsert one completion event. INSERT-OR-IGNORE means we only store the
@@ -26,8 +35,9 @@ pub fn record_completion(
 ) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO run_completion_events
-         (run_id, repo, workflow_name, conclusion, concluded_at, pr_number)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+         (run_id, repo, workflow_name, conclusion, concluded_at, pr_number,
+          event, sha, run_number, actor_login, run_url, branch)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
         (
             event.run_id,
             &event.repo,
@@ -35,6 +45,12 @@ pub fn record_completion(
             event.conclusion.as_deref(),
             &event.concluded_at,
             event.pr_number,
+            event.event.as_deref(),
+            event.sha.as_deref(),
+            event.run_number,
+            event.actor_login.as_deref(),
+            event.run_url.as_deref(),
+            event.branch.as_deref(),
         ),
     )?;
     Ok(())
@@ -47,7 +63,8 @@ pub fn list_recent_completions(
     since_iso: &str,
 ) -> rusqlite::Result<Vec<RunCompletionEvent>> {
     let mut stmt = conn.prepare(
-        "SELECT run_id, repo, workflow_name, conclusion, concluded_at, pr_number
+        "SELECT run_id, repo, workflow_name, conclusion, concluded_at, pr_number,
+                event, sha, run_number, actor_login, run_url, branch
          FROM run_completion_events
          WHERE concluded_at >= ?1
          ORDER BY concluded_at DESC",
@@ -60,6 +77,12 @@ pub fn list_recent_completions(
             conclusion: r.get(3)?,
             concluded_at: r.get(4)?,
             pr_number: r.get(5)?,
+            event: r.get(6)?,
+            sha: r.get(7)?,
+            run_number: r.get(8)?,
+            actor_login: r.get(9)?,
+            run_url: r.get(10)?,
+            branch: r.get(11)?,
         })
     })?;
     let mut out = Vec::new();
@@ -67,6 +90,20 @@ pub fn list_recent_completions(
         out.push(row?);
     }
     Ok(out)
+}
+
+/// Delete completion rows older than `before_iso`. Recently Resolved only
+/// looks back 24 h, so anything older is unreferenced; sweeping it keeps the
+/// table bounded across months of polling.
+pub fn prune_completions_older_than(
+    conn: &Connection,
+    before_iso: &str,
+) -> rusqlite::Result<usize> {
+    let n = conn.execute(
+        "DELETE FROM run_completion_events WHERE concluded_at < ?1",
+        [before_iso],
+    )?;
+    Ok(n)
 }
 
 #[cfg(test)]
@@ -82,6 +119,12 @@ mod tests {
             conclusion: Some("success".into()),
             concluded_at: concluded_at.into(),
             pr_number: None,
+            event: None,
+            sha: None,
+            run_number: None,
+            actor_login: None,
+            run_url: None,
+            branch: None,
         }
     }
 
@@ -104,6 +147,41 @@ mod tests {
         let rows = list_recent_completions(&conn, "2026-01-01T00:00:00.000Z").unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].run_id, 2);
+    }
+
+    #[test]
+    fn prune_drops_only_rows_older_than_the_cutoff() {
+        let conn = open_in_memory().unwrap();
+        record_completion(&conn, &ev(1, "2025-12-31T00:00:00.000Z")).unwrap();
+        record_completion(&conn, &ev(2, "2026-01-02T00:00:00.000Z")).unwrap();
+        let n = prune_completions_older_than(&conn, "2026-01-01T00:00:00.000Z").unwrap();
+        assert_eq!(n, 1);
+        let remaining = list_recent_completions(&conn, "1970-01-01T00:00:00.000Z").unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].run_id, 2);
+    }
+
+    #[test]
+    fn snapshot_fields_round_trip() {
+        let conn = open_in_memory().unwrap();
+        let event = RunCompletionEvent {
+            run_id: 5,
+            repo: "foo/bar".into(),
+            workflow_name: "Deploy".into(),
+            conclusion: Some("success".into()),
+            concluded_at: "2026-01-02T00:00:00.000Z".into(),
+            pr_number: Some(7),
+            event: Some("workflow_dispatch".into()),
+            sha: Some("deadbeefcafe".into()),
+            run_number: Some(42),
+            actor_login: Some("evan".into()),
+            run_url: Some("https://github.com/foo/bar/actions/runs/5".into()),
+            branch: Some("main".into()),
+        };
+        record_completion(&conn, &event).unwrap();
+        let rows = list_recent_completions(&conn, "1970-01-01T00:00:00.000Z").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0], event);
     }
 
     #[test]

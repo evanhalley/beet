@@ -116,7 +116,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
     for (const item of payload.reviewRequests) byId.set(item.id, item);
     for (const item of payload.inFlight) byId.set(item.id, item);
     for (const item of standaloneRuns) byId.set(item.id, item);
-    for (const item of recentlyResolved) byId.set(item.id, item);
+    // Recently-Resolved rows are reconstructed from a stored snapshot (the
+    // PR/run has rotated out of the live poll set). If the same id is still
+    // present in a live section, that richer row wins — don't overwrite.
+    for (const item of recentlyResolved) {
+      if (!byId.has(item.id)) byId.set(item.id, item);
+    }
 
     // Dedupe auto-requeue error toasts: a failing (prId, headSha) should
     // only surface once. The set persists across cycles; a new push (new

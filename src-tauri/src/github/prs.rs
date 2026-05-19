@@ -20,7 +20,7 @@ use crate::scoring::score_pull_requests;
 use crate::store::db::now_iso;
 use crate::store::lifecycle::{
     detect_ejection, get_latest_ejection_event, get_latest_lifecycle_row, record_ejection_event,
-    record_lifecycle,
+    record_lifecycle, PrSnapshot,
 };
 use crate::store::requeue::{count_attempts, is_opted_out, record_attempt};
 use crate::store::Db;
@@ -614,6 +614,15 @@ async fn assemble_my_pr_item(
 
     let lifecycle = derive_lifecycle(&pull);
 
+    // Snapshot enough to render the PR's Recently Resolved row long after the
+    // PR has rotated out of the live poll set (#6 follow-up). Author is
+    // optional because some bot PRs omit `pull.user`; the renderer falls back.
+    let snapshot = PrSnapshot {
+        title: Some(pull.title.clone()),
+        author: pull.user.as_ref().map(|u| u.login.clone()),
+        url: Some(pull.html_url.clone()),
+    };
+
     // detect_ejection reads the *previous* recorded state; record_lifecycle then
     // writes the new one. Order matches prs.ts.
     let ejected = {
@@ -622,7 +631,7 @@ async fn assemble_my_pr_item(
             Err(_) => return Ok((None, rate_limit)),
         };
         let ejected = detect_ejection(&conn, &pr_id, lifecycle).unwrap_or(false);
-        let _ = record_lifecycle(&conn, &pr_id, lifecycle);
+        let _ = record_lifecycle(&conn, &pr_id, lifecycle, &snapshot);
         ejected
     };
 
@@ -904,7 +913,7 @@ mod tests {
         // Seed: the PR was previously in the merge queue.
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#2", PrLifecycle::MergeQueue).unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#2", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
         }
 
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
@@ -1006,7 +1015,7 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1032,7 +1041,7 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1066,7 +1075,7 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1093,7 +1102,7 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
             set_opt_out(&conn, "pr:foo/bar#7", "sha-r4", true).unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
@@ -1117,7 +1126,7 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue).unwrap();
+            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {

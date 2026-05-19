@@ -42,10 +42,19 @@ pub struct FetchedRuns {
     pub rate_limit: Option<RateLimitInfo>,
 }
 
+/// One workflow run carrying the `owner/repo` it came from. The runs API
+/// payload doesn't include the repo on each row, and parsing it back out of
+/// `html_url` breaks on GHES; carry it through from the caller instead.
+#[derive(Debug, Clone)]
+pub struct RunWithRepo {
+    pub repo_full_name: String,
+    pub run: WorkflowRun,
+}
+
 /// Aggregate of all repo fetches.
 #[derive(Debug, Default)]
 pub struct FetchRunsOutcome {
-    pub runs: Vec<WorkflowRun>,
+    pub runs: Vec<RunWithRepo>,
     pub rate_limit: Option<RateLimitInfo>,
 }
 
@@ -75,34 +84,53 @@ pub async fn fetch_runs_for_repo(
 
 /// Fan out `fetch_runs_for_repo` across a set of `owner/repo` strings. A
 /// per-repo failure is swallowed — one broken repo shouldn't take the cycle
-/// down (the call is best-effort; PRs are the user's primary signal).
+/// down — but the error is logged so a persistently broken repo
+/// (revoked scope, deleted repo still referenced by an open PR, etc.)
+/// leaves a breadcrumb instead of silently disappearing.
 pub async fn fetch_runs_for_repos(
     client: &GithubClient,
     db: &Db,
     repos: &[String],
     actor: &str,
 ) -> FetchRunsOutcome {
-    let results: Vec<BeetResult<FetchedRuns>> = stream::iter(repos.iter().cloned())
-        .map(|full_name| async move {
-            let Some((owner, repo)) = full_name.split_once('/') else {
-                return Err(crate::error::BeetError::Other(format!(
-                    "bad repo full_name: {full_name}"
-                )));
-            };
-            fetch_runs_for_repo(client, db, owner, repo, actor).await
-        })
-        .buffer_unordered(MAX_REPO_CONCURRENCY)
-        .collect()
-        .await;
+    let results: Vec<(String, BeetResult<FetchedRuns>)> =
+        stream::iter(repos.iter().cloned())
+            .map(|full_name| async move {
+                let res = match full_name.split_once('/') {
+                    Some((owner, repo)) => {
+                        fetch_runs_for_repo(client, db, owner, repo, actor).await
+                    }
+                    None => Err(crate::error::BeetError::Other(format!(
+                        "bad repo full_name: {full_name}"
+                    ))),
+                };
+                (full_name, res)
+            })
+            .buffer_unordered(MAX_REPO_CONCURRENCY)
+            .collect()
+            .await;
 
-    let mut runs = Vec::new();
+    let mut runs: Vec<RunWithRepo> = Vec::new();
     let mut rate_limit = None;
-    for r in results {
-        let Ok(fetched) = r else { continue };
-        if fetched.rate_limit.is_some() {
-            rate_limit = fetched.rate_limit;
+    for (repo_full_name, r) in results {
+        match r {
+            Ok(fetched) => {
+                if fetched.rate_limit.is_some() {
+                    rate_limit = fetched.rate_limit;
+                }
+                runs.extend(fetched.runs.into_iter().map(|run| RunWithRepo {
+                    repo_full_name: repo_full_name.clone(),
+                    run,
+                }));
+            }
+            Err(e) => {
+                // No tracing infra in V1 yet; eprintln is enough to surface
+                // a persistently broken repo in `tauri dev` output.
+                eprintln!(
+                    "[beet] runs fetch failed for {repo_full_name}: {e}"
+                );
+            }
         }
-        runs.extend(fetched.runs);
     }
     FetchRunsOutcome { runs, rate_limit }
 }
@@ -159,6 +187,18 @@ pub async fn fetch_run_jobs(
     Ok(res.body.jobs)
 }
 
+/// Validate an `owner` / `repo` path segment before interpolating it into a
+/// GitHub API URL. GitHub itself only allows `[A-Za-z0-9._-]` in these
+/// segments; rejecting anything else here keeps a misbehaving renderer or
+/// malicious markdown-injected `invoke` from sneaking `..` / slashes into the
+/// path and reaching unrelated endpoints under the user's PAT.
+fn is_valid_path_segment(s: &str) -> bool {
+    !s.is_empty()
+        && s.len() <= 100
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-')
+}
+
 /// Tauri command — exposes `fetch_run_jobs` to the frontend with a simple
 /// `Result<Vec<WorkflowJobSummary>, String>` shape. Reads the PAT each call
 /// (the poll loop's in-memory cache isn't shared here); commands are
@@ -170,6 +210,12 @@ pub async fn fetch_run_jobs_command(
     repo: String,
     run_id: i64,
 ) -> Result<Vec<WorkflowJobSummary>, String> {
+    if !is_valid_path_segment(&owner) || !is_valid_path_segment(&repo) {
+        return Err("invalid owner or repo".to_string());
+    }
+    if run_id <= 0 {
+        return Err("invalid run id".to_string());
+    }
     let token = read_token()
         .map_err(|e| format!("keyring error: {e}"))?
         .ok_or_else(|| "no PAT configured".to_string())?;
@@ -238,15 +284,13 @@ pub struct CollapseOutcome {
 /// `(owner, repo, number)` for every PR currently in `review_requests` ∪
 /// `in_flight`. A run matches a tracked PR when its `pull_requests[]`
 /// references the same `(repo, number)`; ties (multiple matches) attach to
-/// every matching PR.
-pub fn collapse_runs<I>(
-    runs: I,
+/// every matching PR. `actor_fallback` is the authenticated login, used when
+/// a run payload doesn't include an actor.
+pub fn collapse_runs(
+    runs: Vec<RunWithRepo>,
     tracked_prs: &HashMap<String, (String, String, i64)>,
-) -> CollapseOutcome
-where
-    I: IntoIterator<Item = (String, WorkflowRun, String)>,
-    // (repo_full_name, run, actor_fallback)
-{
+    actor_fallback: &str,
+) -> CollapseOutcome {
     // Reverse index by (owner/repo, number) → pr_id.
     let by_repo_number: HashMap<(String, i64), String> = tracked_prs
         .iter()
@@ -258,7 +302,11 @@ where
     let mut per_pr_seen_at: HashMap<String, HashMap<String, String>> = HashMap::new();
     let mut standalone: Vec<ActionableItem> = Vec::new();
 
-    for (repo_full_name, run, actor) in runs {
+    for RunWithRepo {
+        repo_full_name,
+        run,
+    } in runs
+    {
         // Find every tracked PR this run claims.
         let matched: Vec<&String> = run
             .pull_requests
@@ -269,7 +317,7 @@ where
             .collect();
 
         if matched.is_empty() {
-            standalone.push(to_actionable_run(&run, &repo_full_name, &actor));
+            standalone.push(to_actionable_run(&run, &repo_full_name, actor_fallback));
             continue;
         }
 
@@ -373,15 +421,21 @@ pub fn apply_standalone_allowlist(
 }
 
 /// Persist a `(run_id) → terminal status` row for every completed run we
-/// observed. Called after collapse so we record runs we collapsed too (a run
-/// that landed on a tracked PR can still appear in Recently Resolved once the
-/// PR closes).
-pub fn record_completed_runs(
-    db: &Db,
-    runs: &[(String, WorkflowRun, Option<i64>)],
-) {
+/// observed, snapshotting the bits we need to render the Recently Resolved
+/// row faithfully after the run is no longer in the live poll set
+/// (event/sha/run_number/actor_login/run_url/branch). Called after collapse
+/// so we record runs we collapsed too — a run that landed on a tracked PR
+/// can still appear in Recently Resolved once the PR closes.
+///
+/// Note: `concluded_at = run.updated_at`. The GitHub Actions runs endpoint
+/// doesn't expose a dedicated terminal timestamp; once `status == completed`,
+/// `updated_at` is the de-facto conclusion time. A re-run resets `status`
+/// back to `queued`/`in_progress`, so we won't accidentally record a stale
+/// timestamp for a re-run that's still in flight.
+pub fn record_completed_runs(db: &Db, runs: &[(RunWithRepo, Option<i64>)]) {
     let Ok(conn) = db.lock() else { return };
-    for (repo_full_name, run, pr_number) in runs {
+    for (with_repo, pr_number) in runs {
+        let run = &with_repo.run;
         if run.status != "completed" {
             continue;
         }
@@ -389,11 +443,17 @@ pub fn record_completed_runs(
             &conn,
             &RunCompletionEvent {
                 run_id: run.id,
-                repo: repo_full_name.clone(),
+                repo: with_repo.repo_full_name.clone(),
                 workflow_name: display_workflow_name(run),
                 conclusion: run.conclusion.clone(),
                 concluded_at: run.updated_at.clone(),
                 pr_number: *pr_number,
+                event: Some(run.event.clone()),
+                sha: Some(run.head_sha.clone()),
+                run_number: Some(run.run_number),
+                actor_login: run.actor.as_ref().and_then(|a| a.login.clone()),
+                run_url: Some(run.html_url.clone()),
+                branch: run.head_branch.clone(),
             },
         );
     }
@@ -451,34 +511,31 @@ pub fn build_recently_resolved(
 
 fn completion_to_item(ev: RunCompletionEvent) -> ActionableItem {
     let id = format!("run:{}#{}", ev.repo, ev.run_id);
-    // We don't have the original WorkflowRun by the time we replay a row from
-    // SQLite — synthesize a minimal `ActionableItemRun` from what we recorded.
+    let fallback_url = format!(
+        "https://github.com/{}/actions/runs/{}",
+        ev.repo, ev.run_id
+    );
+    let run_url = ev.run_url.clone().unwrap_or_else(|| fallback_url.clone());
     ActionableItem {
         id,
         kind: ActionableKind::StandaloneRun,
         title: ev.workflow_name.clone(),
-        url: format!(
-            "https://github.com/{}/actions/runs/{}",
-            ev.repo, ev.run_id
-        ),
-        repo_full_name: ev.repo.clone(),
+        url: run_url.clone(),
+        repo_full_name: ev.repo,
         updated_at: ev.concluded_at.clone(),
         unread: false,
         dismissed_until_fingerprint: None,
         pr: None,
         run: Some(ActionableItemRun {
             workflow_name: ev.workflow_name,
-            event: String::new(),
+            event: ev.event.unwrap_or_default(),
             status: "completed".to_string(),
             conclusion: ev.conclusion,
-            branch: None,
-            sha: String::new(),
-            run_number: 0,
-            actor_login: String::new(),
-            run_url: format!(
-                "https://github.com/{}/actions/runs/{}",
-                ev.repo, ev.run_id
-            ),
+            branch: ev.branch,
+            sha: ev.sha.unwrap_or_default(),
+            run_number: ev.run_number.unwrap_or(0),
+            actor_login: ev.actor_login.unwrap_or_default(),
+            run_url,
             started_at: None,
             completed_at: Some(ev.concluded_at),
         }),
@@ -540,16 +597,22 @@ mod tests {
         )
     }
 
+    fn with_repo(repo: &str, run: WorkflowRun) -> RunWithRepo {
+        RunWithRepo {
+            repo_full_name: repo.to_string(),
+            run,
+        }
+    }
+
     #[test]
     fn collapse_attaches_runs_to_tracked_prs_and_drops_them_from_standalone() {
         let tracked: HashMap<_, _> =
             [tracked("pr:foo/bar#1", "foo", "bar", 1)].into_iter().collect();
-        let runs = vec![(
-            "foo/bar".to_string(),
+        let runs = vec![with_repo(
+            "foo/bar",
             run(10, &[1], "completed", Some("success"), "2026-01-01T01:00:00.000Z", "CI"),
-            "evan".to_string(),
         )];
-        let out = collapse_runs(runs, &tracked);
+        let out = collapse_runs(runs, &tracked, "evan");
         assert_eq!(out.standalone.len(), 0);
         let attached = out.attached.get("pr:foo/bar#1").unwrap();
         assert_eq!(attached.len(), 1);
@@ -561,23 +624,20 @@ mod tests {
         let tracked: HashMap<_, _> =
             [tracked("pr:foo/bar#1", "foo", "bar", 1)].into_iter().collect();
         let runs = vec![
-            (
-                "foo/bar".to_string(),
+            with_repo(
+                "foo/bar",
                 run(10, &[1], "completed", Some("failure"), "2026-01-01T00:00:00.000Z", "CI"),
-                "evan".to_string(),
             ),
-            (
-                "foo/bar".to_string(),
+            with_repo(
+                "foo/bar",
                 run(11, &[1], "completed", Some("success"), "2026-01-01T02:00:00.000Z", "CI"),
-                "evan".to_string(),
             ),
-            (
-                "foo/bar".to_string(),
+            with_repo(
+                "foo/bar",
                 run(12, &[1], "in_progress", None, "2026-01-01T03:00:00.000Z", "Deploy"),
-                "evan".to_string(),
             ),
         ];
-        let out = collapse_runs(runs, &tracked);
+        let out = collapse_runs(runs, &tracked, "evan");
         let attached = out.attached.get("pr:foo/bar#1").unwrap();
         assert_eq!(attached.len(), 2);
         let ci = attached.iter().find(|r| r.workflow_name == "CI").unwrap();
@@ -591,18 +651,16 @@ mod tests {
     fn collapse_surfaces_orphan_and_push_event_runs_as_standalone() {
         let tracked: HashMap<_, _> = HashMap::new();
         let runs = vec![
-            (
-                "foo/bar".to_string(),
+            with_repo(
+                "foo/bar",
                 run(20, &[], "completed", Some("success"), "2026-01-01T00:00:00.000Z", "Deploy"),
-                "evan".to_string(),
             ),
-            (
-                "foo/bar".to_string(),
+            with_repo(
+                "foo/bar",
                 run(21, &[999], "in_progress", None, "2026-01-01T00:01:00.000Z", "CI"),
-                "evan".to_string(),
             ),
         ];
-        let out = collapse_runs(runs, &tracked);
+        let out = collapse_runs(runs, &tracked, "evan");
         assert_eq!(out.attached.len(), 0);
         assert_eq!(out.standalone.len(), 2);
         for item in &out.standalone {
@@ -619,12 +677,11 @@ mod tests {
         // claims pull_requests[].number == 1.
         let tracked: HashMap<_, _> =
             [tracked("pr:foo/bar#1", "foo", "bar", 1)].into_iter().collect();
-        let runs = vec![(
-            "baz/qux".to_string(),
+        let runs = vec![with_repo(
+            "baz/qux",
             run(30, &[1], "completed", Some("success"), "2026-01-01T00:00:00.000Z", "CI"),
-            "evan".to_string(),
         )];
-        let out = collapse_runs(runs, &tracked);
+        let out = collapse_runs(runs, &tracked, "evan");
         assert!(out.attached.is_empty());
         assert_eq!(out.standalone.len(), 1);
         assert_eq!(out.standalone[0].repo_full_name, "baz/qux");

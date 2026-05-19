@@ -82,7 +82,12 @@ function AllowlistField() {
     const parsed = parseAllowlist(text);
     await setStandaloneRunsAllowlist(parsed.allowlist);
     setSettings({ standaloneRunsAllowlist: parsed.allowlist });
-    setDraft(null);
+    // If there are invalid lines, keep the user's draft in the textarea so
+    // they can see and fix what was rejected. Only collapse back to the
+    // canonical formatted view when everything parsed cleanly.
+    if (parsed.invalid.length === 0) {
+      setDraft(null);
+    }
   };
 
   return (

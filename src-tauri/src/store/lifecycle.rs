@@ -15,6 +15,17 @@ pub struct LifecycleObservation {
     pub observed_at: String,
 }
 
+/// Snapshot of the bits of a PR we need to render its Recently Resolved row
+/// after the PR is no longer in the live poll set. Captured at the moment a
+/// lifecycle transition is recorded; nullable end-to-end so legacy rows
+/// from before migration v6 still upgrade in place.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PrSnapshot {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub url: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EjectionEvent {
     pub observed_at: String,
@@ -54,18 +65,31 @@ pub fn get_latest_lifecycle(
     Ok(get_latest_lifecycle_row(conn, pr_id)?.map(|row| row.lifecycle))
 }
 
-/// Insert a lifecycle row only when the state actually changed.
+/// Insert a lifecycle row only when the state actually changed. `snapshot`
+/// captures the bits we need to render the Recently Resolved row long after
+/// the PR has rotated out of the live poll set; pass `&PrSnapshot::default()`
+/// when those fields aren't available at the call site.
 pub fn record_lifecycle(
     conn: &Connection,
     pr_id: &str,
     lifecycle: PrLifecycle,
+    snapshot: &PrSnapshot,
 ) -> rusqlite::Result<()> {
     if get_latest_lifecycle(conn, pr_id)? == Some(lifecycle) {
         return Ok(());
     }
     conn.execute(
-        "INSERT INTO pr_lifecycle_history (pr_id, lifecycle, observed_at) VALUES (?1, ?2, ?3)",
-        (pr_id, lifecycle.as_db_str(), now_iso()),
+        "INSERT INTO pr_lifecycle_history
+            (pr_id, lifecycle, observed_at, title, author, url)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        (
+            pr_id,
+            lifecycle.as_db_str(),
+            now_iso(),
+            snapshot.title.as_deref(),
+            snapshot.author.as_deref(),
+            snapshot.url.as_deref(),
+        ),
     )?;
     Ok(())
 }
@@ -98,30 +122,62 @@ pub fn record_ejection_event(
     Ok(())
 }
 
-/// PR ids whose latest recorded lifecycle is `merged` or `closed`, observed
-/// since `since_iso`. Powers the PR half of Recently Resolved (#6).
+/// One row returned by `list_recently_resolved_pr_ids`: a resolved PR plus
+/// the snapshot captured at the moment it transitioned, so the PR half of
+/// Recently Resolved renders meaningfully even after the PR has dropped out
+/// of the live poll set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedPrRow {
+    pub pr_id: String,
+    pub lifecycle: PrLifecycle,
+    pub resolved_at: String,
+    pub snapshot: PrSnapshot,
+}
+
+/// PRs whose **latest** recorded lifecycle is `merged` or `closed`, with that
+/// terminal observation falling inside `since_iso`. Critically: a PR that
+/// merged a week ago and was then reopened today must NOT surface here — the
+/// inner subquery picks the actual latest lifecycle (regardless of state),
+/// and the outer filter then requires that latest row to be terminal.
 pub fn list_recently_resolved_pr_ids(
     conn: &Connection,
     since_iso: &str,
-) -> rusqlite::Result<Vec<(String, PrLifecycle, String)>> {
+) -> rusqlite::Result<Vec<ResolvedPrRow>> {
     let mut stmt = conn.prepare(
-        "SELECT pr_id, lifecycle, MAX(observed_at) AS resolved_at
-         FROM pr_lifecycle_history
-         WHERE lifecycle IN ('merged', 'closed') AND observed_at >= ?1
-         GROUP BY pr_id
-         ORDER BY resolved_at DESC",
+        "SELECT h.pr_id, h.lifecycle, h.observed_at, h.title, h.author, h.url
+         FROM pr_lifecycle_history h
+         JOIN (
+           SELECT pr_id, MAX(observed_at) AS latest_at
+           FROM pr_lifecycle_history
+           GROUP BY pr_id
+         ) m ON m.pr_id = h.pr_id AND m.latest_at = h.observed_at
+         WHERE h.lifecycle IN ('merged', 'closed')
+           AND h.observed_at >= ?1
+         ORDER BY h.observed_at DESC",
     )?;
     let rows = stmt.query_map([since_iso], |r| {
         let pr_id: String = r.get(0)?;
         let lifecycle: String = r.get(1)?;
         let observed_at: String = r.get(2)?;
-        Ok((pr_id, lifecycle, observed_at))
+        let title: Option<String> = r.get(3)?;
+        let author: Option<String> = r.get(4)?;
+        let url: Option<String> = r.get(5)?;
+        Ok((pr_id, lifecycle, observed_at, title, author, url))
     })?;
     let mut out = Vec::new();
     for row in rows {
-        let (pr_id, lifecycle, observed_at) = row?;
+        let (pr_id, lifecycle, observed_at, title, author, url) = row?;
         if let Some(lc) = PrLifecycle::from_db_str(&lifecycle) {
-            out.push((pr_id, lc, observed_at));
+            out.push(ResolvedPrRow {
+                pr_id,
+                lifecycle: lc,
+                resolved_at: observed_at,
+                snapshot: PrSnapshot {
+                    title,
+                    author,
+                    url,
+                },
+            });
         }
     }
     Ok(out)
@@ -167,10 +223,10 @@ mod tests {
         let conn = open_in_memory().unwrap();
         // `observed_at` (millisecond precision) is part of the PK; real
         // transitions are minutes apart, so space the test inserts out.
-        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::Open).unwrap();
-        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::Open).unwrap();
+        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::Open, &PrSnapshot::default()).unwrap();
+        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::Open, &PrSnapshot::default()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
-        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::InReview).unwrap();
+        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::InReview, &PrSnapshot::default()).unwrap();
         let count: i64 = conn
             .query_row(
                 "SELECT count(*) FROM pr_lifecycle_history WHERE pr_id = 'pr:foo/bar#1'",
@@ -189,7 +245,7 @@ mod tests {
     fn detect_ejection_fires_only_on_queue_exit_not_into_merged() {
         let conn = open_in_memory().unwrap();
         let pr = "pr:foo/bar#2";
-        record_lifecycle(&conn, pr, PrLifecycle::MergeQueue).unwrap();
+        record_lifecycle(&conn, pr, PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
         assert!(detect_ejection(&conn, pr, PrLifecycle::Open).unwrap());
         assert!(detect_ejection(&conn, pr, PrLifecycle::InReview).unwrap());
         assert!(!detect_ejection(&conn, pr, PrLifecycle::Merged).unwrap());
@@ -200,7 +256,7 @@ mod tests {
     fn detect_ejection_false_when_not_previously_in_queue() {
         let conn = open_in_memory().unwrap();
         let pr = "pr:foo/bar#3";
-        record_lifecycle(&conn, pr, PrLifecycle::Open).unwrap();
+        record_lifecycle(&conn, pr, PrLifecycle::Open, &PrSnapshot::default()).unwrap();
         assert!(!detect_ejection(&conn, pr, PrLifecycle::Closed).unwrap());
     }
 
@@ -252,7 +308,45 @@ mod tests {
         let rows =
             list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].0, "pr:foo/bar#1");
-        assert_eq!(rows[0].1, PrLifecycle::Merged);
+        assert_eq!(rows[0].pr_id, "pr:foo/bar#1");
+        assert_eq!(rows[0].lifecycle, PrLifecycle::Merged);
+    }
+
+    #[test]
+    fn list_recently_resolved_ignores_reopened_prs() {
+        // Regression: a PR merged inside the window then reopened to "open"
+        // must NOT surface. The fix joins against the latest observation per
+        // PR (regardless of lifecycle), then filters on terminal state.
+        let conn = open_in_memory().unwrap();
+        conn.execute(
+            "INSERT INTO pr_lifecycle_history (pr_id, lifecycle, observed_at)
+             VALUES ('pr:foo/bar#9', 'merged', '2026-05-18T10:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO pr_lifecycle_history (pr_id, lifecycle, observed_at)
+             VALUES ('pr:foo/bar#9', 'open', '2026-05-18T11:00:00.000Z')",
+            [],
+        )
+        .unwrap();
+        let rows =
+            list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
+        assert!(rows.is_empty(), "reopened PRs must not surface as resolved");
+    }
+
+    #[test]
+    fn record_lifecycle_persists_snapshot_columns() {
+        let conn = open_in_memory().unwrap();
+        let snap = PrSnapshot {
+            title: Some("Fix the thing".to_string()),
+            author: Some("rina".to_string()),
+            url: Some("https://github.com/foo/bar/pull/7".to_string()),
+        };
+        record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::Merged, &snap).unwrap();
+        let rows =
+            list_recently_resolved_pr_ids(&conn, "1970-01-01T00:00:00.000Z").unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].snapshot, snap);
     }
 }
