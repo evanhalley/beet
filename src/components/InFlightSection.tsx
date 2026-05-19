@@ -4,9 +4,10 @@ import { useState } from "react";
 import { ChevronDown, Rocket } from "lucide-react";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
+import { SkeletonRows } from "./SkeletonRow";
 
 export function InFlightSection() {
-  const { inFlight: items } = useActionableItems();
+  const { inFlight: items, isLoading } = useActionableItems();
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...items].sort((a, b) =>
@@ -72,7 +73,9 @@ export function InFlightSection() {
       </header>
       {!collapsed && (
         <div id="in-flight-list">
-          {sorted.length === 0 ? (
+          {isLoading && sorted.length === 0 ? (
+            <SkeletonRows count={2} />
+          ) : sorted.length === 0 ? (
             <p
               style={{
                 padding: "10px 16px 14px",

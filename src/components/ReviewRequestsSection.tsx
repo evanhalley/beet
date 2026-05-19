@@ -9,9 +9,10 @@ import {
 } from "@/lib/store";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
+import { SkeletonRows } from "./SkeletonRow";
 
 export function ReviewRequestsSection() {
-  const { reviewRequests: items } = useActionableItems();
+  const { reviewRequests: items, isLoading } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
@@ -127,7 +128,9 @@ export function ReviewRequestsSection() {
       </header>
       {!collapsed && (
         <div id="review-requests-list">
-          {visible.length === 0 ? (
+          {isLoading && visible.length === 0 ? (
+            <SkeletonRows count={3} />
+          ) : visible.length === 0 ? (
             <p
               style={{
                 padding: "10px 16px 14px",

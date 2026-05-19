@@ -156,3 +156,14 @@ body {
     opacity: 0.3;
   }
 }
+
+/* Skeleton-row shimmer for the cold-start "we're loading" state. */
+@keyframes beet-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}

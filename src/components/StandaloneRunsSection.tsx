@@ -4,9 +4,10 @@ import { useState } from "react";
 import { ChevronDown, Cog } from "lucide-react";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { RunRow } from "./RunRow";
+import { SkeletonRows } from "./SkeletonRow";
 
 export function StandaloneRunsSection() {
-  const { standaloneRuns: items } = useActionableItems();
+  const { standaloneRuns: items, isLoading } = useActionableItems();
   const [collapsed, setCollapsed] = useState(false);
 
   // Newest first by completion / update time. Stable sort preserves the order
@@ -74,7 +75,9 @@ export function StandaloneRunsSection() {
       </header>
       {!collapsed && (
         <div id="standalone-runs-list">
-          {sorted.length === 0 ? (
+          {isLoading && sorted.length === 0 ? (
+            <SkeletonRows count={2} />
+          ) : sorted.length === 0 ? (
             <p
               style={{
                 padding: "10px 16px 14px",

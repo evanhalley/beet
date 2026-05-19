@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type MouseEvent } from "react";
-import { Check, ExternalLink, Link2 } from "lucide-react";
+import { Check, ExternalLink, Link2, RefreshCw } from "lucide-react";
 import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -16,6 +16,7 @@ import { copyToClipboard } from "@/lib/copyToClipboard";
 import dayjs from "@/lib/dayjs";
 import { durationSeconds, formatDuration } from "@/lib/duration";
 import { openInBrowser } from "@/lib/openInBrowser";
+import { useAppStore } from "@/lib/store";
 import type {
   ActionableItem,
   AssociatedRun,
@@ -738,6 +739,11 @@ function PlaceholderBlock({ title, hint }: { title: string; hint: string }) {
 export function DetailPane({ item }: DetailPaneProps) {
   const pr = item?.pr ?? null;
   const headSha = pr?.mergeQueue?.headSha ?? null;
+  // Cold-start signal — the Rust poll loop hasn't produced its first result
+  // yet. Read directly off the store so we don't have to thread it through
+  // MainWindowShell just for the empty state.
+  const pollState = useAppStore((s) => s.pollState);
+  const isLoading = pollState === "idle";
   // Only authored PRs are ever auto-requeued, so the toggle/badge are only
   // meaningful in that case — for review-requests, the headSha will usually
   // be absent anyway and the hook returns the empty state. Called above the
@@ -751,16 +757,30 @@ export function DetailPane({ item }: DetailPaneProps) {
     return (
       <div
         aria-label="Detail"
+        role={isLoading ? "status" : undefined}
+        aria-live={isLoading ? "polite" : undefined}
         style={{
           background: "var(--color-bg-elev)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
+          gap: 8,
           color: "var(--color-text-faint)",
           fontSize: 12,
         }}
       >
-        Select an item.
+        {isLoading ? (
+          <>
+            <RefreshCw
+              size={12}
+              aria-hidden
+              style={{ animation: "beet-spin .9s linear infinite" }}
+            />
+            <span>Loading…</span>
+          </>
+        ) : (
+          "Select an item."
+        )}
       </div>
     );
   }

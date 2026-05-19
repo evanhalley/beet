@@ -36,8 +36,17 @@ beforeEach(() => {
 
 describe("StandaloneRunsSection", () => {
   test("renders the empty-state line when no runs are present", () => {
+    // Cold-start renders skeleton rows; this empty-state copy only shows
+    // once the poll loop has reported back at least once.
+    useAppStore.setState({ pollState: "ok" });
     render(<StandaloneRunsSection />);
     expect(screen.getByText(/no standalone workflow runs/i)).toBeInTheDocument();
+  });
+
+  test("renders skeleton rows during cold start", () => {
+    render(<StandaloneRunsSection />);
+    expect(screen.queryByText(/no standalone workflow runs/i)).toBeNull();
+    expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
   });
 
   test("renders a relative timestamp on each row with the ISO time as a tooltip", () => {

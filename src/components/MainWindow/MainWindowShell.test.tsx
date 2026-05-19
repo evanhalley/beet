@@ -94,6 +94,9 @@ describe("MainWindowShell", () => {
   });
 
   test("renders 'Select an item.' when there are no items", () => {
+    // After a completed poll cycle returned nothing — distinct from cold
+    // start, which renders a Loading indicator instead.
+    useAppStore.setState({ pollState: "ok" });
     renderShell();
     expect(screen.getByText("Select an item.")).toBeInTheDocument();
   });
