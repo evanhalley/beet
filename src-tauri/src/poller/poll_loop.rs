@@ -30,7 +30,7 @@ use crate::store::Db;
 use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Runtime};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
@@ -110,17 +110,38 @@ pub fn refresh_now(handle: tauri::State<'_, PollHandle>) -> Result<(), String> {
         .map_err(|e| format!("poll loop is not running: {e}"))
 }
 
-/// Pause or resume polling — backs the TitleBar pause button. While paused the
-/// loop performs no cycles until resumed.
+/// Pause or resume polling — backs the TitleBar pause button and the tray
+/// popover toggle. While paused the loop performs no cycles until resumed.
+///
+/// This is the single source of truth for pause state: it updates the poll
+/// loop, the tray menu label, and broadcasts `tray:toggle-pause` so every
+/// window's Zustand store stays in sync.
 #[tauri::command]
 pub fn set_poll_paused(
     paused: bool,
     handle: tauri::State<'_, PollHandle>,
+    app: tauri::AppHandle,
 ) -> Result<(), String> {
     handle
         .paused_tx
         .send(paused)
-        .map_err(|e| format!("poll loop is not running: {e}"))
+        .map_err(|e| format!("poll loop is not running: {e}"))?;
+
+    // Keep the tray menu item text in sync.
+    if let Some(tray_state) = app.try_state::<crate::tray::TrayState>() {
+        let label = if paused {
+            "Resume polling"
+        } else {
+            "Pause polling"
+        };
+        let _ = tray_state.pause_item.set_text(label);
+    }
+
+    // Broadcast to all windows so their Zustand stores update.
+    use tauri::Emitter;
+    let _ = app.emit("tray:toggle-pause", paused);
+
+    Ok(())
 }
 
 /// Tell the poll loop the keychain PAT changed (rotated or cleared) so it

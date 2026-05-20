@@ -343,7 +343,7 @@ function ChecksBlock({
         >
           {(runs ?? []).map((r) => (
             <div
-              key={`check-${r.name}`}
+              key={`check-${r.name}-${r.detailsUrl ?? r.status ?? r.conclusion ?? ""}`}
               style={{
                 display: "flex",
                 alignItems: "center",

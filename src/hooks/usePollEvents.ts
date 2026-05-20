@@ -11,7 +11,11 @@ import {
 
 // Subscribes the frontend to the Rust poll loop's event stream and funnels both
 // channels into the Zustand store. Mount once, near the app root.
-export function usePollEvents(): void {
+//
+// Set `pokeOnMount` to false in secondary windows (e.g. the tray popover) to
+// avoid triggering a duplicate immediate poll cycle — the main window already
+// pokes on first mount.
+export function usePollEvents({ pokeOnMount = true } = {}): void {
   const setPollResult = useAppStore((s) => s.setPollResult);
   const setPollStatus = useAppStore((s) => s.setPollStatus);
 
@@ -28,15 +32,17 @@ export function usePollEvents(): void {
     // aren't replayed). After both listeners are registered, poke the loop
     // for an immediate poll so the UI populates on the first paint instead
     // of waiting out the interval.
-    Promise.all([resultPromise, statusPromise]).then(() => {
-      invoke("refresh_now").catch(() => {
-        // No Tauri host (tests) — ignore.
+    if (pokeOnMount) {
+      Promise.all([resultPromise, statusPromise]).then(() => {
+        invoke("refresh_now").catch(() => {
+          // No Tauri host (tests) — ignore.
+        });
       });
-    });
+    }
 
     return () => {
       resultPromise.then((unlisten) => unlisten());
       statusPromise.then((unlisten) => unlisten());
     };
-  }, [setPollResult, setPollStatus]);
+  }, [setPollResult, setPollStatus, pokeOnMount]);
 }

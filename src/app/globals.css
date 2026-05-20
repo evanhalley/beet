@@ -147,6 +147,14 @@ body {
   }
 }
 
+/* Hide scrollbars in the tray popover while keeping scroll functional. */
+.tray-scroll::-webkit-scrollbar {
+  display: none;
+}
+.tray-scroll {
+  scrollbar-width: none;
+}
+
 @keyframes beet-blink {
   0%,
   100% {
