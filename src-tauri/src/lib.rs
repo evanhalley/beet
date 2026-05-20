@@ -59,16 +59,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
-                if window.label() == "main" {
-                    api.prevent_close();
-                    let _ = window.hide();
-                }
+            tauri::WindowEvent::CloseRequested { api, .. }
+                if window.label() == "main" =>
+            {
+                api.prevent_close();
+                let _ = window.hide();
             }
-            tauri::WindowEvent::Focused(false) => {
-                if window.label() == "tray" {
-                    let _ = window.hide();
-                }
+            tauri::WindowEvent::Focused(false)
+                if window.label() == "tray" =>
+            {
+                let _ = window.hide();
             }
             _ => {}
         })
