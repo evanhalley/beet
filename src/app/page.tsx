@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { usePollEvents } from "@/hooks/usePollEvents";
 import { useTrayBadge } from "@/hooks/useTrayBadge";
 import { useTrayCommands } from "@/hooks/useTrayCommands";
+import { useThemeSync } from "@/hooks/useThemeSync";
 import { MissingTokenBanner, type MissingTokenReason } from "@/components/MissingTokenBanner";
 import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 import { MainWindowShell } from "@/components/MainWindow/MainWindowShell";
@@ -20,6 +21,7 @@ export default function Page() {
   usePollEvents();
   useTrayBadge();
   useTrayCommands();
+  useThemeSync();
   const uiError = useAppStore((s) => s.uiError);
   const setUiError = useAppStore((s) => s.setUiError);
   const pollError = useAppStore((s) => s.pollError);

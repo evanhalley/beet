@@ -341,9 +341,9 @@ function ChecksBlock({
             gap: 4,
           }}
         >
-          {(runs ?? []).map((r, i) => (
+          {(runs ?? []).map((r) => (
             <div
-              key={`check-${r.name}-${i}`}
+              key={`check-${r.name}-${r.detailsUrl ?? r.status ?? r.conclusion ?? ""}`}
               style={{
                 display: "flex",
                 alignItems: "center",

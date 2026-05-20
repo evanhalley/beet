@@ -15,7 +15,10 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
-                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                {
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                    tray::refresh_dock_icon_pub();
+                }
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
@@ -37,6 +40,7 @@ pub fn run() {
             store::requeue::set_requeue_opt_out,
             github::runs::fetch_run_jobs_command,
             tray::set_badge,
+            tray::open_main_window,
         ])
         .setup(|app| {
             // Open the SQLite DB and start the background poll loop before

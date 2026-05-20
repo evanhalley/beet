@@ -63,7 +63,6 @@ export function TrayPopover() {
   const standaloneRuns = useAppStore((s) => s.standaloneRuns);
   const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const paused = useAppStore((s) => s.paused);
-  const setPaused = useAppStore((s) => s.setPaused);
   const showAll = useAppStore(selectShowAllReviews);
 
   const [collapsed, setCollapsed] = useState<SectionCollapse>({
@@ -82,7 +81,7 @@ export function TrayPopover() {
     .filter((it) => isReviewRequestVisible(it, showAll));
 
   const totalUnread =
-    reviewRequests.filter((r) => r.unread).length;
+    visibleReviews.filter((r) => r.unread).length;
 
   const beetStatus = paused ? "paused" as const : totalUnread > 0 ? "alert" as const : "ok" as const;
 
@@ -91,20 +90,21 @@ export function TrayPopover() {
   };
 
   const onTogglePause = () => {
+    // Route through the centralized Rust command which updates the poll loop,
+    // tray menu label, and broadcasts tray:toggle-pause to all windows.
     const next = !paused;
-    setPaused(next);
     void invoke("set_poll_paused", { paused: next }).catch(() => {});
   };
 
-  const onOpenWindow = async () => {
+  const onOpenWindow = () => {
+    void invoke("open_main_window").catch(() => {});
+  };
+
+  const onOpenSettings = async () => {
+    void invoke("open_main_window").catch(() => {});
     try {
-      const { WebviewWindow } = await import("@tauri-apps/api/webviewWindow");
-      const main = await WebviewWindow.getByLabel("main");
-      if (main) {
-        await main.show();
-        await main.unminimize();
-        await main.setFocus();
-      }
+      const { emit } = await import("@tauri-apps/api/event");
+      await emit("tray:open-settings");
     } catch {
       // No Tauri host
     }
@@ -113,8 +113,8 @@ export function TrayPopover() {
   return (
     <div
       style={{
-        width: 360,
-        height: 480,
+        width: "100%",
+        height: "100%",
         background: "var(--color-bg)",
         borderRadius: 12,
         boxShadow: "var(--shadow-lg, 0 18px 48px rgba(0,0,0,.18)), 0 0 0 0.5px var(--color-border-strong, var(--color-border))",
@@ -192,7 +192,7 @@ export function TrayPopover() {
       </div>
 
       {/* Scroll body */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      <div className="tray-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
         {/* Needs Action — placeholder until #8 */}
         <TraySection
           icon="🔴"
@@ -329,9 +329,7 @@ export function TrayPopover() {
         <span style={{ flex: 1 }} />
         <button
           type="button"
-          onClick={() => {
-            onOpenWindow();
-          }}
+          onClick={onOpenSettings}
           title="Settings"
           aria-label="Settings"
           style={footBtn}
@@ -449,7 +447,10 @@ function TrayRowWrapper({
       tabIndex={0}
       onClick={() => openInBrowser(item.url)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") openInBrowser(item.url);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openInBrowser(item.url);
+        }
       }}
       style={rowBase}
     >
