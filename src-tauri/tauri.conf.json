@@ -22,6 +22,18 @@
         "fullscreen": false,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true
+      },
+      {
+        "label": "tray",
+        "title": "Beet Tray",
+        "url": "/tray",
+        "width": 360,
+        "height": 480,
+        "decorations": false,
+        "transparent": true,
+        "resizable": false,
+        "skipTaskbar": true,
+        "visible": false
       }
     ],
     "security": {

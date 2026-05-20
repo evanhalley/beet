@@ -1,8 +1,4 @@
-use tauri::{
-    menu::{MenuBuilder, MenuItemBuilder},
-    tray::TrayIconBuilder,
-    Manager,
-};
+use tauri::Manager;
 
 mod error;
 mod github;
@@ -11,6 +7,7 @@ mod scoring;
 mod secure_token;
 mod store;
 mod tasks;
+mod tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -37,44 +34,11 @@ pub fn run() {
             store::requeue::get_requeue_opt_out,
             store::requeue::set_requeue_opt_out,
             github::runs::fetch_run_jobs_command,
+            tray::set_badge,
         ])
         .setup(|app| {
-            let open = MenuItemBuilder::with_id("open", "Open Beet").build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-            let menu = MenuBuilder::new(app).items(&[&open, &quit]).build()?;
-
-            let icon = app
-                .default_window_icon()
-                .ok_or("default window icon missing")?
-                .clone();
-
-            let _tray = TrayIconBuilder::with_id("main")
-                .icon(icon)
-                .menu(&menu)
-                .on_menu_event(|app, event| match event.id().as_ref() {
-                    "open" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
-                    }
-                    "quit" => {
-                        // Stop the poll loop before exiting so its task winds
-                        // down cleanly.
-                        if let Some(handle) =
-                            app.try_state::<poller::poll_loop::PollHandle>()
-                        {
-                            handle.cancel.cancel();
-                        }
-                        app.exit(0);
-                    }
-                    _ => {}
-                })
-                .build(app)?;
-
-            // Open the SQLite DB Rust now owns (same file tauri-plugin-sql uses,
-            // so existing history survives) and start the background poll loop.
+            // Open the SQLite DB and start the background poll loop before
+            // setting up the tray — the tray menu handler needs PollHandle.
             let db_path = app.path().app_data_dir()?.join("beet.db");
             if let Some(parent) = db_path.parent() {
                 let _ = std::fs::create_dir_all(parent);
@@ -87,7 +51,26 @@ pub fn run() {
             app.manage(db);
             app.manage(handle);
 
+            tray::setup(app)?;
+
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            tauri::WindowEvent::Focused(false) => {
+                if window.label() == "tray" {
+                    let _ = window.hide();
+                }
+            }
+            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

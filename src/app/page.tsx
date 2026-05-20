@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { usePollEvents } from "@/hooks/usePollEvents";
+import { useTrayBadge } from "@/hooks/useTrayBadge";
+import { useTrayCommands } from "@/hooks/useTrayCommands";
 import { MissingTokenBanner, type MissingTokenReason } from "@/components/MissingTokenBanner";
 import { SettingsPanel } from "@/components/Settings/SettingsPanel";
 import { MainWindowShell } from "@/components/MainWindow/MainWindowShell";
@@ -15,6 +17,8 @@ export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { token, auth, isLoading } = useAuth();
   usePollEvents();
+  useTrayBadge();
+  useTrayCommands();
   const uiError = useAppStore((s) => s.uiError);
   const setUiError = useAppStore((s) => s.setUiError);
   const pollError = useAppStore((s) => s.pollError);

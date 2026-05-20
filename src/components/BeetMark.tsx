@@ -2,7 +2,15 @@
 
 import { useId } from "react";
 
-export function BeetMark({ size = 18 }: { size?: number }) {
+export type BeetMarkStatus = "ok" | "alert" | "paused";
+
+export function BeetMark({
+  size = 18,
+  status = "ok",
+}: {
+  size?: number;
+  status?: BeetMarkStatus;
+}) {
   const gradId = useId();
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ display: "block" }}>
@@ -30,6 +38,26 @@ export function BeetMark({ size = 18 }: { size?: number }) {
         d="M12 11.5 L 16 13.8 L 12 17.5 L 8 13.8 Z"
         fill="rgba(255,255,255,0.18)"
       />
+      {status === "alert" && (
+        <circle
+          cx="19"
+          cy="5"
+          r="3.4"
+          fill="var(--color-danger)"
+          stroke="var(--color-bg)"
+          strokeWidth="1.2"
+        />
+      )}
+      {status === "paused" && (
+        <circle
+          cx="19"
+          cy="5"
+          r="3.4"
+          fill="var(--color-warn)"
+          stroke="var(--color-bg)"
+          strokeWidth="1.2"
+        />
+      )}
     </svg>
   );
 }
