@@ -14,6 +14,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
+                #[cfg(target_os = "macos")]
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
@@ -53,9 +55,6 @@ pub fn run() {
 
             tray::setup(app)?;
 
-            #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -64,6 +63,11 @@ pub fn run() {
             {
                 api.prevent_close();
                 let _ = window.hide();
+                // Hide Beet from the Dock when no windows are visible.
+                #[cfg(target_os = "macos")]
+                let _ = window
+                    .app_handle()
+                    .set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
             tauri::WindowEvent::Focused(false)
                 if window.label() == "tray" =>

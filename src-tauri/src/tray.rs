@@ -104,6 +104,9 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
+        // Restore Beet in the Dock before showing the window.
+        #[cfg(target_os = "macos")]
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

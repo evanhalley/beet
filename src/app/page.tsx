@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { X } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import { useAuth } from "@/hooks/useAuth";
 import { usePollEvents } from "@/hooks/usePollEvents";
 import { useTrayBadge } from "@/hooks/useTrayBadge";
@@ -22,6 +23,15 @@ export default function Page() {
   const uiError = useAppStore((s) => s.uiError);
   const setUiError = useAppStore((s) => s.setUiError);
   const pollError = useAppStore((s) => s.pollError);
+
+  // Open settings when the tray menu "Settings" item is clicked.
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  useEffect(() => {
+    const unlisten = listen("tray:open-settings", openSettings);
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [openSettings]);
 
   useEffect(() => {
     if (!uiError) return;
