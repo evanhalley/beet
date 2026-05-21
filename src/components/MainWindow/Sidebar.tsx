@@ -13,11 +13,13 @@ import {
   VolumeX,
 } from "lucide-react";
 import {
+  applyMutes,
   isReviewRequestVisible,
   selectShowAllReviews,
   useAppStore,
 } from "@/lib/store";
 import { useActionableItems } from "@/hooks/useActionableItems";
+import { removeMute, removePin } from "@/lib/storage/mutePin";
 
 interface SidebarGroupProps {
   title: string;
@@ -295,13 +297,25 @@ export function Sidebar({
 }: SidebarProps) {
   const { reviewRequests, inFlight, standaloneRuns } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
+  const mutes = useAppStore((s) => s.mutes);
+  const pins = useAppStore((s) => s.pins);
+  const setMutes = useAppStore((s) => s.setMutes);
+  const setPins = useAppStore((s) => s.setPins);
+
+  // Apply mute filter so sidebar badge matches what the list shows.
+  const visibleReviews = applyMutes(reviewRequests, mutes);
+  const visibleInFlight = applyMutes(inFlight, mutes);
+  const visibleRuns = applyMutes(standaloneRuns, mutes);
+
   // Match the predicate ReviewRequestsSection uses, so the badge here can
   // never diverge from the count rendered above the list.
-  const reviewCount = reviewRequests.filter((it) =>
+  const reviewCount = visibleReviews.filter((it) =>
     isReviewRequestVisible(it, showAll),
   ).length;
-  const inFlightCount = inFlight.length;
-  const runsCount = standaloneRuns.length;
+  const inFlightCount = visibleInFlight.length;
+  const runsCount = visibleRuns.length;
+
+  const pinnedCount = pins.length;
 
   const toggleButton = onToggleCollapsed ? (
     <button
@@ -404,11 +418,58 @@ export function Sidebar({
           </SidebarGroup>
 
           <SidebarGroup title="Pinned">
-            <SidebarItem icon={<Pin size={12} />} label="No pinned repos" muted disabled />
+            {pins.length === 0 ? (
+              <SidebarItem
+                icon={<Pin size={12} />}
+                label="No pinned repos"
+                muted
+                disabled
+              />
+            ) : (
+              pins.map((repo) => (
+                <SidebarItem
+                  key={repo}
+                  icon={<Pin size={12} />}
+                  label={repo}
+                  badge={pinnedCount}
+                  collapsed={collapsed}
+                  onClick={async () => {
+                    await removePin(repo);
+                    setPins(pins.filter((p) => p !== repo));
+                  }}
+                />
+              ))
+            )}
           </SidebarGroup>
 
           <SidebarGroup title="Muted">
-            <SidebarItem icon={<VolumeX size={12} />} label="No muted repos" muted disabled />
+            {mutes.length === 0 ? (
+              <SidebarItem
+                icon={<VolumeX size={12} />}
+                label="No muted repos"
+                muted
+                disabled
+              />
+            ) : (
+              mutes.map((rule) => (
+                <SidebarItem
+                  key={`${rule.scope}:${rule.value}`}
+                  icon={<VolumeX size={12} />}
+                  label={rule.value}
+                  muted
+                  collapsed={collapsed}
+                  onClick={async () => {
+                    await removeMute(rule.scope, rule.value);
+                    setMutes(
+                      mutes.filter(
+                        (m) =>
+                          !(m.scope === rule.scope && m.value === rule.value),
+                      ),
+                    );
+                  }}
+                />
+              ))
+            )}
           </SidebarGroup>
         </>
       )}

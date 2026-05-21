@@ -253,12 +253,17 @@ async fn run<R: Runtime>(
                 }
             };
 
+        let has_pinned = db
+            .lock()
+            .map(|c| crate::store::mute_pin::has_any_pins(&c))
+            .unwrap_or(false);
         let interval = effective_interval(&AdaptiveSignals {
             base_secs: config.polling_interval_sec,
             window_hidden: is_window_hidden(&app),
             on_battery: is_on_battery(),
             rate_limited,
             retry_after_secs,
+            has_pinned_repos: has_pinned,
         });
         tokio::select! {
             _ = cancel.cancelled() => break,

@@ -33,9 +33,17 @@ pub struct AdaptiveSignals {
     /// `Retry-After` seconds from a rate-limit response. Used as a floor —
     /// we never re-poll sooner than GitHub asked.
     pub retry_after_secs: Option<u64>,
+    /// At least one repo is pinned (§8). Pinned repos always get the fast
+    /// (base) interval — this overrides every other multiplier, including
+    /// rate-limit pressure, so pinned repos stay fresh.
+    pub has_pinned_repos: bool,
 }
 
 pub fn effective_interval(s: &AdaptiveSignals) -> Duration {
+    // Pinned repos take priority: always return the base interval unchanged.
+    if s.has_pinned_repos {
+        return Duration::from_secs(s.base_secs.max(1).min(MAX_INTERVAL_SECS));
+    }
     let mut secs = s.base_secs.max(1);
     if s.window_hidden {
         secs = secs.saturating_mul(HIDDEN_MULTIPLIER);
@@ -87,6 +95,7 @@ mod tests {
             on_battery: false,
             rate_limited: false,
             retry_after_secs: None,
+            has_pinned_repos: false,
         }
     }
 
@@ -166,5 +175,27 @@ mod tests {
             ..base(60)
         };
         assert_eq!(effective_interval(&s), Duration::from_secs(MAX_INTERVAL_SECS));
+    }
+
+    #[test]
+    fn pinned_repos_overrides_all_multipliers() {
+        // Even rate-limit + battery + hidden cannot stretch the interval when
+        // any repos are pinned — fast polling is the invariant.
+        let s = AdaptiveSignals {
+            has_pinned_repos: true,
+            window_hidden: true,
+            on_battery: true,
+            rate_limited: true,
+            retry_after_secs: Some(300),
+            ..base(60)
+        };
+        assert_eq!(effective_interval(&s), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn pinned_repos_false_leaves_other_multipliers_intact() {
+        // Ensure the new field doesn't silently break the existing path.
+        let s = AdaptiveSignals { rate_limited: true, ..base(60) };
+        assert_eq!(effective_interval(&s), Duration::from_secs(240));
     }
 }

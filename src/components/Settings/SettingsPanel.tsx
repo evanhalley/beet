@@ -7,6 +7,8 @@ import { AboutTab } from "./AboutTab";
 import { AccountTab } from "./AccountTab";
 import { AppearanceTab } from "./AppearanceTab";
 import { MergeQueueTab } from "./MergeQueueTab";
+import { MutePinTab } from "./MutePinTab";
+import { NotificationsTab } from "./NotificationsTab";
 import { RunsTab } from "./RunsTab";
 import { ScoringTab } from "./ScoringTab";
 import { PollingTab } from "./PollingTab";
@@ -15,10 +17,12 @@ import { NavIcon, type NavIconName } from "./NavIcon";
 interface NavItem {
   id:
     | "account"
+    | "notifications"
     | "scoring"
     | "polling"
     | "appearance"
     | "merge-queue"
+    | "mute-pin"
     | "runs"
     | "about";
   label: string;
@@ -27,10 +31,12 @@ interface NavItem {
 
 const ITEMS: readonly NavItem[] = [
   { id: "account", label: "Account", icon: "user" },
+  { id: "notifications", label: "Notifications", icon: "bell" },
   { id: "appearance", label: "Appearance", icon: "theme" },
   { id: "scoring", label: "Scoring", icon: "score" },
   { id: "polling", label: "Polling", icon: "refresh" },
   { id: "runs", label: "Runs", icon: "runs" },
+  { id: "mute-pin", label: "Mute & Pin", icon: "mute" },
   { id: "merge-queue", label: "Merge Queue", icon: "merge" },
   { id: "about", label: "About", icon: "info" },
 ] as const;
@@ -127,10 +133,12 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
 
         <div className="overflow-y-auto" style={{ padding: "20px 28px" }}>
           {tab === "account" && <AccountTab />}
+          {tab === "notifications" && <NotificationsTab />}
           {tab === "scoring" && <ScoringTab />}
           {tab === "polling" && <PollingTab />}
           {tab === "appearance" && <AppearanceTab />}
           {tab === "runs" && <RunsTab />}
+          {tab === "mute-pin" && <MutePinTab />}
           {tab === "merge-queue" && <MergeQueueTab />}
           {tab === "about" && <AboutTab />}
         </div>

@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 import { usePollEvents } from "@/hooks/usePollEvents";
 import { useTrayBadge } from "@/hooks/useTrayBadge";
 import { useTrayCommands } from "@/hooks/useTrayCommands";
@@ -19,6 +20,7 @@ export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { token, auth, isLoading } = useAuth();
   usePollEvents();
+  useNotifications();
   useTrayBadge();
   useTrayCommands();
   useThemeSync();

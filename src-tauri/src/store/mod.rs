@@ -1,6 +1,8 @@
 pub mod db;
 pub mod etag_cache;
 pub mod lifecycle;
+pub mod mute_pin;
+pub mod notifications;
 pub mod requeue;
 pub mod runs;
 

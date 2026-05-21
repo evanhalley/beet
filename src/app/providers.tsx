@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAppStore } from "@/lib/store";
 import { loadSettings } from "@/lib/storage/settings";
+import { listMutes, listPins } from "@/lib/storage/mutePin";
 import {
   applyAccent,
   applyDensity,
@@ -27,10 +28,13 @@ export function Providers({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadSettings()
-      .then((settings) => {
+    Promise.all([loadSettings(), listMutes(), listPins()])
+      .then(([settings, mutes, pins]) => {
         if (cancelled) return;
-        useAppStore.getState().hydrateSettings(settings);
+        const store = useAppStore.getState();
+        store.hydrateSettings(settings);
+        store.setMutes(mutes);
+        store.setPins(pins);
         applyTheme(settings.theme);
         applyFontScale(settings.fontScale);
         applyAccent(settings.accent);
