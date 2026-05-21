@@ -42,7 +42,7 @@ pub struct AdaptiveSignals {
 pub fn effective_interval(s: &AdaptiveSignals) -> Duration {
     // Pinned repos take priority: always return the base interval unchanged.
     if s.has_pinned_repos {
-        return Duration::from_secs(s.base_secs.max(1).min(MAX_INTERVAL_SECS));
+        return Duration::from_secs(s.base_secs.clamp(1, MAX_INTERVAL_SECS));
     }
     let mut secs = s.base_secs.max(1);
     if s.window_hidden {
