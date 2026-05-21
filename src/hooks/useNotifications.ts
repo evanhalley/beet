@@ -6,7 +6,7 @@ import {
   requestPermission,
   sendNotification,
 } from "@tauri-apps/plugin-notification";
-import { useAppStore } from "@/lib/store";
+import { applyMutes, useAppStore } from "@/lib/store";
 import { checkAndRecord } from "@/lib/storage/notifications";
 import type { ActionableItem } from "@/lib/types";
 
@@ -110,19 +110,30 @@ export function useNotifications(): void {
 
     const unsubscribe = useAppStore.subscribe(async (state) => {
       if (cancelled) return;
-      const { reviewRequests, inFlight, standaloneRuns, settings } = state;
+
+      // Don't process until at least one poll has completed — otherwise a
+      // settings-hydration or mutes-load event will set an empty baseline and
+      // the first real poll tick will fire notifications for every existing item.
+      if (!state.lastPolledAt) return;
+
+      const { reviewRequests, inFlight, standaloneRuns, settings, mutes } = state;
+
+      // Apply mute rules so notifications are never fired for muted repos/orgs.
+      const filteredReviews = applyMutes(reviewRequests, mutes);
+      const filteredInFlight = applyMutes(inFlight, mutes);
+      const filteredRuns = applyMutes(standaloneRuns, mutes);
 
       const prev = prevRef.current;
       if (!prev) {
-        // First tick: build a baseline, no notifications.
-        prevRef.current = buildSnapshot(reviewRequests, inFlight, standaloneRuns);
+        // First completed poll: build a baseline, no notifications.
+        prevRef.current = buildSnapshot(filteredReviews, filteredInFlight, filteredRuns);
         return;
       }
 
       const promises: Promise<void>[] = [];
 
       // ── Trigger 1: Ejected from merge queue ──────────────────────────────
-      for (const item of inFlight) {
+      for (const item of filteredInFlight) {
         const mq = item.pr?.mergeQueue;
         if (!mq?.lastEjectionAt) continue;
         if (item.pr?.lifecycle === "merge_queue") continue; // still queued
@@ -140,15 +151,19 @@ export function useNotifications(): void {
       }
 
       // ── Trigger 2: Failing checks on your PR ─────────────────────────────
-      for (const item of inFlight) {
+      for (const item of filteredInFlight) {
         if (!item.pr?.isAuthoredByMe) continue;
-        const hasFailing = item.pr.checkRuns?.some(
+        const failingRuns = (item.pr.checkRuns ?? []).filter(
           (c) => c.conclusion === "failure",
         );
-        if (!hasFailing) continue;
+        if (failingRuns.length === 0) continue;
         if (prev.failingCheckPrIds.has(item.id)) continue; // already known
-        const sha = item.pr.mergeQueue?.headSha ?? item.updatedAt;
-        const key = `checks-fail:${item.id}:${sha}`;
+        // Use mergeQueue.headSha when available; otherwise key off the sorted
+        // set of failing check names (stable per-commit, unlike updatedAt).
+        const stableId =
+          item.pr.mergeQueue?.headSha ??
+          failingRuns.map((c) => c.name).sort().join(",");
+        const key = `checks-fail:${item.id}:${stableId}`;
         const failingNames = (item.pr.checkRuns ?? [])
           .filter((c) => c.conclusion === "failure")
           .slice(0, 2)
@@ -165,7 +180,7 @@ export function useNotifications(): void {
       }
 
       // ── Trigger 3: New review request ────────────────────────────────────
-      for (const item of reviewRequests) {
+      for (const item of filteredReviews) {
         if (prev.reviewRequestIds.has(item.id)) continue;
         const key = `review-req:${item.id}`;
         promises.push(
@@ -181,7 +196,7 @@ export function useNotifications(): void {
       // ── Trigger 4: Comment / @mention (unread proxy) ─────────────────────
       // Full mention detection requires pr.activity.mentionsMe (§8 follow-up).
       // As a proxy: fire when an existing item becomes newly unread.
-      for (const item of [...reviewRequests, ...inFlight]) {
+      for (const item of [...filteredReviews, ...filteredInFlight]) {
         if (!item.unread) continue;
         const prevUpdatedAt = prev.unreadUpdatedAt.get(item.id);
         if (prevUpdatedAt === item.updatedAt) continue; // same update
@@ -202,7 +217,7 @@ export function useNotifications(): void {
       }
 
       // ── Trigger 5: Workflow run finished ─────────────────────────────────
-      for (const item of standaloneRuns) {
+      for (const item of filteredRuns) {
         if (item.run?.status !== "completed") continue;
         if (!item.run.conclusion) continue;
         if (prev.completedRunIds.has(item.id)) continue;
@@ -227,8 +242,9 @@ export function useNotifications(): void {
 
       await Promise.allSettled(promises);
 
-      // Update snapshot for next tick.
-      prevRef.current = buildSnapshot(reviewRequests, inFlight, standaloneRuns);
+      // Update snapshot for next tick (using the mute-filtered views so the
+      // baseline stays consistent with what we diffed against above).
+      prevRef.current = buildSnapshot(filteredReviews, filteredInFlight, filteredRuns);
     });
 
     return () => {

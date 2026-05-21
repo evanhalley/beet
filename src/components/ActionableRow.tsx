@@ -2,7 +2,7 @@
 
 import { useState, type MouseEvent } from "react";
 import { AlertTriangle, Check, Link2 } from "lucide-react";
-import { useAppStore, applyMutes } from "@/lib/store";
+import { useAppStore } from "@/lib/store";
 import { addMute, addPin, removePin } from "@/lib/storage/mutePin";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import type { ActionableItem } from "@/lib/types";
@@ -56,17 +56,16 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
   };
 
   const handleMuteRepo = async () => {
+    if (mutes.some((m) => m.scope === "repo" && m.value === item.repoFullName)) return;
     await addMute("repo", item.repoFullName);
-    // Refresh mutes from store — the store already has the list; we add locally.
-    const newMutes = [...mutes, { scope: "repo" as const, value: item.repoFullName }];
-    setMutes(newMutes);
+    setMutes([...mutes, { scope: "repo" as const, value: item.repoFullName }]);
   };
 
   const handleMuteOrg = async () => {
     const owner = item.repoFullName.split("/")[0] ?? "";
+    if (mutes.some((m) => m.scope === "org" && m.value === owner)) return;
     await addMute("org", owner);
-    const newMutes = [...mutes, { scope: "org" as const, value: owner }];
-    setMutes(newMutes);
+    setMutes([...mutes, { scope: "org" as const, value: owner }]);
   };
 
   const handleTogglePin = async () => {

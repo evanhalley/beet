@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Pin, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { removeMute, removePin } from "@/lib/storage/mutePin";
@@ -124,7 +125,7 @@ function RuleRow({
   label,
   onRemove,
 }: {
-  icon?: React.ReactNode;
+  icon?: ReactNode;
   label: string;
   onRemove: () => void;
 }) {

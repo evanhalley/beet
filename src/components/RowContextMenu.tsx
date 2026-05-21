@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 import { Pin, PinOff, VolumeX } from "lucide-react";
 
 export interface RowContextMenuProps {
@@ -14,7 +15,7 @@ export interface RowContextMenuProps {
   onTogglePin: () => void;
 }
 
-const menuItemStyle: React.CSSProperties = {
+const menuItemStyle: CSSProperties = {
   display: "flex",
   alignItems: "center",
   gap: 8,

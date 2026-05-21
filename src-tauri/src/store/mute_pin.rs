@@ -39,6 +39,9 @@ pub fn list_mutes(db: State<'_, Db>) -> Result<Vec<MuteRule>, String> {
 
 #[tauri::command]
 pub fn add_mute(db: State<'_, Db>, scope: String, value: String) -> Result<(), String> {
+    if scope != "repo" && scope != "org" {
+        return Err(format!("invalid mute scope '{scope}': must be 'repo' or 'org'"));
+    }
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR IGNORE INTO mute_rules (scope, value, created_at) VALUES (?1, ?2, ?3)",
@@ -50,6 +53,9 @@ pub fn add_mute(db: State<'_, Db>, scope: String, value: String) -> Result<(), S
 
 #[tauri::command]
 pub fn remove_mute(db: State<'_, Db>, scope: String, value: String) -> Result<(), String> {
+    if scope != "repo" && scope != "org" {
+        return Err(format!("invalid mute scope '{scope}': must be 'repo' or 'org'"));
+    }
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "DELETE FROM mute_rules WHERE scope = ?1 AND value = ?2",

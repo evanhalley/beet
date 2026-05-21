@@ -13,7 +13,6 @@ import {
   VolumeX,
 } from "lucide-react";
 import {
-  applyMutes,
   isReviewRequestVisible,
   selectShowAllReviews,
   useAppStore,
@@ -302,20 +301,13 @@ export function Sidebar({
   const setMutes = useAppStore((s) => s.setMutes);
   const setPins = useAppStore((s) => s.setPins);
 
-  // Apply mute filter so sidebar badge matches what the list shows.
-  const visibleReviews = applyMutes(reviewRequests, mutes);
-  const visibleInFlight = applyMutes(inFlight, mutes);
-  const visibleRuns = applyMutes(standaloneRuns, mutes);
-
-  // Match the predicate ReviewRequestsSection uses, so the badge here can
-  // never diverge from the count rendered above the list.
-  const reviewCount = visibleReviews.filter((it) =>
+  // reviewRequests/inFlight/standaloneRuns from useActionableItems already have
+  // mutes applied — no need to filter again here.
+  const reviewCount = reviewRequests.filter((it) =>
     isReviewRequestVisible(it, showAll),
   ).length;
-  const inFlightCount = visibleInFlight.length;
-  const runsCount = visibleRuns.length;
-
-  const pinnedCount = pins.length;
+  const inFlightCount = inFlight.length;
+  const runsCount = standaloneRuns.length;
 
   const toggleButton = onToggleCollapsed ? (
     <button
@@ -431,7 +423,6 @@ export function Sidebar({
                   key={repo}
                   icon={<Pin size={12} />}
                   label={repo}
-                  badge={pinnedCount}
                   collapsed={collapsed}
                   onClick={async () => {
                     await removePin(repo);
