@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, MouseEvent } from "react";
 import { Pin, PinOff, VolumeX } from "lucide-react";
 
 export interface RowContextMenuProps {
@@ -63,6 +63,15 @@ export function RowContextMenu({
     };
   }, [onClose]);
 
+  // Hover highlight for menu items. Applied imperatively because every item
+  // shares the `menuItemStyle` object — there's no per-item :hover rule.
+  const onItemEnter = (e: MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = "var(--color-hover)";
+  };
+  const onItemLeave = (e: MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = "transparent";
+  };
+
   return (
     <div
       ref={menuRef}
@@ -89,13 +98,8 @@ export function RowContextMenu({
           onMuteRepo();
           onClose();
         }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.background =
-            "var(--color-row-hover)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.background = "transparent";
-        }}
+        onMouseEnter={onItemEnter}
+        onMouseLeave={onItemLeave}
       >
         <VolumeX size={13} style={{ color: "var(--color-text-faint)" }} />
         Mute repo {repoFullName}
@@ -109,13 +113,8 @@ export function RowContextMenu({
           onMuteOrg();
           onClose();
         }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.background =
-            "var(--color-row-hover)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.background = "transparent";
-        }}
+        onMouseEnter={onItemEnter}
+        onMouseLeave={onItemLeave}
       >
         <VolumeX size={13} style={{ color: "var(--color-text-faint)" }} />
         Mute org {owner}
@@ -137,13 +136,8 @@ export function RowContextMenu({
           onTogglePin();
           onClose();
         }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLElement).style.background =
-            "var(--color-row-hover)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLElement).style.background = "transparent";
-        }}
+        onMouseEnter={onItemEnter}
+        onMouseLeave={onItemLeave}
       >
         {isPinned ? (
           <PinOff size={13} style={{ color: "var(--color-accent)" }} />

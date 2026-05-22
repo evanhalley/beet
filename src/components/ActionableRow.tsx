@@ -52,7 +52,12 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
 
   const onContextMenu = (e: MouseEvent) => {
     e.preventDefault();
-    setCtxMenu({ x: e.clientX, y: e.clientY });
+    // clientX/Y are viewport CSS pixels, but RowContextMenu positions itself
+    // with `position: fixed` left/top — values the global `:root { zoom }`
+    // rule multiplies by the font scale. Divide it back out so the menu's
+    // corner lands on the actual cursor instead of zoom-factor away from it.
+    const scale = useAppStore.getState().settings.fontScale || 1;
+    setCtxMenu({ x: e.clientX / scale, y: e.clientY / scale });
   };
 
   const handleMuteRepo = async () => {
