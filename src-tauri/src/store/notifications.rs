@@ -11,11 +11,12 @@
 
 use crate::store::{db::now_iso, Db};
 use rusqlite::params;
+use std::sync::Arc;
 use tauri::State;
 
 #[tauri::command]
 pub fn check_and_record_notification(
-    db: State<'_, Db>,
+    db: State<'_, Arc<Db>>,
     dedupe_key: String,
 ) -> Result<bool, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;

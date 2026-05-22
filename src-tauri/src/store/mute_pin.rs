@@ -8,6 +8,7 @@
 use crate::store::{db::now_iso, Db};
 use rusqlite::params;
 use serde::Serialize;
+use std::sync::Arc;
 use tauri::State;
 
 #[derive(Debug, Clone, Serialize)]
@@ -19,7 +20,7 @@ pub struct MuteRule {
 // ── Mute rules ───────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_mutes(db: State<'_, Db>) -> Result<Vec<MuteRule>, String> {
+pub fn list_mutes(db: State<'_, Arc<Db>>) -> Result<Vec<MuteRule>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT scope, value FROM mute_rules ORDER BY created_at")
@@ -38,7 +39,7 @@ pub fn list_mutes(db: State<'_, Db>) -> Result<Vec<MuteRule>, String> {
 }
 
 #[tauri::command]
-pub fn add_mute(db: State<'_, Db>, scope: String, value: String) -> Result<(), String> {
+pub fn add_mute(db: State<'_, Arc<Db>>, scope: String, value: String) -> Result<(), String> {
     if scope != "repo" && scope != "org" {
         return Err(format!("invalid mute scope '{scope}': must be 'repo' or 'org'"));
     }
@@ -52,7 +53,7 @@ pub fn add_mute(db: State<'_, Db>, scope: String, value: String) -> Result<(), S
 }
 
 #[tauri::command]
-pub fn remove_mute(db: State<'_, Db>, scope: String, value: String) -> Result<(), String> {
+pub fn remove_mute(db: State<'_, Arc<Db>>, scope: String, value: String) -> Result<(), String> {
     if scope != "repo" && scope != "org" {
         return Err(format!("invalid mute scope '{scope}': must be 'repo' or 'org'"));
     }
@@ -68,7 +69,7 @@ pub fn remove_mute(db: State<'_, Db>, scope: String, value: String) -> Result<()
 // ── Pin rules ────────────────────────────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_pins(db: State<'_, Db>) -> Result<Vec<String>, String> {
+pub fn list_pins(db: State<'_, Arc<Db>>) -> Result<Vec<String>, String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     let mut stmt = conn
         .prepare("SELECT value FROM pin_rules ORDER BY created_at")
@@ -82,7 +83,7 @@ pub fn list_pins(db: State<'_, Db>) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub fn add_pin(db: State<'_, Db>, value: String) -> Result<(), String> {
+pub fn add_pin(db: State<'_, Arc<Db>>, value: String) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "INSERT OR IGNORE INTO pin_rules (value, created_at) VALUES (?1, ?2)",
@@ -93,7 +94,7 @@ pub fn add_pin(db: State<'_, Db>, value: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn remove_pin(db: State<'_, Db>, value: String) -> Result<(), String> {
+pub fn remove_pin(db: State<'_, Arc<Db>>, value: String) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
         "DELETE FROM pin_rules WHERE value = ?1",
