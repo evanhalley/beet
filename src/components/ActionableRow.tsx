@@ -59,7 +59,12 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
     if (mutes.some((m) => m.scope === "repo" && m.value === item.repoFullName)) return;
     try {
       await addMute("repo", item.repoFullName);
-      setMutes([...mutes, { scope: "repo" as const, value: item.repoFullName }]);
+      // Read fresh state after the await — the closure's `mutes` may be stale
+      // if another handler ran concurrently while the IPC call was in-flight.
+      const latest = useAppStore.getState().mutes;
+      if (!latest.some((m) => m.scope === "repo" && m.value === item.repoFullName)) {
+        setMutes([...latest, { scope: "repo" as const, value: item.repoFullName }]);
+      }
     } catch { /* storage error — leave state unchanged */ }
   };
 
@@ -68,7 +73,10 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
     if (mutes.some((m) => m.scope === "org" && m.value === owner)) return;
     try {
       await addMute("org", owner);
-      setMutes([...mutes, { scope: "org" as const, value: owner }]);
+      const latest = useAppStore.getState().mutes;
+      if (!latest.some((m) => m.scope === "org" && m.value === owner)) {
+        setMutes([...latest, { scope: "org" as const, value: owner }]);
+      }
     } catch { /* storage error — leave state unchanged */ }
   };
 
@@ -76,10 +84,14 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
     try {
       if (isPinned) {
         await removePin(item.repoFullName);
-        setPins(pins.filter((p) => p !== item.repoFullName));
+        const latest = useAppStore.getState().pins;
+        setPins(latest.filter((p) => p !== item.repoFullName));
       } else {
         await addPin(item.repoFullName);
-        setPins([...pins, item.repoFullName]);
+        const latest = useAppStore.getState().pins;
+        if (!latest.includes(item.repoFullName)) {
+          setPins([...latest, item.repoFullName]);
+        }
       }
     } catch { /* storage error — leave state unchanged */ }
   };

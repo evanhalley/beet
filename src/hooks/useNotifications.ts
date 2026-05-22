@@ -109,8 +109,28 @@ async function maybeNotify(
   }
 }
 
+// Tracks the last set of poll-relevant slice references seen by the subscriber.
+// Used to skip store updates that aren't poll-driven (selected item, UI errors,
+// settings toggles, etc.) without paying the cost of the full diff loop.
+interface SeenSlices {
+  lastPolledAt: string | null;
+  reviewRequests: unknown;
+  inFlight: unknown;
+  standaloneRuns: unknown;
+  mutes: unknown;
+  settings: unknown;
+}
+
 export function useNotifications(): void {
   const prevRef = useRef<PrevSnapshot | null>(null);
+  const seenRef = useRef<SeenSlices>({
+    lastPolledAt: null,
+    reviewRequests: null,
+    inFlight: null,
+    standaloneRuns: null,
+    mutes: null,
+    settings: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +163,22 @@ export function useNotifications(): void {
       // the first real poll tick will fire notifications for every existing item.
       if (!state.lastPolledAt) return;
 
-      const { reviewRequests, inFlight, standaloneRuns, settings, mutes } = state;
+      const { reviewRequests, inFlight, standaloneRuns, settings, mutes, lastPolledAt } = state;
+
+      // Skip if none of the poll-relevant slices changed reference. UI-only
+      // state changes (selectedItemId, uiError, etc.) should not retrigger
+      // the diff loop or waste SQLite dedupe round-trips.
+      const seen = seenRef.current;
+      if (
+        seen.lastPolledAt === lastPolledAt &&
+        seen.reviewRequests === reviewRequests &&
+        seen.inFlight === inFlight &&
+        seen.standaloneRuns === standaloneRuns &&
+        seen.mutes === mutes &&
+        seen.settings === settings
+      ) return;
+      seenRef.current = { lastPolledAt, reviewRequests, inFlight, standaloneRuns, mutes, settings };
+
       const currentMutesKey = mutesFingerprint(mutes);
 
       // Apply mute rules so notifications are never fired for muted repos/orgs.

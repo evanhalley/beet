@@ -189,7 +189,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 8);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

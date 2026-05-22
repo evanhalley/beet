@@ -40,9 +40,13 @@ pub struct AdaptiveSignals {
 }
 
 pub fn effective_interval(s: &AdaptiveSignals) -> Duration {
-    // Pinned repos take priority: always return the base interval unchanged.
+    // Pinned repos skip all multipliers so fresh data arrives quickly.
+    // We still honour any explicit Retry-After GitHub sent — polling sooner
+    // than asked is never acceptable regardless of pinning.
     if s.has_pinned_repos {
-        return Duration::from_secs(s.base_secs.clamp(1, MAX_INTERVAL_SECS));
+        let secs = s.base_secs.clamp(1, MAX_INTERVAL_SECS);
+        let secs = s.retry_after_secs.map_or(secs, |r| secs.max(r));
+        return Duration::from_secs(secs.min(MAX_INTERVAL_SECS));
     }
     let mut secs = s.base_secs.max(1);
     if s.window_hidden {
@@ -178,15 +182,29 @@ mod tests {
     }
 
     #[test]
-    fn pinned_repos_overrides_all_multipliers() {
-        // Even rate-limit + battery + hidden cannot stretch the interval when
-        // any repos are pinned — fast polling is the invariant.
+    fn pinned_repos_skips_multipliers_but_respects_retry_after() {
+        // Battery/hidden/rate-limit multipliers are bypassed, but an explicit
+        // Retry-After is still honoured — we must never poll sooner than asked.
         let s = AdaptiveSignals {
             has_pinned_repos: true,
             window_hidden: true,
             on_battery: true,
             rate_limited: true,
             retry_after_secs: Some(300),
+            ..base(60)
+        };
+        assert_eq!(effective_interval(&s), Duration::from_secs(300));
+    }
+
+    #[test]
+    fn pinned_repos_without_retry_after_uses_base() {
+        // No Retry-After → use base interval, ignoring all multipliers.
+        let s = AdaptiveSignals {
+            has_pinned_repos: true,
+            window_hidden: true,
+            on_battery: true,
+            rate_limited: true,
+            retry_after_secs: None,
             ..base(60)
         };
         assert_eq!(effective_interval(&s), Duration::from_secs(60));

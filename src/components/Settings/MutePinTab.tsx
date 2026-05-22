@@ -47,8 +47,10 @@ export function MutePinTab() {
               icon={<Pin size={12} style={{ color: "var(--color-accent)" }} />}
               label={value}
               onRemove={async () => {
-                await removePin(value);
-                setPins(pins.filter((p) => p !== value));
+                try {
+                  await removePin(value);
+                  setPins(useAppStore.getState().pins.filter((p) => p !== value));
+                } catch { /* storage error — leave state unchanged */ }
               }}
             />
           ))}
@@ -74,12 +76,14 @@ export function MutePinTab() {
               key={`repo:${rule.value}`}
               label={rule.value}
               onRemove={async () => {
-                await removeMute("repo", rule.value);
-                setMutes(
-                  mutes.filter(
-                    (m) => !(m.scope === "repo" && m.value === rule.value),
-                  ),
-                );
+                try {
+                  await removeMute("repo", rule.value);
+                  setMutes(
+                    useAppStore.getState().mutes.filter(
+                      (m) => !(m.scope === "repo" && m.value === rule.value),
+                    ),
+                  );
+                } catch { /* storage error — leave state unchanged */ }
               }}
             />
           ))}
@@ -105,12 +109,14 @@ export function MutePinTab() {
               key={`org:${rule.value}`}
               label={rule.value}
               onRemove={async () => {
-                await removeMute("org", rule.value);
-                setMutes(
-                  mutes.filter(
-                    (m) => !(m.scope === "org" && m.value === rule.value),
-                  ),
-                );
+                try {
+                  await removeMute("org", rule.value);
+                  setMutes(
+                    useAppStore.getState().mutes.filter(
+                      (m) => !(m.scope === "org" && m.value === rule.value),
+                    ),
+                  );
+                } catch { /* storage error — leave state unchanged */ }
               }}
             />
           ))}

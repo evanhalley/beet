@@ -427,7 +427,7 @@ export function Sidebar({
                   onClick={async () => {
                     try {
                       await removePin(repo);
-                      setPins(pins.filter((p) => p !== repo));
+                      setPins(useAppStore.getState().pins.filter((p) => p !== repo));
                     } catch { /* storage error — leave state unchanged */ }
                   }}
                 />
@@ -455,7 +455,7 @@ export function Sidebar({
                     try {
                       await removeMute(rule.scope, rule.value);
                       setMutes(
-                        mutes.filter(
+                        useAppStore.getState().mutes.filter(
                           (m) =>
                             !(m.scope === rule.scope && m.value === rule.value),
                         ),
