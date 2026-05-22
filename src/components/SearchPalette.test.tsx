@@ -86,6 +86,24 @@ describe("SearchPalette", () => {
     expect(options[0]).toHaveTextContent("Add rate-limit cache");
   });
 
+  test("de-dupes an item that appears in more than one section", async () => {
+    const user = userEvent.setup();
+    // The same item can land in two sections at once (e.g. a finished run in
+    // both Standalone Runs and Recently Resolved). The merged search corpus
+    // must list it once — two rows with the same id collide on their React key.
+    const shared = makeItem("1", "shared alpha");
+    useAppStore.getState().setPollResult({
+      reviewRequests: [shared],
+      inFlight: [shared],
+      rateLimit: null,
+      polledAt: "2026-05-09T10:00:00Z",
+    });
+    render(<SearchPalette open onClose={() => {}} />);
+
+    await user.type(screen.getByLabelText("Search query"), "alpha");
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+  });
+
   test("renders empty state for a non-empty query with no matches", async () => {
     const user = userEvent.setup();
     seedReviews([makeItem("1", "Refactor poll loop")]);

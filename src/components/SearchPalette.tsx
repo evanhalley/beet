@@ -33,15 +33,24 @@ function PaletteContent({ onClose }: { onClose: () => void }) {
   const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
 
-  const corpus = useMemo(
-    () => [
+  const corpus = useMemo(() => {
+    // De-dupe by id: an item can legitimately appear in more than one section
+    // (e.g. a just-finished run shows in both Standalone Runs and Recently
+    // Resolved). Without this the merged corpus yields duplicate React keys —
+    // and duplicated/omitted result rows. First occurrence wins.
+    const seen = new Set<string>();
+    const all = [
       ...inFlight,
       ...reviewRequests,
       ...standaloneRuns,
       ...recentlyResolved,
-    ],
-    [inFlight, reviewRequests, standaloneRuns, recentlyResolved],
-  );
+    ];
+    return all.filter((it) => {
+      if (seen.has(it.id)) return false;
+      seen.add(it.id);
+      return true;
+    });
+  }, [inFlight, reviewRequests, standaloneRuns, recentlyResolved]);
 
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
