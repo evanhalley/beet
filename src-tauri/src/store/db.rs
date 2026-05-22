@@ -68,6 +68,26 @@ const MIGRATIONS: &[&str] = &[
      ALTER TABLE run_completion_events ADD COLUMN actor_login TEXT;
      ALTER TABLE run_completion_events ADD COLUMN run_url TEXT;
      ALTER TABLE run_completion_events ADD COLUMN branch TEXT;",
+    // v7: notification dedupe — each fired OS notification records its dedupe
+    // key here. `check_and_record_notification` does an atomic INSERT OR IGNORE
+    // and returns whether the key was new; callers skip the OS call if not.
+    "CREATE TABLE IF NOT EXISTS notifications_sent (
+        dedupe_key TEXT PRIMARY KEY,
+        fired_at   TEXT NOT NULL
+    );",
+    // v8: mute and pin rules. Muted repos/orgs are filtered out of every UI
+    // section (applied at the Zustand selector layer). Pinned repos force the
+    // fast-poll interval (×1 multiplier in the Rust adaptive poller).
+    "CREATE TABLE IF NOT EXISTS mute_rules (
+        scope      TEXT NOT NULL,
+        value      TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (scope, value)
+    );
+    CREATE TABLE IF NOT EXISTS pin_rules (
+        value      TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL
+    );",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.
@@ -118,13 +138,16 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 8);
         for table in [
             "etag_cache",
             "pr_lifecycle_history",
             "pr_ejection_events",
             "pr_requeue_attempts",
             "run_completion_events",
+            "notifications_sent",
+            "mute_rules",
+            "pin_rules",
         ] {
             let count: i64 = conn
                 .query_row(
@@ -145,7 +168,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 8);
     }
 
     #[test]
@@ -166,7 +189,7 @@ mod tests {
         let version: i64 = conn
             .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 8);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

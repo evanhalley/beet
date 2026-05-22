@@ -191,8 +191,12 @@ export function TrayPopover() {
         </button>
       </div>
 
-      {/* Scroll body */}
-      <div className="tray-scroll" style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+      {/* Scroll body — minHeight:0 lets this flex child shrink below its
+          content so its own overflow scrolls, keeping header/footer pinned. */}
+      <div
+        className="tray-scroll"
+        style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}
+      >
         {/* Needs Action — placeholder until #8 */}
         <TraySection
           icon="🔴"

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { RateLimitInfo } from "@/lib/github/rate-limit";
 import type { ActionableItem } from "@/lib/types";
 import { SETTINGS_DEFAULTS, type BeetSettings } from "@/lib/storage/settings";
+import type { MuteRule } from "@/lib/storage/mutePin";
 
 export type PollState = "idle" | "polling" | "ok" | "error";
 
@@ -73,6 +74,12 @@ export interface AppStore {
   settings: BeetSettings;
   settingsHydrated: boolean;
 
+  // Mute and pin rules (§8). Loaded from SQLite on startup via providers.tsx.
+  // The raw poll results are stored unfiltered so unmuting doesn't refetch.
+  // Use `applyMutes(items, mutes)` or the section selectors to get filtered views.
+  mutes: MuteRule[];
+  pins: string[]; // owner/repo strings
+
   setPollResult: (payload: PollResultPayload) => void;
   setPollStatus: (payload: PollStatusPayload) => void;
   setPaused: (paused: boolean) => void;
@@ -82,6 +89,8 @@ export interface AppStore {
   setSelectedItemId: (id: string | null) => void;
   setSettings: (settings: Partial<BeetSettings>) => void;
   hydrateSettings: (settings: BeetSettings) => void;
+  setMutes: (mutes: MuteRule[]) => void;
+  setPins: (pins: string[]) => void;
 
   reset: () => void;
 }
@@ -105,6 +114,8 @@ const initialState = {
   selectedItemId: null as string | null,
   settings: SETTINGS_DEFAULTS,
   settingsHydrated: false,
+  mutes: [] as MuteRule[],
+  pins: [] as string[],
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -167,6 +178,8 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),
   hydrateSettings: (settings) => set({ settings, settingsHydrated: true }),
+  setMutes: (mutes) => set({ mutes }),
+  setPins: (pins) => set({ pins }),
   reset: () =>
     set({
       ...initialState,
@@ -191,3 +204,24 @@ export function isReviewRequestVisible(
 ): boolean {
   return showAll || (item.pr?.score ?? 0) > 0;
 }
+
+// Filter `items` by the active mute rules (§8). Called at the Zustand selector
+// layer so the raw poll cache stays intact — unmuting restores items without
+// triggering a refetch.
+export function applyMutes(
+  items: ActionableItem[],
+  mutes: MuteRule[],
+): ActionableItem[] {
+  if (mutes.length === 0) return items;
+  return items.filter((item) => {
+    const repo = item.repoFullName;
+    const owner = repo.split("/")[0] ?? "";
+    return !mutes.some(
+      (m) =>
+        (m.scope === "repo" && m.value === repo) ||
+        (m.scope === "org" && m.value === owner),
+    );
+  });
+}
+
+export type { MuteRule };

@@ -126,11 +126,25 @@
   zoom: var(--font-scale, 1);
 }
 
+/* Give the app shell an exact 100% height chain (html → body → page wrapper)
+ * so windows can size their content with `100%` instead of `100vw`/`100vh`.
+ * Viewport units don't compensate for the `:root { zoom }` rule above, so a
+ * `100vh` box overflows the window at any non-default font scale; a `100%`
+ * chain stays exact. */
+html,
+body {
+  height: 100%;
+}
+
 body {
   background-color: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
   margin: 0;
+  /* Desktop shell: the window itself never scrolls — only inner panes do.
+   * A safety net so a stray pixel of overflow can't produce a window-level
+   * scrollbar that drags the whole UI (TitleBar included) with it. */
+  overflow: hidden;
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.005em;
 }

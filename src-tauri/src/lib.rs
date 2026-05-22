@@ -11,7 +11,7 @@ mod tray;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
@@ -26,7 +26,13 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build());
+
+    // OS notifications — macOS only in V1 (§13).
+    #[cfg(target_os = "macos")]
+    let builder = builder.plugin(tauri_plugin_notification::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![
             secure_token::store_token,
             secure_token::get_token,
@@ -38,6 +44,13 @@ pub fn run() {
             store::requeue::get_requeue_count,
             store::requeue::get_requeue_opt_out,
             store::requeue::set_requeue_opt_out,
+            store::mute_pin::list_mutes,
+            store::mute_pin::add_mute,
+            store::mute_pin::remove_mute,
+            store::mute_pin::list_pins,
+            store::mute_pin::add_pin,
+            store::mute_pin::remove_pin,
+            store::notifications::check_and_record_notification,
             github::runs::fetch_run_jobs_command,
             tray::set_badge,
             tray::open_main_window,

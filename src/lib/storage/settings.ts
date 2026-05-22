@@ -18,6 +18,11 @@ export const SETTINGS_KEYS = {
   autoRequeueMaxAttempts: "autoRequeueMaxAttempts",
   autoRequeueRepos: "autoRequeueRepos",
   standaloneRunsAllowlist: "standaloneRunsAllowlist",
+  notifyOnEjection: "notifyOnEjection",
+  notifyOnFailingChecks: "notifyOnFailingChecks",
+  notifyOnReviewRequest: "notifyOnReviewRequest",
+  notifyOnMention: "notifyOnMention",
+  notifyOnRunFinished: "notifyOnRunFinished",
 } as const;
 
 export const AUTO_REQUEUE_MAX_ATTEMPTS_MIN = 1;
@@ -78,6 +83,12 @@ export interface BeetSettings {
   // empty list = show all (already deduped per workflow). Non-empty list =
   // restrict that repo's standalone runs to just the listed workflows.
   standaloneRunsAllowlist: Record<string, string[]>;
+  // §10 notification toggles — all on by default.
+  notifyOnEjection: boolean;
+  notifyOnFailingChecks: boolean;
+  notifyOnReviewRequest: boolean;
+  notifyOnMention: boolean;
+  notifyOnRunFinished: boolean;
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -94,6 +105,11 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   autoRequeueMaxAttempts: 2,
   autoRequeueRepos: [],
   standaloneRunsAllowlist: {},
+  notifyOnEjection: true,
+  notifyOnFailingChecks: true,
+  notifyOnReviewRequest: true,
+  notifyOnMention: true,
+  notifyOnRunFinished: true,
 };
 
 function clampMaxAttempts(n: number): number {
@@ -150,6 +166,11 @@ export async function loadSettings(): Promise<BeetSettings> {
     autoRequeueMaxAttemptsRaw,
     autoRequeueRepos,
     standaloneRunsAllowlistRaw,
+    notifyOnEjection,
+    notifyOnFailingChecks,
+    notifyOnReviewRequest,
+    notifyOnMention,
+    notifyOnRunFinished,
   ] = await Promise.all([
     getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
     getValue<string[]>(
@@ -185,6 +206,26 @@ export async function loadSettings(): Promise<BeetSettings> {
       SETTINGS_KEYS.standaloneRunsAllowlist,
       SETTINGS_DEFAULTS.standaloneRunsAllowlist,
     ),
+    getValue<boolean>(
+      SETTINGS_KEYS.notifyOnEjection,
+      SETTINGS_DEFAULTS.notifyOnEjection,
+    ),
+    getValue<boolean>(
+      SETTINGS_KEYS.notifyOnFailingChecks,
+      SETTINGS_DEFAULTS.notifyOnFailingChecks,
+    ),
+    getValue<boolean>(
+      SETTINGS_KEYS.notifyOnReviewRequest,
+      SETTINGS_DEFAULTS.notifyOnReviewRequest,
+    ),
+    getValue<boolean>(
+      SETTINGS_KEYS.notifyOnMention,
+      SETTINGS_DEFAULTS.notifyOnMention,
+    ),
+    getValue<boolean>(
+      SETTINGS_KEYS.notifyOnRunFinished,
+      SETTINGS_DEFAULTS.notifyOnRunFinished,
+    ),
   ]);
   const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
   const fontScale = isFontScale(fontScaleRaw)
@@ -208,6 +249,11 @@ export async function loadSettings(): Promise<BeetSettings> {
     standaloneRunsAllowlist: sanitizeStandaloneRunsAllowlist(
       standaloneRunsAllowlistRaw,
     ),
+    notifyOnEjection,
+    notifyOnFailingChecks,
+    notifyOnReviewRequest,
+    notifyOnMention,
+    notifyOnRunFinished,
   };
 }
 
@@ -291,6 +337,27 @@ export async function setStandaloneRunsAllowlist(
 ): Promise<void> {
   await setValue(SETTINGS_KEYS.standaloneRunsAllowlist, value);
   await notifyPollerConfigChanged();
+}
+
+// Notification toggles are frontend-only; no need to poke the poll loop.
+export async function setNotifyOnEjection(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.notifyOnEjection, value);
+}
+
+export async function setNotifyOnFailingChecks(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.notifyOnFailingChecks, value);
+}
+
+export async function setNotifyOnReviewRequest(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.notifyOnReviewRequest, value);
+}
+
+export async function setNotifyOnMention(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.notifyOnMention, value);
+}
+
+export async function setNotifyOnRunFinished(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.notifyOnRunFinished, value);
 }
 
 export function parseLineList(text: string): string[] {

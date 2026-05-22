@@ -199,6 +199,11 @@ export function MainWindowShell({
             flex: 1,
             display: "grid",
             gridTemplateColumns: `1fr 1px ${detailWidth}px`,
+            // Constrain the single implicit row so it can shrink below its
+            // content size — otherwise an `auto` row grows to fit ListPane /
+            // DetailPane, their `overflow: auto` never engages, and the
+            // content overflows up to the window body (whole-app scrollbar).
+            gridTemplateRows: "minmax(0, 1fr)",
             minHeight: 0,
           }}
         >

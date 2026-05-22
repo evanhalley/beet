@@ -2,19 +2,22 @@
 
 import { useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, isReviewRequestVisible, selectShowAllReviews } from "@/lib/store";
+import { applyMutes, useAppStore, isReviewRequestVisible, selectShowAllReviews } from "@/lib/store";
 
 const DEBOUNCE_MS = 150;
 
 export function useTrayBadge(): void {
   const reviewRequests = useAppStore((s) => s.reviewRequests);
+  const mutes = useAppStore((s) => s.mutes);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // Apply mute filter before counting so the badge matches what the UI shows.
+    const visible = applyMutes(reviewRequests, mutes);
     // Only count unread items that are actually visible (score > 0, or showAll).
-    const count = reviewRequests
+    const count = visible
       .filter((r) => r.unread && isReviewRequestVisible(r, showAll))
       .length;
 
@@ -26,5 +29,5 @@ export function useTrayBadge(): void {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [reviewRequests, paused, showAll]);
+  }, [reviewRequests, mutes, paused, showAll]);
 }

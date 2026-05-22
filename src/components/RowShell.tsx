@@ -1,12 +1,13 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 
 export interface RowShellProps {
   ariaLabel: string;
   unread: boolean;
   active?: boolean;
   onSelect: () => void;
+  onContextMenu?: (e: MouseEvent) => void;
   children: ReactNode;
   aside?: ReactNode;
   /**
@@ -23,12 +24,13 @@ export function RowShell({
   unread,
   active = false,
   onSelect,
+  onContextMenu,
   children,
   aside,
   actions,
 }: RowShellProps) {
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative" }} onContextMenu={onContextMenu}>
       <button
         type="button"
         onClick={onSelect}

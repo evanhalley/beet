@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -11,6 +11,7 @@ import {
   Rocket,
   Settings as Cog,
   VolumeX,
+  X,
 } from "lucide-react";
 import {
   isReviewRequestVisible,
@@ -18,6 +19,7 @@ import {
   useAppStore,
 } from "@/lib/store";
 import { useActionableItems } from "@/hooks/useActionableItems";
+import { removeMute, removePin } from "@/lib/storage/mutePin";
 
 interface SidebarGroupProps {
   title: string;
@@ -177,6 +179,85 @@ function SidebarItem({
   );
 }
 
+interface RemovableSidebarRowProps {
+  // The resting icon (a Pin / VolumeX glyph). Swapped for an ✕ on row hover.
+  icon: ReactNode;
+  label: string;
+  // aria-label / tooltip for the remove button, e.g. "Unpin acme/repo".
+  removeLabel: string;
+  onRemove: () => void;
+}
+
+// A pinned/muted repo row. The leading icon turns into an ✕ while the row is
+// hovered; clicking that icon — and only that icon — removes the rule. The
+// repo name is plain text, not a click target, so removal is deliberate.
+function RemovableSidebarRow({
+  icon,
+  label,
+  removeLabel,
+  onRemove,
+}: RemovableSidebarRowProps) {
+  const [rowHover, setRowHover] = useState(false);
+  const [iconHover, setIconHover] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setRowHover(true)}
+      onMouseLeave={() => {
+        setRowHover(false);
+        setIconHover(false);
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "5px 10px",
+        borderRadius: 6,
+        background: rowHover ? "var(--color-hover)" : "transparent",
+        fontSize: 12.5,
+        fontWeight: 500,
+        color: "var(--color-text)",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onRemove}
+        onMouseEnter={() => setIconHover(true)}
+        onMouseLeave={() => setIconHover(false)}
+        aria-label={removeLabel}
+        title={removeLabel}
+        style={{
+          display: "inline-flex",
+          width: 14,
+          height: 14,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          background: "transparent",
+          color: iconHover
+            ? "var(--color-danger)"
+            : "var(--color-text-faint)",
+          cursor: "pointer",
+        }}
+      >
+        {rowHover ? <X size={12} /> : icon}
+      </button>
+      <span
+        // Native tooltip — surfaces the full name when the row is too narrow
+        // to show it and the text is truncated with an ellipsis.
+        title={label}
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
 function RateLimitCard({ collapsed = false }: { collapsed?: boolean }) {
   const rateLimit = useAppStore((s) => s.rateLimit);
   const remaining = rateLimit?.remaining ?? 0;
@@ -295,8 +376,13 @@ export function Sidebar({
 }: SidebarProps) {
   const { reviewRequests, inFlight, standaloneRuns } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
-  // Match the predicate ReviewRequestsSection uses, so the badge here can
-  // never diverge from the count rendered above the list.
+  const mutes = useAppStore((s) => s.mutes);
+  const pins = useAppStore((s) => s.pins);
+  const setMutes = useAppStore((s) => s.setMutes);
+  const setPins = useAppStore((s) => s.setPins);
+
+  // reviewRequests/inFlight/standaloneRuns from useActionableItems already have
+  // mutes applied — no need to filter again here.
   const reviewCount = reviewRequests.filter((it) =>
     isReviewRequestVisible(it, showAll),
   ).length;
@@ -404,11 +490,60 @@ export function Sidebar({
           </SidebarGroup>
 
           <SidebarGroup title="Pinned">
-            <SidebarItem icon={<Pin size={12} />} label="No pinned repos" muted disabled />
+            {pins.length === 0 ? (
+              <SidebarItem
+                icon={<Pin size={12} />}
+                label="No pinned repos"
+                muted
+                disabled
+              />
+            ) : (
+              pins.map((repo) => (
+                <RemovableSidebarRow
+                  key={repo}
+                  icon={<Pin size={12} />}
+                  label={repo}
+                  removeLabel={`Unpin ${repo}`}
+                  onRemove={async () => {
+                    try {
+                      await removePin(repo);
+                      setPins(useAppStore.getState().pins.filter((p) => p !== repo));
+                    } catch { /* storage error — leave state unchanged */ }
+                  }}
+                />
+              ))
+            )}
           </SidebarGroup>
 
           <SidebarGroup title="Muted">
-            <SidebarItem icon={<VolumeX size={12} />} label="No muted repos" muted disabled />
+            {mutes.length === 0 ? (
+              <SidebarItem
+                icon={<VolumeX size={12} />}
+                label="No muted repos"
+                muted
+                disabled
+              />
+            ) : (
+              mutes.map((rule) => (
+                <RemovableSidebarRow
+                  key={`${rule.scope}:${rule.value}`}
+                  icon={<VolumeX size={12} />}
+                  label={rule.value}
+                  removeLabel={`Unmute ${rule.value}`}
+                  onRemove={async () => {
+                    try {
+                      await removeMute(rule.scope, rule.value);
+                      setMutes(
+                        useAppStore.getState().mutes.filter(
+                          (m) =>
+                            !(m.scope === rule.scope && m.value === rule.value),
+                        ),
+                      );
+                    } catch { /* storage error — leave state unchanged */ }
+                  }}
+                />
+              ))
+            )}
           </SidebarGroup>
         </>
       )}
