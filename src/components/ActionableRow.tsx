@@ -57,25 +57,31 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
 
   const handleMuteRepo = async () => {
     if (mutes.some((m) => m.scope === "repo" && m.value === item.repoFullName)) return;
-    await addMute("repo", item.repoFullName);
-    setMutes([...mutes, { scope: "repo" as const, value: item.repoFullName }]);
+    try {
+      await addMute("repo", item.repoFullName);
+      setMutes([...mutes, { scope: "repo" as const, value: item.repoFullName }]);
+    } catch { /* storage error — leave state unchanged */ }
   };
 
   const handleMuteOrg = async () => {
     const owner = item.repoFullName.split("/")[0] ?? "";
     if (mutes.some((m) => m.scope === "org" && m.value === owner)) return;
-    await addMute("org", owner);
-    setMutes([...mutes, { scope: "org" as const, value: owner }]);
+    try {
+      await addMute("org", owner);
+      setMutes([...mutes, { scope: "org" as const, value: owner }]);
+    } catch { /* storage error — leave state unchanged */ }
   };
 
   const handleTogglePin = async () => {
-    if (isPinned) {
-      await removePin(item.repoFullName);
-      setPins(pins.filter((p) => p !== item.repoFullName));
-    } else {
-      await addPin(item.repoFullName);
-      setPins([...pins, item.repoFullName]);
-    }
+    try {
+      if (isPinned) {
+        await removePin(item.repoFullName);
+        setPins(pins.filter((p) => p !== item.repoFullName));
+      } else {
+        await addPin(item.repoFullName);
+        setPins([...pins, item.repoFullName]);
+      }
+    } catch { /* storage error — leave state unchanged */ }
   };
 
   const copyButton = (

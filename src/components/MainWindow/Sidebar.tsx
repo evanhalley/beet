@@ -425,8 +425,10 @@ export function Sidebar({
                   label={repo}
                   collapsed={collapsed}
                   onClick={async () => {
-                    await removePin(repo);
-                    setPins(pins.filter((p) => p !== repo));
+                    try {
+                      await removePin(repo);
+                      setPins(pins.filter((p) => p !== repo));
+                    } catch { /* storage error — leave state unchanged */ }
                   }}
                 />
               ))
@@ -450,13 +452,15 @@ export function Sidebar({
                   muted
                   collapsed={collapsed}
                   onClick={async () => {
-                    await removeMute(rule.scope, rule.value);
-                    setMutes(
-                      mutes.filter(
-                        (m) =>
-                          !(m.scope === rule.scope && m.value === rule.value),
-                      ),
-                    );
+                    try {
+                      await removeMute(rule.scope, rule.value);
+                      setMutes(
+                        mutes.filter(
+                          (m) =>
+                            !(m.scope === rule.scope && m.value === rule.value),
+                        ),
+                      );
+                    } catch { /* storage error — leave state unchanged */ }
                   }}
                 />
               ))

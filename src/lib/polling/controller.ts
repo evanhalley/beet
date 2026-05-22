@@ -8,6 +8,11 @@
 // uses multiplication semantics. This frontend copy is used for:
 // 1. Unit-testable documentation of the §7 policy.
 // 2. Driving a pollingState Zustand slice that the Settings UI can display.
+//
+// NOTE: computeMultiplier is intentionally not wired to the Rust poll interval.
+// The Rust side is the ground truth. The frontend value is for UI display only
+// (e.g. PollingTab showing "currently polling every ~60s"). Wire it up by
+// subscribing to the relevant store slices and passing the result to PollingTab.
 
 export interface PollingSignals {
   windowHidden: boolean;
