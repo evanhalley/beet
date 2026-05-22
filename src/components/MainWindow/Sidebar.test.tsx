@@ -3,10 +3,16 @@ import { render, screen } from "@testing-library/react";
 import { Sidebar } from "./Sidebar";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { useAppStore } from "@/lib/store";
+import { removeMute, removePin } from "@/lib/storage/mutePin";
 import type { ActionableItem } from "@/lib/types";
 
 vi.mock("@/hooks/useActionableItems", () => ({
   useActionableItems: vi.fn(),
+}));
+
+vi.mock("@/lib/storage/mutePin", () => ({
+  removePin: vi.fn().mockResolvedValue(undefined),
+  removeMute: vi.fn().mockResolvedValue(undefined),
 }));
 
 function setActionable(
@@ -59,6 +65,7 @@ function prItem(id: string): ActionableItem {
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
   useAppStore.getState().reset();
   setActionable([], []);
 });
@@ -125,5 +132,32 @@ describe("Sidebar", () => {
     expect(myteam).toBeDisabled();
     expect(screen.getByRole("button", { name: /No pinned repos/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /No muted repos/ })).toBeDisabled();
+  });
+
+  test("pinned repo: name is plain text; removal is a dedicated Unpin button", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    useAppStore.setState({ pins: ["acme/repo"] });
+    render(<Sidebar />);
+
+    // The repo name is not itself a click target — clicking it must not remove.
+    // It carries a title tooltip so a truncated name is still readable.
+    expect(screen.getByText("acme/repo")).toHaveAttribute("title", "acme/repo");
+    expect(screen.queryByRole("button", { name: "acme/repo" })).toBeNull();
+
+    // The ✕ icon button is the only remove affordance.
+    await user.click(screen.getByRole("button", { name: "Unpin acme/repo" }));
+    expect(vi.mocked(removePin)).toHaveBeenCalledWith("acme/repo");
+  });
+
+  test("muted repo: name is plain text; removal is a dedicated Unmute button", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    useAppStore.setState({ mutes: [{ scope: "repo", value: "acme/old" }] });
+    render(<Sidebar />);
+
+    expect(screen.getByText("acme/old")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "acme/old" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Unmute acme/old" }));
+    expect(vi.mocked(removeMute)).toHaveBeenCalledWith("repo", "acme/old");
   });
 });

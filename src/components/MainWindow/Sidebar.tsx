@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -11,6 +11,7 @@ import {
   Rocket,
   Settings as Cog,
   VolumeX,
+  X,
 } from "lucide-react";
 import {
   isReviewRequestVisible,
@@ -175,6 +176,85 @@ function SidebarItem({
         </span>
       )}
     </button>
+  );
+}
+
+interface RemovableSidebarRowProps {
+  // The resting icon (a Pin / VolumeX glyph). Swapped for an ✕ on row hover.
+  icon: ReactNode;
+  label: string;
+  // aria-label / tooltip for the remove button, e.g. "Unpin acme/repo".
+  removeLabel: string;
+  onRemove: () => void;
+}
+
+// A pinned/muted repo row. The leading icon turns into an ✕ while the row is
+// hovered; clicking that icon — and only that icon — removes the rule. The
+// repo name is plain text, not a click target, so removal is deliberate.
+function RemovableSidebarRow({
+  icon,
+  label,
+  removeLabel,
+  onRemove,
+}: RemovableSidebarRowProps) {
+  const [rowHover, setRowHover] = useState(false);
+  const [iconHover, setIconHover] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setRowHover(true)}
+      onMouseLeave={() => {
+        setRowHover(false);
+        setIconHover(false);
+      }}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "5px 10px",
+        borderRadius: 6,
+        background: rowHover ? "var(--color-hover)" : "transparent",
+        fontSize: 12.5,
+        fontWeight: 500,
+        color: "var(--color-text)",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onRemove}
+        onMouseEnter={() => setIconHover(true)}
+        onMouseLeave={() => setIconHover(false)}
+        aria-label={removeLabel}
+        title={removeLabel}
+        style={{
+          display: "inline-flex",
+          width: 14,
+          height: 14,
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          background: "transparent",
+          color: iconHover
+            ? "var(--color-danger)"
+            : "var(--color-text-faint)",
+          cursor: "pointer",
+        }}
+      >
+        {rowHover ? <X size={12} /> : icon}
+      </button>
+      <span
+        // Native tooltip — surfaces the full name when the row is too narrow
+        // to show it and the text is truncated with an ellipsis.
+        title={label}
+        style={{
+          flex: 1,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </span>
+    </div>
   );
 }
 
@@ -419,12 +499,12 @@ export function Sidebar({
               />
             ) : (
               pins.map((repo) => (
-                <SidebarItem
+                <RemovableSidebarRow
                   key={repo}
                   icon={<Pin size={12} />}
                   label={repo}
-                  collapsed={collapsed}
-                  onClick={async () => {
+                  removeLabel={`Unpin ${repo}`}
+                  onRemove={async () => {
                     try {
                       await removePin(repo);
                       setPins(useAppStore.getState().pins.filter((p) => p !== repo));
@@ -445,13 +525,12 @@ export function Sidebar({
               />
             ) : (
               mutes.map((rule) => (
-                <SidebarItem
+                <RemovableSidebarRow
                   key={`${rule.scope}:${rule.value}`}
                   icon={<VolumeX size={12} />}
                   label={rule.value}
-                  muted
-                  collapsed={collapsed}
-                  onClick={async () => {
+                  removeLabel={`Unmute ${rule.value}`}
+                  onRemove={async () => {
                     try {
                       await removeMute(rule.scope, rule.value);
                       setMutes(

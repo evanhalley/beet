@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Pin, X } from "lucide-react";
+import { Pin, VolumeX, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { removeMute, removePin } from "@/lib/storage/mutePin";
 import { H, Stack } from "./atoms";
@@ -74,6 +74,7 @@ export function MutePinTab() {
           {repoMutes.map((rule) => (
             <RuleRow
               key={`repo:${rule.value}`}
+              icon={<VolumeX size={12} style={{ color: "var(--color-accent)" }} />}
               label={rule.value}
               onRemove={async () => {
                 try {
@@ -107,6 +108,7 @@ export function MutePinTab() {
           {orgMutes.map((rule) => (
             <RuleRow
               key={`org:${rule.value}`}
+              icon={<VolumeX size={12} style={{ color: "var(--color-accent)" }} />}
               label={rule.value}
               onRemove={async () => {
                 try {
