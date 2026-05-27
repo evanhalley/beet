@@ -110,19 +110,28 @@ mod tests {
 
     #[test]
     fn hidden_window_doubles() {
-        let s = AdaptiveSignals { window_hidden: true, ..base(60) };
+        let s = AdaptiveSignals {
+            window_hidden: true,
+            ..base(60)
+        };
         assert_eq!(effective_interval(&s), Duration::from_secs(120));
     }
 
     #[test]
     fn battery_doubles() {
-        let s = AdaptiveSignals { on_battery: true, ..base(60) };
+        let s = AdaptiveSignals {
+            on_battery: true,
+            ..base(60)
+        };
         assert_eq!(effective_interval(&s), Duration::from_secs(120));
     }
 
     #[test]
     fn rate_limited_quadruples() {
-        let s = AdaptiveSignals { rate_limited: true, ..base(60) };
+        let s = AdaptiveSignals {
+            rate_limited: true,
+            ..base(60)
+        };
         assert_eq!(effective_interval(&s), Duration::from_secs(240));
     }
 
@@ -168,7 +177,10 @@ mod tests {
             rate_limited: true,
             ..base(600)
         };
-        assert_eq!(effective_interval(&s), Duration::from_secs(MAX_INTERVAL_SECS));
+        assert_eq!(
+            effective_interval(&s),
+            Duration::from_secs(MAX_INTERVAL_SECS)
+        );
     }
 
     #[test]
@@ -178,7 +190,10 @@ mod tests {
             retry_after_secs: Some(100_000),
             ..base(60)
         };
-        assert_eq!(effective_interval(&s), Duration::from_secs(MAX_INTERVAL_SECS));
+        assert_eq!(
+            effective_interval(&s),
+            Duration::from_secs(MAX_INTERVAL_SECS)
+        );
     }
 
     #[test]
@@ -213,7 +228,10 @@ mod tests {
     #[test]
     fn pinned_repos_false_leaves_other_multipliers_intact() {
         // Ensure the new field doesn't silently break the existing path.
-        let s = AdaptiveSignals { rate_limited: true, ..base(60) };
+        let s = AdaptiveSignals {
+            rate_limited: true,
+            ..base(60)
+        };
         assert_eq!(effective_interval(&s), Duration::from_secs(240));
     }
 }

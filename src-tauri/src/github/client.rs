@@ -188,7 +188,9 @@ impl GithubClient {
 
         if status == StatusCode::NOT_MODIFIED {
             let entry = cached.ok_or_else(|| {
-                BeetError::Other(format!("304 Not Modified with no cached body for {cache_key}"))
+                BeetError::Other(format!(
+                    "304 Not Modified with no cached body for {cache_key}"
+                ))
             })?;
             let body: T = serde_json::from_str(&entry.body_json)?;
             return Ok(BeetGetResult {
@@ -350,8 +352,7 @@ mod tests {
         let db = db();
         let client = GithubClient::new("tok").unwrap();
         let url = format!("{}/thing", server.uri());
-        let res: BeetGetResult<Payload> =
-            client.beet_get(&db, "thing", &url).await.unwrap();
+        let res: BeetGetResult<Payload> = client.beet_get(&db, "thing", &url).await.unwrap();
 
         assert!(!res.from_cache);
         assert_eq!(res.body, Payload { value: 1 });
@@ -396,13 +397,11 @@ mod tests {
             let conn = db.lock().unwrap();
             set_cached(&conn, "thing", "MISSING", "{\"value\":0}").unwrap();
         }
-        let first: BeetGetResult<Payload> =
-            client.beet_get(&db, "thing", &url).await.unwrap();
+        let first: BeetGetResult<Payload> = client.beet_get(&db, "thing", &url).await.unwrap();
         assert!(!first.from_cache);
         assert_eq!(first.body, Payload { value: 7 });
 
-        let second: BeetGetResult<Payload> =
-            client.beet_get(&db, "thing", &url).await.unwrap();
+        let second: BeetGetResult<Payload> = client.beet_get(&db, "thing", &url).await.unwrap();
         assert!(second.from_cache);
         assert_eq!(second.body, Payload { value: 7 });
     }
@@ -450,8 +449,7 @@ mod tests {
         let db = db();
         let client = GithubClient::new("tok").unwrap();
         let url = format!("{}/flaky", server.uri());
-        let res: BeetGetResult<Payload> =
-            client.beet_get(&db, "flaky", &url).await.unwrap();
+        let res: BeetGetResult<Payload> = client.beet_get(&db, "flaky", &url).await.unwrap();
         assert_eq!(res.body, Payload { value: 42 });
         assert_eq!(res.etag.as_deref(), Some("\"recovered\""));
     }
@@ -468,7 +466,10 @@ mod tests {
         let db = db();
         let client = GithubClient::new("tok").unwrap();
         let url = format!("{}/auth", server.uri());
-        let err = client.beet_get::<Payload>(&db, "auth", &url).await.unwrap_err();
+        let err = client
+            .beet_get::<Payload>(&db, "auth", &url)
+            .await
+            .unwrap_err();
         assert!(matches!(err, BeetError::Unauthorized(401)));
     }
 
@@ -490,7 +491,9 @@ mod tests {
             .unwrap_err();
         assert!(matches!(
             err,
-            BeetError::RateLimited { retry_after_secs: Some(60) }
+            BeetError::RateLimited {
+                retry_after_secs: Some(60)
+            }
         ));
     }
 
@@ -523,7 +526,9 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            BeetError::RateLimited { retry_after_secs: Some(n) } => {
+            BeetError::RateLimited {
+                retry_after_secs: Some(n),
+            } => {
                 assert!(n > 0 && n <= 120, "expected ~120s, got {n}");
             }
             other => panic!("expected RateLimited, got {other:?}"),
@@ -563,10 +568,7 @@ mod tests {
 
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let err = client
-            .beet_post_graphql::<serde_json::Value>(
-                "mutation { noop }",
-                serde_json::json!({}),
-            )
+            .beet_post_graphql::<serde_json::Value>("mutation { noop }", serde_json::json!({}))
             .await
             .unwrap_err();
         match err {
@@ -588,10 +590,7 @@ mod tests {
 
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let err = client
-            .beet_post_graphql::<serde_json::Value>(
-                "mutation { noop }",
-                serde_json::json!({}),
-            )
+            .beet_post_graphql::<serde_json::Value>("mutation { noop }", serde_json::json!({}))
             .await
             .unwrap_err();
         assert!(matches!(err, BeetError::Unauthorized(401)));

@@ -111,9 +111,7 @@ mod tests {
         let server = MockServer::start().await;
         Mock::given(method("GET"))
             .and(path("/orgs/acme/teams/core/members"))
-            .respond_with(
-                ResponseTemplate::new(429).insert_header("retry-after", "30"),
-            )
+            .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "30"))
             .mount(&server)
             .await;
 
@@ -122,7 +120,9 @@ mod tests {
         let res = resolve_team_members(&client, &db, &["acme/core".to_string()]).await;
         assert!(matches!(
             res,
-            Err(crate::error::BeetError::RateLimited { retry_after_secs: Some(30) })
+            Err(crate::error::BeetError::RateLimited {
+                retry_after_secs: Some(30)
+            })
         ));
     }
 }

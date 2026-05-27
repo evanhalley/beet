@@ -189,8 +189,7 @@ mod tests {
             pr.is_review_requested_from_me = true;
             pr.is_author_on_my_team = true;
         }
-        let result =
-            score_pull_requests_at(vec![item], false, &["renovate[bot]".to_string()], now);
+        let result = score_pull_requests_at(vec![item], false, &["renovate[bot]".to_string()], now);
         assert_eq!(result.len(), 0);
     }
 

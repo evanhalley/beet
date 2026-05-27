@@ -94,10 +94,8 @@ impl PollConfig {
             ),
             auto_requeue_repos: string_array(store.get("autoRequeueRepos"))
                 .unwrap_or(defaults.auto_requeue_repos),
-            standalone_runs_allowlist: string_array_map(
-                store.get("standaloneRunsAllowlist"),
-            )
-            .unwrap_or(defaults.standalone_runs_allowlist),
+            standalone_runs_allowlist: string_array_map(store.get("standaloneRunsAllowlist"))
+                .unwrap_or(defaults.standalone_runs_allowlist),
         }
     }
 }
@@ -107,10 +105,7 @@ fn clamp_interval(secs: u64) -> u64 {
 }
 
 fn clamp_max_attempts(n: u32) -> u32 {
-    n.clamp(
-        AUTO_REQUEUE_MAX_ATTEMPTS_MIN,
-        AUTO_REQUEUE_MAX_ATTEMPTS_MAX,
-    )
+    n.clamp(AUTO_REQUEUE_MAX_ATTEMPTS_MIN, AUTO_REQUEUE_MAX_ATTEMPTS_MAX)
 }
 
 fn string_array(value: Option<Value>) -> Option<Vec<String>> {
