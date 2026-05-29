@@ -27,7 +27,7 @@
         "label": "tray",
         "title": "Beet Tray",
         "url": "/tray",
-        "width": 360,
+        "width": 440,
         "height": 480,
         "decorations": false,
         "transparent": false,

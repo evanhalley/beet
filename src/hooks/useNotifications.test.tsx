@@ -14,11 +14,21 @@ const mockRequestPermission = vi.hoisted(() =>
   vi.fn().mockResolvedValue("granted"),
 );
 const mockCheckAndRecord = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+// Captures the onNotificationClicked callback so tests can simulate a click.
+const mockOnNotificationClicked = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ unregister: vi.fn() }),
+);
+const mockOpenInBrowser = vi.hoisted(() => vi.fn());
 
-vi.mock("@tauri-apps/plugin-notification", () => ({
+vi.mock("@choochmeque/tauri-plugin-notifications-api", () => ({
   isPermissionGranted: mockIsPermissionGranted,
   requestPermission: mockRequestPermission,
   sendNotification: mockSendNotification,
+  onNotificationClicked: mockOnNotificationClicked,
+}));
+
+vi.mock("@/lib/openInBrowser", () => ({
+  openInBrowser: mockOpenInBrowser,
 }));
 
 vi.mock("@/lib/storage/notifications", () => ({
@@ -110,6 +120,33 @@ describe("useNotifications", () => {
     await waitFor(() =>
       expect(mockIsPermissionGranted).toHaveBeenCalled(),
     );
+  });
+
+  test("clicking a notification opens its URL in the browser", async () => {
+    renderHook(() => useNotifications());
+    await waitFor(() =>
+      expect(mockOnNotificationClicked).toHaveBeenCalled(),
+    );
+
+    // Simulate macOS delivering a click for a notification carrying a URL.
+    const clickCb = mockOnNotificationClicked.mock.calls[0][0];
+    clickCb({ id: 1, data: { url: "https://github.com/acme/repo/pull/7" } });
+
+    expect(mockOpenInBrowser).toHaveBeenCalledWith(
+      "https://github.com/acme/repo/pull/7",
+    );
+  });
+
+  test("clicking a notification with no URL does nothing", async () => {
+    renderHook(() => useNotifications());
+    await waitFor(() =>
+      expect(mockOnNotificationClicked).toHaveBeenCalled(),
+    );
+
+    const clickCb = mockOnNotificationClicked.mock.calls[0][0];
+    clickCb({ id: 1 });
+
+    expect(mockOpenInBrowser).not.toHaveBeenCalled();
   });
 
   test("trigger 3: fires when a new review request appears", async () => {

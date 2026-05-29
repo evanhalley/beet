@@ -27,7 +27,7 @@ pub fn run() {
 
     // OS notifications — macOS only in V1 (§13).
     #[cfg(target_os = "macos")]
-    let builder = builder.plugin(tauri_plugin_notification::init());
+    let builder = builder.plugin(tauri_plugin_notifications::init());
 
     builder
         .invoke_handler(tauri::generate_handler![
