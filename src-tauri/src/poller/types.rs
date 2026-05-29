@@ -320,7 +320,10 @@ mod tests {
         );
         assert_eq!(pr["lifecycle"], "merge_queue");
         assert_eq!(keys(&pr["reviewers"][0]), vec!["login", "state"]);
-        assert_eq!(keys(&pr["checkRuns"][0]), vec!["conclusion", "name", "status"]);
+        assert_eq!(
+            keys(&pr["checkRuns"][0]),
+            vec!["conclusion", "name", "status"]
+        );
 
         let mq = &pr["mergeQueue"];
         assert_eq!(
@@ -334,7 +337,10 @@ mod tests {
                 "prNodeId",
             ]
         );
-        assert_eq!(keys(&mq["ejectedChecks"][0]), vec!["conclusion", "detailsUrl", "name"]);
+        assert_eq!(
+            keys(&mq["ejectedChecks"][0]),
+            vec!["conclusion", "detailsUrl", "name"]
+        );
     }
 
     /// Optional fields collapse out of the JSON when absent, matching the

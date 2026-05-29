@@ -12,9 +12,7 @@
 use crate::error::BeetResult;
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::{WorkflowJob, WorkflowJobsResult, WorkflowRun, WorkflowRunsResult};
-use crate::poller::types::{
-    ActionableItem, ActionableItemRun, ActionableKind, AssociatedRun,
-};
+use crate::poller::types::{ActionableItem, ActionableItemRun, ActionableKind, AssociatedRun};
 use crate::secure_token::read_token;
 use crate::store::runs::{list_recent_completions, record_completion, RunCompletionEvent};
 use crate::store::Db;
@@ -93,22 +91,19 @@ pub async fn fetch_runs_for_repos(
     repos: &[String],
     actor: &str,
 ) -> FetchRunsOutcome {
-    let results: Vec<(String, BeetResult<FetchedRuns>)> =
-        stream::iter(repos.iter().cloned())
-            .map(|full_name| async move {
-                let res = match full_name.split_once('/') {
-                    Some((owner, repo)) => {
-                        fetch_runs_for_repo(client, db, owner, repo, actor).await
-                    }
-                    None => Err(crate::error::BeetError::Other(format!(
-                        "bad repo full_name: {full_name}"
-                    ))),
-                };
-                (full_name, res)
-            })
-            .buffer_unordered(MAX_REPO_CONCURRENCY)
-            .collect()
-            .await;
+    let results: Vec<(String, BeetResult<FetchedRuns>)> = stream::iter(repos.iter().cloned())
+        .map(|full_name| async move {
+            let res = match full_name.split_once('/') {
+                Some((owner, repo)) => fetch_runs_for_repo(client, db, owner, repo, actor).await,
+                None => Err(crate::error::BeetError::Other(format!(
+                    "bad repo full_name: {full_name}"
+                ))),
+            };
+            (full_name, res)
+        })
+        .buffer_unordered(MAX_REPO_CONCURRENCY)
+        .collect()
+        .await;
 
     let mut runs: Vec<RunWithRepo> = Vec::new();
     let mut rate_limit = None;
@@ -126,9 +121,7 @@ pub async fn fetch_runs_for_repos(
             Err(e) => {
                 // No tracing infra in V1 yet; eprintln is enough to surface
                 // a persistently broken repo in `tauri dev` output.
-                eprintln!(
-                    "[beet] runs fetch failed for {repo_full_name}: {e}"
-                );
+                eprintln!("[beet] runs fetch failed for {repo_full_name}: {e}");
             }
         }
     }
@@ -177,9 +170,7 @@ pub async fn fetch_run_jobs(
     repo: &str,
     run_id: i64,
 ) -> BeetResult<Vec<WorkflowJob>> {
-    let url = client.url(&format!(
-        "/repos/{owner}/{repo}/actions/runs/{run_id}/jobs"
-    ));
+    let url = client.url(&format!("/repos/{owner}/{repo}/actions/runs/{run_id}/jobs"));
     let cache_key = format!("runs:{owner}/{repo}#{run_id}:jobs");
     let res = client
         .beet_get::<WorkflowJobsResult>(db, &cache_key, &url)
@@ -253,7 +244,10 @@ fn to_actionable_run(run: &WorkflowRun, repo_full_name: &str, actor: &str) -> Ac
                 .and_then(|a| a.login.clone())
                 .unwrap_or_else(|| actor.to_string()),
             run_url: run.html_url.clone(),
-            started_at: run.run_started_at.clone().or_else(|| Some(run.created_at.clone())),
+            started_at: run
+                .run_started_at
+                .clone()
+                .or_else(|| Some(run.created_at.clone())),
             completed_at: if run.status == "completed" {
                 Some(run.updated_at.clone())
             } else {
@@ -337,7 +331,10 @@ pub fn collapse_runs(
             let seen = per_pr_seen_at.entry(pr_id.clone()).or_default();
             let prev_at = seen.get(&assoc.workflow_name).cloned();
             // Keep the most-recent run per workflow name (by `updated_at`).
-            if prev_at.as_deref().map_or(true, |p| run.updated_at.as_str() > p) {
+            if prev_at
+                .as_deref()
+                .map_or(true, |p| run.updated_at.as_str() > p)
+            {
                 seen.insert(assoc.workflow_name.clone(), run.updated_at.clone());
                 bucket.insert(assoc.workflow_name.clone(), assoc.clone());
             }
@@ -372,7 +369,9 @@ pub fn collapse_runs(
 pub fn dedupe_standalone(runs: Vec<ActionableItem>) -> Vec<ActionableItem> {
     let mut newest: HashMap<(String, String), ActionableItem> = HashMap::new();
     for item in runs {
-        let Some(run) = item.run.as_ref() else { continue };
+        let Some(run) = item.run.as_ref() else {
+            continue;
+        };
         let key = (item.repo_full_name.clone(), run.workflow_name.clone());
         match newest.get(&key) {
             Some(existing) if existing.updated_at >= item.updated_at => {}
@@ -414,8 +413,7 @@ pub fn apply_standalone_allowlist(
                 return true;
             };
             let needle = run.workflow_name.trim().to_ascii_lowercase();
-            list.iter()
-                .any(|w| w.trim().to_ascii_lowercase() == needle)
+            list.iter().any(|w| w.trim().to_ascii_lowercase() == needle)
         })
         .collect()
 }
@@ -511,10 +509,7 @@ pub fn build_recently_resolved(
 
 fn completion_to_item(ev: RunCompletionEvent) -> ActionableItem {
     let id = format!("run:{}#{}", ev.repo, ev.run_id);
-    let fallback_url = format!(
-        "https://github.com/{}/actions/runs/{}",
-        ev.repo, ev.run_id
-    );
+    let fallback_url = format!("https://github.com/{}/actions/runs/{}", ev.repo, ev.run_id);
     let run_url = ev.run_url.clone().unwrap_or_else(|| fallback_url.clone());
     ActionableItem {
         id,
@@ -591,10 +586,7 @@ mod tests {
     }
 
     fn tracked(pr_id: &str, owner: &str, repo: &str, n: i64) -> (String, (String, String, i64)) {
-        (
-            pr_id.to_string(),
-            (owner.to_string(), repo.to_string(), n),
-        )
+        (pr_id.to_string(), (owner.to_string(), repo.to_string(), n))
     }
 
     fn with_repo(repo: &str, run: WorkflowRun) -> RunWithRepo {
@@ -606,11 +598,19 @@ mod tests {
 
     #[test]
     fn collapse_attaches_runs_to_tracked_prs_and_drops_them_from_standalone() {
-        let tracked: HashMap<_, _> =
-            [tracked("pr:foo/bar#1", "foo", "bar", 1)].into_iter().collect();
+        let tracked: HashMap<_, _> = [tracked("pr:foo/bar#1", "foo", "bar", 1)]
+            .into_iter()
+            .collect();
         let runs = vec![with_repo(
             "foo/bar",
-            run(10, &[1], "completed", Some("success"), "2026-01-01T01:00:00.000Z", "CI"),
+            run(
+                10,
+                &[1],
+                "completed",
+                Some("success"),
+                "2026-01-01T01:00:00.000Z",
+                "CI",
+            ),
         )];
         let out = collapse_runs(runs, &tracked, "evan");
         assert_eq!(out.standalone.len(), 0);
@@ -621,20 +621,42 @@ mod tests {
 
     #[test]
     fn collapse_keeps_only_most_recent_run_per_workflow_per_pr() {
-        let tracked: HashMap<_, _> =
-            [tracked("pr:foo/bar#1", "foo", "bar", 1)].into_iter().collect();
+        let tracked: HashMap<_, _> = [tracked("pr:foo/bar#1", "foo", "bar", 1)]
+            .into_iter()
+            .collect();
         let runs = vec![
             with_repo(
                 "foo/bar",
-                run(10, &[1], "completed", Some("failure"), "2026-01-01T00:00:00.000Z", "CI"),
+                run(
+                    10,
+                    &[1],
+                    "completed",
+                    Some("failure"),
+                    "2026-01-01T00:00:00.000Z",
+                    "CI",
+                ),
             ),
             with_repo(
                 "foo/bar",
-                run(11, &[1], "completed", Some("success"), "2026-01-01T02:00:00.000Z", "CI"),
+                run(
+                    11,
+                    &[1],
+                    "completed",
+                    Some("success"),
+                    "2026-01-01T02:00:00.000Z",
+                    "CI",
+                ),
             ),
             with_repo(
                 "foo/bar",
-                run(12, &[1], "in_progress", None, "2026-01-01T03:00:00.000Z", "Deploy"),
+                run(
+                    12,
+                    &[1],
+                    "in_progress",
+                    None,
+                    "2026-01-01T03:00:00.000Z",
+                    "Deploy",
+                ),
             ),
         ];
         let out = collapse_runs(runs, &tracked, "evan");
@@ -642,7 +664,10 @@ mod tests {
         assert_eq!(attached.len(), 2);
         let ci = attached.iter().find(|r| r.workflow_name == "CI").unwrap();
         assert_eq!(ci.conclusion.as_deref(), Some("success"));
-        let deploy = attached.iter().find(|r| r.workflow_name == "Deploy").unwrap();
+        let deploy = attached
+            .iter()
+            .find(|r| r.workflow_name == "Deploy")
+            .unwrap();
         assert_eq!(deploy.status, "in_progress");
         assert!(deploy.completed_at.is_none());
     }
@@ -653,11 +678,25 @@ mod tests {
         let runs = vec![
             with_repo(
                 "foo/bar",
-                run(20, &[], "completed", Some("success"), "2026-01-01T00:00:00.000Z", "Deploy"),
+                run(
+                    20,
+                    &[],
+                    "completed",
+                    Some("success"),
+                    "2026-01-01T00:00:00.000Z",
+                    "Deploy",
+                ),
             ),
             with_repo(
                 "foo/bar",
-                run(21, &[999], "in_progress", None, "2026-01-01T00:01:00.000Z", "CI"),
+                run(
+                    21,
+                    &[999],
+                    "in_progress",
+                    None,
+                    "2026-01-01T00:01:00.000Z",
+                    "CI",
+                ),
             ),
         ];
         let out = collapse_runs(runs, &tracked, "evan");
@@ -675,11 +714,19 @@ mod tests {
     fn collapse_does_not_match_pr_numbers_across_different_repos() {
         // A PR #1 in foo/bar must not collect a run from baz/qux that also
         // claims pull_requests[].number == 1.
-        let tracked: HashMap<_, _> =
-            [tracked("pr:foo/bar#1", "foo", "bar", 1)].into_iter().collect();
+        let tracked: HashMap<_, _> = [tracked("pr:foo/bar#1", "foo", "bar", 1)]
+            .into_iter()
+            .collect();
         let runs = vec![with_repo(
             "baz/qux",
-            run(30, &[1], "completed", Some("success"), "2026-01-01T00:00:00.000Z", "CI"),
+            run(
+                30,
+                &[1],
+                "completed",
+                Some("success"),
+                "2026-01-01T00:00:00.000Z",
+                "CI",
+            ),
         )];
         let out = collapse_runs(runs, &tracked, "evan");
         assert!(out.attached.is_empty());
@@ -687,12 +734,7 @@ mod tests {
         assert_eq!(out.standalone[0].repo_full_name, "baz/qux");
     }
 
-    fn standalone(
-        repo: &str,
-        run_id: i64,
-        workflow: &str,
-        updated_at: &str,
-    ) -> ActionableItem {
+    fn standalone(repo: &str, run_id: i64, workflow: &str, updated_at: &str) -> ActionableItem {
         to_actionable_run(
             &run(
                 run_id,
@@ -818,7 +860,9 @@ mod tests {
 
         let db: Db = Mutex::new(open_in_memory().unwrap());
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-        let jobs = fetch_run_jobs(&client, &db, "foo", "bar", 42).await.unwrap();
+        let jobs = fetch_run_jobs(&client, &db, "foo", "bar", 42)
+            .await
+            .unwrap();
 
         assert_eq!(jobs.len(), 2);
         assert_eq!(jobs[0].name, "build");
@@ -835,8 +879,7 @@ mod tests {
     #[test]
     fn iso_window_start_returns_a_past_timestamp() {
         let start = iso_window_start(24);
-        let now = chrono::Utc::now()
-            .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         assert!(start < now, "{start} should sort before {now}");
     }
 }

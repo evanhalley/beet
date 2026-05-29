@@ -15,10 +15,7 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 #[cfg(target_os = "macos")]
-                {
-                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-                    tray::refresh_dock_icon_pub();
-                }
+                let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
@@ -62,8 +59,8 @@ pub fn run() {
             if let Some(parent) = db_path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            let conn = store::db::open(&db_path)
-                .map_err(|e| format!("failed to open beet.db: {e}"))?;
+            let conn =
+                store::db::open(&db_path).map_err(|e| format!("failed to open beet.db: {e}"))?;
             let db = std::sync::Arc::new(std::sync::Mutex::new(conn));
 
             let handle = poller::poll_loop::spawn(app.handle().clone(), db.clone());
@@ -75,9 +72,7 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. }
-                if window.label() == "main" =>
-            {
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == "main" => {
                 api.prevent_close();
                 let _ = window.hide();
                 // Hide Beet from the Dock when no windows are visible.
@@ -86,9 +81,7 @@ pub fn run() {
                     .app_handle()
                     .set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
-            tauri::WindowEvent::Focused(false)
-                if window.label() == "tray" =>
-            {
+            tauri::WindowEvent::Focused(false) if window.label() == "tray" => {
                 let _ = window.hide();
             }
             _ => {}

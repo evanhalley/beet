@@ -172,11 +172,7 @@ pub fn list_recently_resolved_pr_ids(
                 pr_id,
                 lifecycle: lc,
                 resolved_at: observed_at,
-                snapshot: PrSnapshot {
-                    title,
-                    author,
-                    url,
-                },
+                snapshot: PrSnapshot { title, author, url },
             });
         }
     }
@@ -223,10 +219,28 @@ mod tests {
         let conn = open_in_memory().unwrap();
         // `observed_at` (millisecond precision) is part of the PK; real
         // transitions are minutes apart, so space the test inserts out.
-        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::Open, &PrSnapshot::default()).unwrap();
-        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::Open, &PrSnapshot::default()).unwrap();
+        record_lifecycle(
+            &conn,
+            "pr:foo/bar#1",
+            PrLifecycle::Open,
+            &PrSnapshot::default(),
+        )
+        .unwrap();
+        record_lifecycle(
+            &conn,
+            "pr:foo/bar#1",
+            PrLifecycle::Open,
+            &PrSnapshot::default(),
+        )
+        .unwrap();
         std::thread::sleep(std::time::Duration::from_millis(2));
-        record_lifecycle(&conn, "pr:foo/bar#1", PrLifecycle::InReview, &PrSnapshot::default()).unwrap();
+        record_lifecycle(
+            &conn,
+            "pr:foo/bar#1",
+            PrLifecycle::InReview,
+            &PrSnapshot::default(),
+        )
+        .unwrap();
         let count: i64 = conn
             .query_row(
                 "SELECT count(*) FROM pr_lifecycle_history WHERE pr_id = 'pr:foo/bar#1'",
@@ -305,8 +319,7 @@ mod tests {
             [],
         )
         .unwrap();
-        let rows =
-            list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
+        let rows = list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].pr_id, "pr:foo/bar#1");
         assert_eq!(rows[0].lifecycle, PrLifecycle::Merged);
@@ -330,8 +343,7 @@ mod tests {
             [],
         )
         .unwrap();
-        let rows =
-            list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
+        let rows = list_recently_resolved_pr_ids(&conn, "2026-05-17T00:00:00.000Z").unwrap();
         assert!(rows.is_empty(), "reopened PRs must not surface as resolved");
     }
 
@@ -344,8 +356,7 @@ mod tests {
             url: Some("https://github.com/foo/bar/pull/7".to_string()),
         };
         record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::Merged, &snap).unwrap();
-        let rows =
-            list_recently_resolved_pr_ids(&conn, "1970-01-01T00:00:00.000Z").unwrap();
+        let rows = list_recently_resolved_pr_ids(&conn, "1970-01-01T00:00:00.000Z").unwrap();
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].snapshot, snap);
     }

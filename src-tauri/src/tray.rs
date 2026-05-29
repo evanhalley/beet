@@ -2,43 +2,10 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, LogicalPosition, Position, Runtime, Size,
+    AppHandle, Emitter, LogicalPosition, Manager, Position, Runtime, Size,
 };
 
 use crate::poller::poll_loop::PollHandle;
-
-/// Re-set the macOS dock icon after toggling activation policy.
-/// When switching from Accessory → Regular, macOS sometimes shows a generic
-/// "exec" icon instead of the bundled app icon. Explicitly setting
-/// `applicationIconImage` from the bundled icon data fixes this.
-/// Public entry point for callers outside this module (e.g. single-instance handler).
-#[cfg(target_os = "macos")]
-pub fn refresh_dock_icon_pub() {
-    refresh_dock_icon();
-}
-
-#[cfg(target_os = "macos")]
-fn refresh_dock_icon() {
-    use objc2::AnyThread;
-    use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSApplication, NSImage};
-    use objc2_foundation::NSData;
-
-    static ICON_BYTES: &[u8] = include_bytes!("../icons/icon.png");
-
-    // This runs on the main thread (Tauri UI callbacks are always main-thread).
-    let Some(mtm) = MainThreadMarker::new() else {
-        return;
-    };
-
-    unsafe {
-        let data = NSData::with_bytes(ICON_BYTES);
-        if let Some(image) = NSImage::initWithData(NSImage::alloc(), &data) {
-            let app = NSApplication::sharedApplication(mtm);
-            app.setApplicationIconImage(Some(&image));
-        }
-    }
-}
 
 pub struct TrayState {
     pub pause_item: tauri::menu::MenuItem<tauri::Wry>,
@@ -139,12 +106,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
-        // Restore Beet in the Dock before showing the window.
+        // Restore Beet in the Dock before showing the window. macOS picks the
+        // bundled icon.icns from Contents/Resources automatically — don't override.
         #[cfg(target_os = "macos")]
-        {
-            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
-            refresh_dock_icon();
-        }
+        let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();

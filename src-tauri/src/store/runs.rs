@@ -29,10 +29,7 @@ pub struct RunCompletionEvent {
 /// Upsert one completion event. INSERT-OR-IGNORE means we only store the
 /// first time we see a `(run_id)` resolve — subsequent polls observing the
 /// same terminal state are no-ops, which is what #9 wants for dedupe.
-pub fn record_completion(
-    conn: &Connection,
-    event: &RunCompletionEvent,
-) -> rusqlite::Result<()> {
+pub fn record_completion(conn: &Connection, event: &RunCompletionEvent) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT OR IGNORE INTO run_completion_events
          (run_id, repo, workflow_name, conclusion, concluded_at, pr_number,

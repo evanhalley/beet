@@ -7,8 +7,7 @@
 
 use fancy_regex::Regex;
 
-pub const DEFAULT_TASK_REGEX: &str =
-    r"https://your-company\.atlassian\.net/browse/[A-Z]+-\d+";
+pub const DEFAULT_TASK_REGEX: &str = r"https://your-company\.atlassian\.net/browse/[A-Z]+-\d+";
 
 /// Compile a user-supplied task pattern. Accepts a bare pattern or the
 /// `/pattern/flags` form (`i`, `m`, `s`, `x` are honored; `g` is ignored).

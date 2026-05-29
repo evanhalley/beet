@@ -109,8 +109,9 @@ pub fn open_in_memory() -> rusqlite::Result<Connection> {
 /// created by tauri-plugin-sql have `user_version = 0` but the tables already
 /// exist; the `IF NOT EXISTS` statements make re-running them a no-op.
 pub fn migrate(conn: &Connection) -> rusqlite::Result<()> {
-    let version: i64 =
-        conn.query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))?;
+    let version: i64 = conn.query_row("SELECT user_version FROM pragma_user_version", [], |r| {
+        r.get(0)
+    })?;
     for (i, sql) in MIGRATIONS.iter().enumerate() {
         let target = (i + 1) as i64;
         if version < target {
@@ -136,7 +137,9 @@ mod tests {
     fn migrate_creates_all_tables_and_sets_version() {
         let conn = open_in_memory().unwrap();
         let version: i64 = conn
-            .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
+            .query_row("SELECT user_version FROM pragma_user_version", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(version, 8);
         for table in [
@@ -166,7 +169,9 @@ mod tests {
         // Running again must not error or downgrade.
         migrate(&conn).unwrap();
         let version: i64 = conn
-            .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
+            .query_row("SELECT user_version FROM pragma_user_version", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(version, 8);
     }
@@ -187,7 +192,9 @@ mod tests {
         migrate(&conn).unwrap();
 
         let version: i64 = conn
-            .query_row("SELECT user_version FROM pragma_user_version", [], |r| r.get(0))
+            .query_row("SELECT user_version FROM pragma_user_version", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(version, 8);
         // Pre-existing row survives.

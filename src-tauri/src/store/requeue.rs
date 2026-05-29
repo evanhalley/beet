@@ -41,11 +41,7 @@ pub fn record_attempt(
 
 /// Number of real attempts (both succeeded and failed) against this head SHA.
 /// The opt-out sentinel row is excluded.
-pub fn count_attempts(
-    conn: &Connection,
-    pr_id: &str,
-    head_sha: &str,
-) -> rusqlite::Result<i64> {
+pub fn count_attempts(conn: &Connection, pr_id: &str, head_sha: &str) -> rusqlite::Result<i64> {
     conn.query_row(
         "SELECT COUNT(*) FROM pr_requeue_attempts
          WHERE pr_id = ?1 AND head_sha = ?2 AND opt_out = 0",
@@ -80,11 +76,7 @@ pub fn set_opt_out(
     Ok(())
 }
 
-pub fn is_opted_out(
-    conn: &Connection,
-    pr_id: &str,
-    head_sha: &str,
-) -> rusqlite::Result<bool> {
+pub fn is_opted_out(conn: &Connection, pr_id: &str, head_sha: &str) -> rusqlite::Result<bool> {
     let count: i64 = conn.query_row(
         "SELECT COUNT(*) FROM pr_requeue_attempts
          WHERE pr_id = ?1 AND head_sha = ?2 AND opt_out = 1",

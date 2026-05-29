@@ -8,7 +8,6 @@
 //! the task itself never panics out.
 
 use crate::error::{BeetError, BeetResult};
-use crate::poller::adaptive::{effective_interval, is_on_battery, is_window_hidden, AdaptiveSignals};
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::AuthUser;
 use crate::github::prs::{
@@ -20,6 +19,9 @@ use crate::github::runs::{
     fetch_runs_for_repos, iso_window_start, record_completed_runs, RunWithRepo,
     RECENTLY_RESOLVED_WINDOW_HOURS,
 };
+use crate::poller::adaptive::{
+    effective_interval, is_on_battery, is_window_hidden, AdaptiveSignals,
+};
 use crate::poller::config::PollConfig;
 use crate::poller::types::ActionableItem;
 use crate::secure_token::read_token;
@@ -27,8 +29,8 @@ use crate::store::db::now_iso;
 use crate::store::lifecycle::{list_recently_resolved_pr_ids, PrSnapshot, ResolvedPrRow};
 use crate::store::runs::prune_completions_older_than;
 use crate::store::Db;
-use std::collections::{HashMap, HashSet};
 use serde::Serialize;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::watch;
@@ -347,15 +349,15 @@ async fn poll_once<R: Runtime>(
         .filter_map(|item| {
             let pr = item.pr.as_ref()?;
             let (owner, repo) = item.repo_full_name.split_once('/')?;
-            Some((item.id.clone(), (owner.to_string(), repo.to_string(), pr.number)))
+            Some((
+                item.id.clone(),
+                (owner.to_string(), repo.to_string(), pr.number),
+            ))
         })
         .collect();
 
     let (collapsed, runs_rate_limit) = if tracked_repos.is_empty() {
-        (
-            crate::github::runs::CollapseOutcome::default(),
-            None,
-        )
+        (crate::github::runs::CollapseOutcome::default(), None)
     } else {
         let outcome = fetch_runs_for_repos(&client, db, &tracked_repos, &username).await;
         let rl = outcome.rate_limit;
@@ -422,12 +424,8 @@ async fn poll_once<R: Runtime>(
 
     // Prefer a per-PR (core bucket) reading; the search call lives in a separate
     // rate-limit bucket and is not representative. Runs also use the core bucket.
-    let rate_limit = mine
-        .rate_limit
-        .or(reviews.rate_limit)
-        .or(runs_rate_limit);
-    let rate_limited =
-        rate_limit.is_some_and(|rl| rl.remaining < RATE_LIMIT_PRESSURE_THRESHOLD);
+    let rate_limit = mine.rate_limit.or(reviews.rate_limit).or(runs_rate_limit);
+    let rate_limited = rate_limit.is_some_and(|rl| rl.remaining < RATE_LIMIT_PRESSURE_THRESHOLD);
 
     let payload = PollResultPayload {
         review_requests: reviews_items,

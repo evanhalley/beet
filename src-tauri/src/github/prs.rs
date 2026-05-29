@@ -25,8 +25,8 @@ use crate::store::lifecycle::{
 use crate::store::requeue::{count_attempts, is_opted_out, record_attempt};
 use crate::store::Db;
 use crate::tasks::{compile_task_regex, extract_task_urls};
-use serde::Serialize;
 use futures::stream::{self, StreamExt};
+use serde::Serialize;
 // Two different regex engines: `regex` for our own URL parsers (linear,
 // fast), `fancy_regex` for the user-supplied taskRegex (supports JS-era
 // patterns with lookaround / backreferences). Aliased here so the call
@@ -75,8 +75,7 @@ type AssembledItem = (
 pub fn parse_repo_and_owner_from_url(url: &str) -> Option<(String, String)> {
     static GITHUB_RE: OnceLock<Regex> = OnceLock::new();
     static REPOS_RE: OnceLock<Regex> = OnceLock::new();
-    let github_re =
-        GITHUB_RE.get_or_init(|| Regex::new(r"github\.com/([^/]+)/([^/]+)").unwrap());
+    let github_re = GITHUB_RE.get_or_init(|| Regex::new(r"github\.com/([^/]+)/([^/]+)").unwrap());
     let repos_re = REPOS_RE.get_or_init(|| Regex::new(r"repos/([^/]+)/([^/]+)").unwrap());
     let caps = github_re.captures(url).or_else(|| repos_re.captures(url))?;
     Some((caps[1].to_string(), caps[2].to_string()))
@@ -99,10 +98,7 @@ pub fn count_distinct_approvers(reviews: &[ReviewRow]) -> i64 {
 /// reviewer who has submitted a review we keep their *latest* non-`PENDING`
 /// state; reviewers who were requested but have not yet submitted appear with
 /// `state = "requested"` so the block doesn't lose them.
-pub fn build_reviewers(
-    reviews: &[ReviewRow],
-    requested: Option<&[UserRef]>,
-) -> Vec<ReviewerEntry> {
+pub fn build_reviewers(reviews: &[ReviewRow], requested: Option<&[UserRef]>) -> Vec<ReviewerEntry> {
     use std::collections::BTreeMap;
 
     // BTreeMap so the output is deterministic (alphabetical by login); the
@@ -165,19 +161,10 @@ pub fn derive_lifecycle(pull: &PullDetail) -> PrLifecycle {
             PrLifecycle::Closed
         };
     }
-    if pull
-        .auto_merge
-        .as_ref()
-        .is_some_and(|v| !v.is_null())
-    {
+    if pull.auto_merge.as_ref().is_some_and(|v| !v.is_null()) {
         return PrLifecycle::MergeQueue;
     }
-    if pull
-        .requested_reviewers
-        .as_ref()
-        .map_or(0, |r| r.len())
-        > 0
-    {
+    if pull.requested_reviewers.as_ref().map_or(0, |r| r.len()) > 0 {
         return PrLifecycle::InReview;
     }
     PrLifecycle::Open
@@ -282,23 +269,15 @@ pub async fn fetch_review_requests(
     // GitHub's search order before scoring. score_pull_requests's stable sort
     // then preserves that order for equal-score items, eliminating the
     // completion-order shuffle that buffer_unordered would otherwise create.
-    let assembled: Vec<AssembledItem> =
-        stream::iter(search.items.into_iter().enumerate())
-            .map(|(idx, hit)| async move {
-                let res = assemble_review_item(
-                    client,
-                    db,
-                    hit,
-                    username,
-                    team_members,
-                    compiled_ref,
-                )
-                .await;
-                (idx, res)
-            })
-            .buffer_unordered(MAX_PR_CONCURRENCY)
-            .collect()
-            .await;
+    let assembled: Vec<AssembledItem> = stream::iter(search.items.into_iter().enumerate())
+        .map(|(idx, hit)| async move {
+            let res =
+                assemble_review_item(client, db, hit, username, team_members, compiled_ref).await;
+            (idx, res)
+        })
+        .buffer_unordered(MAX_PR_CONCURRENCY)
+        .collect()
+        .await;
 
     let (items, rate_limit) = collect_assembled(assembled)?;
 
@@ -334,16 +313,14 @@ pub async fn fetch_my_open_prs(
     let username = &opts.username;
     let compiled_ref = compiled.as_ref();
 
-    let assembled: Vec<AssembledItem> =
-        stream::iter(search.items.into_iter().enumerate())
-            .map(|(idx, hit)| async move {
-                let res =
-                    assemble_my_pr_item(client, db, hit, username, compiled_ref).await;
-                (idx, res)
-            })
-            .buffer_unordered(MAX_PR_CONCURRENCY)
-            .collect()
-            .await;
+    let assembled: Vec<AssembledItem> = stream::iter(search.items.into_iter().enumerate())
+        .map(|(idx, hit)| async move {
+            let res = assemble_my_pr_item(client, db, hit, username, compiled_ref).await;
+            (idx, res)
+        })
+        .buffer_unordered(MAX_PR_CONCURRENCY)
+        .collect()
+        .await;
 
     let (mut items, rate_limit) = collect_assembled(assembled)?;
 
@@ -480,7 +457,12 @@ async fn fetch_pr_triple(
     owner: &str,
     repo: &str,
     num: i64,
-) -> BeetResult<(PullDetail, Vec<CommentRow>, Vec<ReviewRow>, Option<RateLimitInfo>)> {
+) -> BeetResult<(
+    PullDetail,
+    Vec<CommentRow>,
+    Vec<ReviewRow>,
+    Option<RateLimitInfo>,
+)> {
     let detail_url = client.url(&format!("/repos/{owner}/{repo}/pulls/{num}"));
     let comments_url = client.url(&format!("/repos/{owner}/{repo}/issues/{num}/comments"));
     let reviews_url = client.url(&format!("/repos/{owner}/{repo}/pulls/{num}/reviews"));
@@ -538,9 +520,9 @@ async fn assemble_review_item(
     let ive_reviewed = reviews
         .iter()
         .any(|r| r.user.as_ref().is_some_and(|u| u.login == username));
-    let ive_approved = reviews.iter().any(|r| {
-        r.user.as_ref().is_some_and(|u| u.login == username) && r.state == "APPROVED"
-    });
+    let ive_approved = reviews
+        .iter()
+        .any(|r| r.user.as_ref().is_some_and(|u| u.login == username) && r.state == "APPROVED");
     let approval_count = count_distinct_approvers(&reviews);
     let task_urls = extract_task_urls(pull.body.as_deref(), compiled_regex);
     let lifecycle = derive_lifecycle(&pull);
@@ -644,14 +626,8 @@ async fn assemble_my_pr_item(
         Err(_) => None,
     };
 
-    let merge_queue = build_merge_queue(
-        db,
-        &pr_id,
-        &pull,
-        lifecycle,
-        ejected,
-        check_runs.as_deref(),
-    )?;
+    let merge_queue =
+        build_merge_queue(db, &pr_id, &pull, lifecycle, ejected, check_runs.as_deref())?;
 
     let author = pull_user.login.clone();
     let is_review_requested_from_me = pull
@@ -664,9 +640,9 @@ async fn assemble_my_pr_item(
     let ive_reviewed = reviews
         .iter()
         .any(|r| r.user.as_ref().is_some_and(|u| u.login == username));
-    let ive_approved = reviews.iter().any(|r| {
-        r.user.as_ref().is_some_and(|u| u.login == username) && r.state == "APPROVED"
-    });
+    let ive_approved = reviews
+        .iter()
+        .any(|r| r.user.as_ref().is_some_and(|u| u.login == username) && r.state == "APPROVED");
     let approval_count = count_distinct_approvers(&reviews);
     let task_urls = extract_task_urls(pull.body.as_deref(), compiled_regex);
     let reviewers = build_reviewers(&reviews, pull.requested_reviewers.as_deref());
@@ -913,7 +889,13 @@ mod tests {
         // Seed: the PR was previously in the merge queue.
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#2", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
+            record_lifecycle(
+                &conn,
+                "pr:foo/bar#2",
+                PrLifecycle::MergeQueue,
+                &PrSnapshot::default(),
+            )
+            .unwrap();
         }
 
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
@@ -944,11 +926,7 @@ mod tests {
     /// detect-ejection test uses, plus a `pulls.get` body that includes
     /// `node_id` (needed for the GraphQL mutation) and a `head_sha` of the
     /// caller's choice.
-    async fn seed_my_open_prs_with_ejection(
-        server: &MockServer,
-        head_sha: &str,
-        node_id: &str,
-    ) {
+    async fn seed_my_open_prs_with_ejection(server: &MockServer, head_sha: &str, node_id: &str) {
         Mock::given(method("GET"))
             .and(path("/search/issues"))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
@@ -988,7 +966,9 @@ mod tests {
             .mount(server)
             .await;
         Mock::given(method("GET"))
-            .and(path(format!("/repos/foo/bar/commits/{head_sha}/check-runs")))
+            .and(path(format!(
+                "/repos/foo/bar/commits/{head_sha}/check-runs"
+            )))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "check_runs": [
                     { "name": "ci/build", "conclusion": "failure" },
@@ -1015,7 +995,13 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
+            record_lifecycle(
+                &conn,
+                "pr:foo/bar#7",
+                PrLifecycle::MergeQueue,
+                &PrSnapshot::default(),
+            )
+            .unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1041,7 +1027,13 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
+            record_lifecycle(
+                &conn,
+                "pr:foo/bar#7",
+                PrLifecycle::MergeQueue,
+                &PrSnapshot::default(),
+            )
+            .unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1075,7 +1067,13 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
+            record_lifecycle(
+                &conn,
+                "pr:foo/bar#7",
+                PrLifecycle::MergeQueue,
+                &PrSnapshot::default(),
+            )
+            .unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1102,7 +1100,13 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
+            record_lifecycle(
+                &conn,
+                "pr:foo/bar#7",
+                PrLifecycle::MergeQueue,
+                &PrSnapshot::default(),
+            )
+            .unwrap();
             set_opt_out(&conn, "pr:foo/bar#7", "sha-r4", true).unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
@@ -1126,7 +1130,13 @@ mod tests {
         let db: Db = Mutex::new(open_in_memory().unwrap());
         {
             let conn = db.lock().unwrap();
-            record_lifecycle(&conn, "pr:foo/bar#7", PrLifecycle::MergeQueue, &PrSnapshot::default()).unwrap();
+            record_lifecycle(
+                &conn,
+                "pr:foo/bar#7",
+                PrLifecycle::MergeQueue,
+                &PrSnapshot::default(),
+            )
+            .unwrap();
         }
         let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
         let opts = FetchMyOpenPrsOptions {
@@ -1187,7 +1197,9 @@ mod tests {
         let res = fetch_review_requests(&client, &db, &opts).await;
         assert!(matches!(
             res,
-            Err(crate::error::BeetError::RateLimited { retry_after_secs: Some(45) })
+            Err(crate::error::BeetError::RateLimited {
+                retry_after_secs: Some(45)
+            })
         ));
     }
 
@@ -1230,7 +1242,10 @@ mod tests {
     #[test]
     fn derive_lifecycle_covers_all_states() {
         assert_eq!(derive_lifecycle(&pull("closed", true)), PrLifecycle::Merged);
-        assert_eq!(derive_lifecycle(&pull("closed", false)), PrLifecycle::Closed);
+        assert_eq!(
+            derive_lifecycle(&pull("closed", false)),
+            PrLifecycle::Closed
+        );
 
         let mut p = pull("open", false);
         p.auto_merge = Some(serde_json::json!({ "enabled_by": {} }));
@@ -1251,27 +1266,39 @@ mod tests {
         // carol: commented only.
         let reviews = vec![
             ReviewRow {
-                user: Some(UserRef { login: "alice".into() }),
+                user: Some(UserRef {
+                    login: "alice".into(),
+                }),
                 state: "APPROVED".into(),
             },
             ReviewRow {
-                user: Some(UserRef { login: "alice".into() }),
+                user: Some(UserRef {
+                    login: "alice".into(),
+                }),
                 state: "CHANGES_REQUESTED".into(),
             },
             ReviewRow {
-                user: Some(UserRef { login: "alice".into() }),
+                user: Some(UserRef {
+                    login: "alice".into(),
+                }),
                 state: "APPROVED".into(),
             },
             ReviewRow {
-                user: Some(UserRef { login: "bob".into() }),
+                user: Some(UserRef {
+                    login: "bob".into(),
+                }),
                 state: "APPROVED".into(),
             },
             ReviewRow {
-                user: Some(UserRef { login: "bob".into() }),
+                user: Some(UserRef {
+                    login: "bob".into(),
+                }),
                 state: "PENDING".into(),
             },
             ReviewRow {
-                user: Some(UserRef { login: "carol".into() }),
+                user: Some(UserRef {
+                    login: "carol".into(),
+                }),
                 state: "COMMENTED".into(),
             },
         ];
@@ -1289,14 +1316,20 @@ mod tests {
     #[test]
     fn build_reviewers_includes_requested_with_no_submitted_review() {
         let reviews = vec![ReviewRow {
-            user: Some(UserRef { login: "alice".into() }),
+            user: Some(UserRef {
+                login: "alice".into(),
+            }),
             state: "APPROVED".into(),
         }];
         // bob was requested but hasn't reviewed yet → appears with state
         // "requested". alice already submitted → no duplicate row for her.
         let requested = vec![
-            UserRef { login: "alice".into() },
-            UserRef { login: "bob".into() },
+            UserRef {
+                login: "alice".into(),
+            },
+            UserRef {
+                login: "bob".into(),
+            },
         ];
         let out = build_reviewers(&reviews, Some(&requested));
         assert_eq!(out.len(), 2);
@@ -1373,7 +1406,10 @@ mod tests {
         };
         let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
         let pr = outcome.items[0].pr.as_ref().unwrap();
-        let runs = pr.check_runs.as_ref().expect("check_runs should be populated");
+        let runs = pr
+            .check_runs
+            .as_ref()
+            .expect("check_runs should be populated");
         assert_eq!(runs.len(), 3);
         assert_eq!(runs[0].name, "build");
         assert_eq!(runs[0].conclusion.as_deref(), Some("success"));

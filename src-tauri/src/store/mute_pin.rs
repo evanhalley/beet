@@ -41,7 +41,9 @@ pub fn list_mutes(db: State<'_, Arc<Db>>) -> Result<Vec<MuteRule>, String> {
 #[tauri::command]
 pub fn add_mute(db: State<'_, Arc<Db>>, scope: String, value: String) -> Result<(), String> {
     if scope != "repo" && scope != "org" {
-        return Err(format!("invalid mute scope '{scope}': must be 'repo' or 'org'"));
+        return Err(format!(
+            "invalid mute scope '{scope}': must be 'repo' or 'org'"
+        ));
     }
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
@@ -55,7 +57,9 @@ pub fn add_mute(db: State<'_, Arc<Db>>, scope: String, value: String) -> Result<
 #[tauri::command]
 pub fn remove_mute(db: State<'_, Arc<Db>>, scope: String, value: String) -> Result<(), String> {
     if scope != "repo" && scope != "org" {
-        return Err(format!("invalid mute scope '{scope}': must be 'repo' or 'org'"));
+        return Err(format!(
+            "invalid mute scope '{scope}': must be 'repo' or 'org'"
+        ));
     }
     let conn = db.lock().map_err(|e| e.to_string())?;
     conn.execute(
@@ -96,11 +100,8 @@ pub fn add_pin(db: State<'_, Arc<Db>>, value: String) -> Result<(), String> {
 #[tauri::command]
 pub fn remove_pin(db: State<'_, Arc<Db>>, value: String) -> Result<(), String> {
     let conn = db.lock().map_err(|e| e.to_string())?;
-    conn.execute(
-        "DELETE FROM pin_rules WHERE value = ?1",
-        params![value],
-    )
-    .map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM pin_rules WHERE value = ?1", params![value])
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -138,7 +139,10 @@ mod tests {
             let c = db.lock().unwrap();
             let mut stmt = c.prepare("SELECT scope, value FROM mute_rules").unwrap();
             stmt.query_map([], |row| {
-                Ok(MuteRule { scope: row.get(0)?, value: row.get(1)? })
+                Ok(MuteRule {
+                    scope: row.get(0)?,
+                    value: row.get(1)?,
+                })
             })
             .unwrap()
             .map(|r| r.unwrap())
@@ -151,11 +155,16 @@ mod tests {
         // Remove it.
         {
             let c = db.lock().unwrap();
-            c.execute("DELETE FROM mute_rules WHERE scope='repo' AND value='owner/foo'", []).unwrap();
+            c.execute(
+                "DELETE FROM mute_rules WHERE scope='repo' AND value='owner/foo'",
+                [],
+            )
+            .unwrap();
         }
         let count: i64 = {
             let c = db.lock().unwrap();
-            c.query_row("SELECT count(*) FROM mute_rules", [], |r| r.get(0)).unwrap()
+            c.query_row("SELECT count(*) FROM mute_rules", [], |r| r.get(0))
+                .unwrap()
         };
         assert_eq!(count, 0);
     }
@@ -172,7 +181,8 @@ mod tests {
         .unwrap();
         assert!(has_any_pins(&conn));
 
-        conn.execute("DELETE FROM pin_rules WHERE value='owner/repo'", []).unwrap();
+        conn.execute("DELETE FROM pin_rules WHERE value='owner/repo'", [])
+            .unwrap();
         assert!(!has_any_pins(&conn));
     }
 }
