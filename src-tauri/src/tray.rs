@@ -89,7 +89,7 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                             Size::Physical(s) => s.height as f64 / scale,
                             Size::Logical(s) => s.height,
                         };
-                        let popover_width = 360.0_f64;
+                        let popover_width = 440.0_f64;
                         let x = icon_x + (icon_w / 2.0) - (popover_width / 2.0);
                         let y = icon_y + icon_h;
                         let _ = window.set_position(LogicalPosition::new(x, y));

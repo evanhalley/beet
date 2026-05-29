@@ -3,11 +3,13 @@
 import { useEffect, useRef } from "react";
 import {
   isPermissionGranted,
+  onNotificationClicked,
   requestPermission,
   sendNotification,
-} from "@tauri-apps/plugin-notification";
+} from "@choochmeque/tauri-plugin-notifications-api";
 import { applyMutes, useAppStore } from "@/lib/store";
 import type { MuteRule } from "@/lib/store";
+import { openInBrowser } from "@/lib/openInBrowser";
 import { checkAndRecord } from "@/lib/storage/notifications";
 import type { ActionableItem } from "@/lib/types";
 
@@ -98,12 +100,15 @@ async function maybeNotify(
   dedupeKey: string,
   title: string,
   body: string,
+  // GitHub URL opened when the user clicks the notification. Stored in `extra`
+  // and surfaced back via the onNotificationClicked listener below.
+  url: string,
 ): Promise<void> {
   if (!enabled) return;
   const isNew = await checkAndRecord(dedupeKey);
   if (!isNew) return;
   try {
-    sendNotification({ title, body });
+    sendNotification({ title, body, extra: { url } });
   } catch {
     // Permission denied or OS error — ignore.
   }
@@ -154,6 +159,26 @@ export function useNotifications(): void {
     }
 
     requestOnce();
+
+    // Open the associated GitHub URL when the user clicks a notification.
+    // The URL is stored in `extra` on send and echoed back here as `data`.
+    // Also covers cold-start: if the app was launched by a notification tap,
+    // the click is delivered when the listener registers.
+    let clickListener: { unregister: () => void } | undefined;
+    onNotificationClicked((data) => {
+      const url = data.data?.url;
+      if (typeof url === "string" && url) void openInBrowser(url);
+    })
+      .then((listener) => {
+        if (cancelled) {
+          listener.unregister();
+          return;
+        }
+        clickListener = listener;
+      })
+      .catch(() => {
+        // Not in a Tauri environment (tests) — ignore.
+      });
 
     const unsubscribe = useAppStore.subscribe(async (state) => {
       if (cancelled) return;
@@ -217,6 +242,7 @@ export function useNotifications(): void {
             key,
             `🚨 Kicked from merge queue: ${item.title}`,
             `${item.repoFullName} #${item.pr?.number}`,
+            item.url,
           ),
         );
       }
@@ -245,6 +271,7 @@ export function useNotifications(): void {
             key,
             `❌ Checks failing: ${item.title}`,
             `${item.repoFullName} #${item.pr.number}${failingNames ? ` · ${failingNames}` : ""}`,
+            item.url,
           ),
         );
       }
@@ -259,6 +286,7 @@ export function useNotifications(): void {
             key,
             `👀 Review requested: ${item.title}`,
             `${item.repoFullName} #${item.pr?.number} · by @${item.pr?.author ?? ""}`,
+            item.url,
           ),
         );
       }
@@ -283,6 +311,7 @@ export function useNotifications(): void {
             key,
             `💬 New activity: ${item.title}`,
             `${item.repoFullName} #${item.pr?.number}`,
+            item.url,
           ),
         );
       }
@@ -306,6 +335,7 @@ export function useNotifications(): void {
             key,
             `${item.run.workflowName} ${verb}`,
             `${item.repoFullName} · ${item.run.branch ?? item.run.sha.slice(0, 7)}`,
+            item.run?.runUrl ?? item.url,
           ),
         );
       }
@@ -328,6 +358,7 @@ export function useNotifications(): void {
 
     return () => {
       cancelled = true;
+      clickListener?.unregister();
       unsubscribe();
     };
   }, []);
