@@ -131,6 +131,35 @@ describe("MainWindowShell", () => {
     expect(useAppStore.getState().selectedItemId).toBe("a");
   });
 
+  test("pending notification selection wins over auto-pick and is cleared", async () => {
+    // "b" is the top scorer auto-pick would choose; the notification points at
+    // the lower-scored "a", which must win.
+    seedReviews([makeItem("a", 4, "Low"), makeItem("b", 9, "High")]);
+    useAppStore.getState().setPendingNotificationItemId("a");
+    renderShell();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().selectedItemId).toBe("a");
+    expect(useAppStore.getState().pendingNotificationItemId).toBeNull();
+  });
+
+  test("pending selection waits for the item to load, suppressing auto-pick", async () => {
+    // Cold-start race: the click arrives before the target is in the data.
+    useAppStore.setState({ pollState: "ok" });
+    seedReviews([makeItem("b", 9, "High")]);
+    useAppStore.getState().setPendingNotificationItemId("a");
+    renderShell();
+    await new Promise((r) => setTimeout(r, 0));
+    // Auto-pick is held off; nothing resolves yet.
+    expect(useAppStore.getState().selectedItemId).toBeNull();
+    expect(useAppStore.getState().pendingNotificationItemId).toBe("a");
+
+    // The target lands on a later poll → it's selected and pending clears.
+    seedReviews([makeItem("a", 4, "Low"), makeItem("b", 9, "High")]);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().selectedItemId).toBe("a");
+    expect(useAppStore.getState().pendingNotificationItemId).toBeNull();
+  });
+
   test("Open on GitHub button invokes tauri shell open", async () => {
     const user = userEvent.setup();
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {

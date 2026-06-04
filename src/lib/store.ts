@@ -71,6 +71,12 @@ export interface AppStore {
 
   selectedItemId: string | null;
 
+  // Set by the notification click handler to request that a specific item be
+  // selected. Cleared once the item resolves in the loaded data (see
+  // MainWindowShell). Lets a click win the race against auto-pick on cold start,
+  // where the target isn't in the store yet when the click arrives.
+  pendingNotificationItemId: string | null;
+
   settings: BeetSettings;
   settingsHydrated: boolean;
 
@@ -87,6 +93,7 @@ export interface AppStore {
   setShowAllReviewsOverride: (value: boolean | null) => void;
   setUiError: (message: string | null) => void;
   setSelectedItemId: (id: string | null) => void;
+  setPendingNotificationItemId: (id: string | null) => void;
   setSettings: (settings: Partial<BeetSettings>) => void;
   hydrateSettings: (settings: BeetSettings) => void;
   setMutes: (mutes: MuteRule[]) => void;
@@ -112,6 +119,7 @@ const initialState = {
   uiError: null as string | null,
   autoRequeueNotified: new Set<string>(),
   selectedItemId: null as string | null,
+  pendingNotificationItemId: null as string | null,
   settings: SETTINGS_DEFAULTS,
   settingsHydrated: false,
   mutes: [] as MuteRule[],
@@ -175,6 +183,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
   setUiError: (message) => set({ uiError: message }),
   setSelectedItemId: (id) => set({ selectedItemId: id }),
+  setPendingNotificationItemId: (id) => set({ pendingNotificationItemId: id }),
   setSettings: (partial) =>
     set((state) => ({ settings: { ...state.settings, ...partial } })),
   hydrateSettings: (settings) => set({ settings, settingsHydrated: true }),

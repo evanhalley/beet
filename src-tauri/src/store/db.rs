@@ -88,6 +88,14 @@ const MIGRATIONS: &[&str] = &[
         value      TEXT PRIMARY KEY,
         created_at TEXT NOT NULL
     );",
+    // v9: maps an OS notification's numeric id to the ActionableItem it points
+    // at. The notifications plugin only round-trips the numeric `id` on click
+    // (not the `extra` payload), so the click handler resolves the item here.
+    "CREATE TABLE IF NOT EXISTS notification_links (
+        notif_id   INTEGER PRIMARY KEY,
+        item_id    TEXT NOT NULL,
+        created_at TEXT NOT NULL
+    );",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.
@@ -141,7 +149,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         for table in [
             "etag_cache",
             "pr_lifecycle_history",
@@ -151,6 +159,7 @@ mod tests {
             "notifications_sent",
             "mute_rules",
             "pin_rules",
+            "notification_links",
         ] {
             let count: i64 = conn
                 .query_row(
@@ -173,7 +182,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
     }
 
     #[test]
@@ -196,7 +205,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 8);
+        assert_eq!(version, 9);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
+
+const mockInvoke = vi.mocked(invoke);
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 // Use vi.hoisted so these are initialized before vi.mock hoisting runs.
@@ -14,11 +17,18 @@ const mockRequestPermission = vi.hoisted(() =>
   vi.fn().mockResolvedValue("granted"),
 );
 const mockCheckAndRecord = vi.hoisted(() => vi.fn().mockResolvedValue(true));
+const mockGetNotificationLink = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(null),
+);
+const mockRecordNotificationLink = vi.hoisted(() =>
+  vi.fn().mockResolvedValue(undefined),
+);
+// Deterministic id so tests can assert the send/record/link wiring.
+const mockNotifIdFromKey = vi.hoisted(() => vi.fn(() => 123));
 // Captures the onNotificationClicked callback so tests can simulate a click.
 const mockOnNotificationClicked = vi.hoisted(() =>
   vi.fn().mockResolvedValue({ unregister: vi.fn() }),
 );
-const mockOpenInBrowser = vi.hoisted(() => vi.fn());
 
 vi.mock("@choochmeque/tauri-plugin-notifications-api", () => ({
   isPermissionGranted: mockIsPermissionGranted,
@@ -27,12 +37,14 @@ vi.mock("@choochmeque/tauri-plugin-notifications-api", () => ({
   onNotificationClicked: mockOnNotificationClicked,
 }));
 
-vi.mock("@/lib/openInBrowser", () => ({
-  openInBrowser: mockOpenInBrowser,
-}));
+// `@tauri-apps/api/core` is mocked globally in src/test/setup.ts; reuse that
+// invoke so the shared keychain reset keeps working.
 
 vi.mock("@/lib/storage/notifications", () => ({
   checkAndRecord: mockCheckAndRecord,
+  getNotificationLink: mockGetNotificationLink,
+  recordNotificationLink: mockRecordNotificationLink,
+  notifIdFromKey: mockNotifIdFromKey,
 }));
 
 import { useNotifications } from "./useNotifications";
@@ -112,6 +124,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockIsPermissionGranted.mockResolvedValue(true);
   mockCheckAndRecord.mockResolvedValue(true);
+  mockGetNotificationLink.mockResolvedValue(null);
+  mockRecordNotificationLink.mockResolvedValue(undefined);
+  mockNotifIdFromKey.mockReturnValue(123);
 });
 
 describe("useNotifications", () => {
@@ -122,31 +137,37 @@ describe("useNotifications", () => {
     );
   });
 
-  test("clicking a notification opens its URL in the browser", async () => {
+  test("clicking a notification selects the linked item and shows the app", async () => {
+    mockGetNotificationLink.mockResolvedValue("pr:acme/repo#7");
     renderHook(() => useNotifications());
     await waitFor(() =>
       expect(mockOnNotificationClicked).toHaveBeenCalled(),
     );
 
-    // Simulate macOS delivering a click for a notification carrying a URL.
+    // Simulate macOS delivering a click; the plugin round-trips the numeric id,
+    // which resolves to an ActionableItem id via the persisted link map.
     const clickCb = mockOnNotificationClicked.mock.calls[0][0];
-    clickCb({ id: 1, data: { url: "https://github.com/acme/repo/pull/7" } });
+    await clickCb({ id: 123 });
 
-    expect(mockOpenInBrowser).toHaveBeenCalledWith(
-      "https://github.com/acme/repo/pull/7",
+    expect(mockGetNotificationLink).toHaveBeenCalledWith(123);
+    expect(mockInvoke).toHaveBeenCalledWith("open_main_window");
+    expect(useAppStore.getState().pendingNotificationItemId).toBe(
+      "pr:acme/repo#7",
     );
   });
 
-  test("clicking a notification with no URL does nothing", async () => {
+  test("clicking a notification with no linked item does nothing", async () => {
+    mockGetNotificationLink.mockResolvedValue(null);
     renderHook(() => useNotifications());
     await waitFor(() =>
       expect(mockOnNotificationClicked).toHaveBeenCalled(),
     );
 
     const clickCb = mockOnNotificationClicked.mock.calls[0][0];
-    clickCb({ id: 1 });
+    await clickCb({ id: 999 });
 
-    expect(mockOpenInBrowser).not.toHaveBeenCalled();
+    expect(mockInvoke).not.toHaveBeenCalled();
+    expect(useAppStore.getState().pendingNotificationItemId).toBeNull();
   });
 
   test("trigger 3: fires when a new review request appears", async () => {
@@ -179,9 +200,15 @@ describe("useNotifications", () => {
       expect(mockSendNotification).toHaveBeenCalledWith(
         expect.objectContaining({
           title: expect.stringContaining("Review requested"),
+          id: 123,
         }),
       );
     });
+    // The id→item link is persisted so the click handler can resolve it.
+    expect(mockRecordNotificationLink).toHaveBeenCalledWith(
+      123,
+      "pr:acme/repo#1",
+    );
   });
 
   test("trigger 3: does not fire when checkAndRecord returns false (already sent)", async () => {
