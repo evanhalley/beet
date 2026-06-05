@@ -143,21 +143,39 @@ describe("MainWindowShell", () => {
   });
 
   test("pending selection waits for the item to load, suppressing auto-pick", async () => {
-    // Cold-start race: the click arrives before the target is in the data.
-    useAppStore.setState({ pollState: "ok" });
+    // Cold-start race: the click arrives before the first poll has completed
+    // (pollState still "idle"), so the target isn't in the data yet.
     seedReviews([makeItem("b", 9, "High")]);
     useAppStore.getState().setPendingNotificationItemId("a");
     renderShell();
     await new Promise((r) => setTimeout(r, 0));
-    // Auto-pick is held off; nothing resolves yet.
+    // Auto-pick is held off; nothing resolves yet, and pending is preserved
+    // because no poll has completed that could prove the item is gone.
     expect(useAppStore.getState().selectedItemId).toBeNull();
     expect(useAppStore.getState().pendingNotificationItemId).toBe("a");
 
-    // The target lands on a later poll → it's selected and pending clears.
+    // The first poll completes and carries the target → it's selected and
+    // pending clears.
+    useAppStore.setState({ pollState: "ok" });
     seedReviews([makeItem("a", 4, "Low"), makeItem("b", 9, "High")]);
     await new Promise((r) => setTimeout(r, 0));
     expect(useAppStore.getState().selectedItemId).toBe("a");
     expect(useAppStore.getState().pendingNotificationItemId).toBeNull();
+  });
+
+  test("pending selection is abandoned once a poll completes without the target", async () => {
+    // The notification points at an item that's no longer tracked (merged,
+    // untracked, or aged out). After a poll cycle finishes and it's still
+    // absent, the pending marker must clear so auto-pick can resume instead of
+    // the app sitting stuck with an empty detail pane forever.
+    useAppStore.setState({ pollState: "ok" });
+    seedReviews([makeItem("b", 9, "High")]);
+    useAppStore.getState().setPendingNotificationItemId("gone");
+    renderShell();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(useAppStore.getState().pendingNotificationItemId).toBeNull();
+    // Auto-pick resumes and selects the top-scored review request.
+    expect(useAppStore.getState().selectedItemId).toBe("b");
   });
 
   test("Open on GitHub button invokes tauri shell open", async () => {

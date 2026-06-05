@@ -68,6 +68,7 @@ export function MainWindowShell({
   const selected = useSelectedItem();
   const { reviewRequests, inFlight, standaloneRuns, recentlyResolved } =
     useActionableItems();
+  const pollState = useAppStore((s) => s.pollState);
   const showAll = useAppStore(selectShowAllReviews);
   const [activeSection, setActiveSection] =
     useState<"reviews" | "inflight" | "runs" | "recent">("reviews");
@@ -109,7 +110,17 @@ export function MainWindowShell({
           : recentlyResolved.some((it) => it.id === id)
             ? "recent"
             : null;
-    if (!section) return; // not loaded yet — wait for a poll
+    if (!section) {
+      // Target not in the loaded data. While no poll has completed yet this is
+      // the expected cold-start gap, so keep waiting. But once a poll cycle has
+      // finished ("ok"/"error") and the item is still absent — it merged, was
+      // untracked, or aged out — give up and clear the marker so auto-pick can
+      // resume instead of the app sitting stuck in a pending state forever.
+      if (pollState === "ok" || pollState === "error") {
+        setPendingNotificationItemId(null);
+      }
+      return;
+    }
     setSelectedItemId(id);
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveSection(section);
@@ -121,6 +132,7 @@ export function MainWindowShell({
     });
   }, [
     pendingNotificationItemId,
+    pollState,
     reviewRequests,
     inFlight,
     standaloneRuns,
