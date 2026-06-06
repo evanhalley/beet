@@ -3,6 +3,7 @@ import type { RateLimitInfo } from "@/lib/github/rate-limit";
 import type { ActionableItem } from "@/lib/types";
 import { SETTINGS_DEFAULTS, type BeetSettings } from "@/lib/storage/settings";
 import type { MuteRule } from "@/lib/storage/mutePin";
+import { EMPTY_LIST_FILTERS, type ListFilters } from "@/lib/filters";
 
 export type PollState = "idle" | "polling" | "ok" | "error";
 
@@ -62,6 +63,11 @@ export interface AppStore {
   // null = use settings.showAllApproved; true|false = session override.
   showAllReviewsOverride: boolean | null;
 
+  // Sidebar Filters group (§ list filters). Session-only, like the override
+  // above — not persisted to BeetSettings. Applied at the selector layer in
+  // useActionableItems so the raw poll cache stays intact.
+  listFilters: ListFilters;
+
   uiError: string | null;
   // Set of (prId|headSha) pairs the user has already been notified about for
   // auto-requeue failures (#13). Persisting it across poll cycles keeps a
@@ -91,6 +97,8 @@ export interface AppStore {
   setPaused: (paused: boolean) => void;
   setRateLimit: (rateLimit: RateLimitInfo | null) => void;
   setShowAllReviewsOverride: (value: boolean | null) => void;
+  toggleListFilter: (key: keyof ListFilters) => void;
+  clearListFilters: () => void;
   setUiError: (message: string | null) => void;
   setSelectedItemId: (id: string | null) => void;
   setPendingNotificationItemId: (id: string | null) => void;
@@ -116,6 +124,7 @@ const initialState = {
   rateLimit: null as RateLimitInfo | null,
   paused: false,
   showAllReviewsOverride: null as boolean | null,
+  listFilters: EMPTY_LIST_FILTERS,
   uiError: null as string | null,
   autoRequeueNotified: new Set<string>(),
   selectedItemId: null as string | null,
@@ -181,6 +190,11 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setPaused: (paused) => set({ paused }),
   setRateLimit: (rateLimit) => set({ rateLimit }),
   setShowAllReviewsOverride: (value) => set({ showAllReviewsOverride: value }),
+  toggleListFilter: (key) =>
+    set((state) => ({
+      listFilters: { ...state.listFilters, [key]: !state.listFilters[key] },
+    })),
+  clearListFilters: () => set({ listFilters: EMPTY_LIST_FILTERS }),
   setUiError: (message) => set({ uiError: message }),
   setSelectedItemId: (id) => set({ selectedItemId: id }),
   setPendingNotificationItemId: (id) => set({ pendingNotificationItemId: id }),
@@ -234,3 +248,4 @@ export function applyMutes(
 }
 
 export type { MuteRule };
+export type { ListFilters };

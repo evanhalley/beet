@@ -64,6 +64,38 @@ describe("app store (client/UI state)", () => {
     expect(useAppStore.getState().settings.taskRegex).toBe("FOO-\\d+");
   });
 
+  test("toggleListFilter flips a single key independently", () => {
+    useAppStore.getState().toggleListFilter("failingOnly");
+    expect(useAppStore.getState().listFilters).toEqual({
+      failingOnly: true,
+      pendingOnly: false,
+      myTeamOnly: false,
+    });
+    useAppStore.getState().toggleListFilter("myTeamOnly");
+    expect(useAppStore.getState().listFilters).toEqual({
+      failingOnly: true,
+      pendingOnly: false,
+      myTeamOnly: true,
+    });
+    useAppStore.getState().toggleListFilter("failingOnly");
+    expect(useAppStore.getState().listFilters.failingOnly).toBe(false);
+  });
+
+  test("clearListFilters and reset() clear all filters", () => {
+    useAppStore.getState().toggleListFilter("failingOnly");
+    useAppStore.getState().toggleListFilter("pendingOnly");
+    useAppStore.getState().clearListFilters();
+    expect(useAppStore.getState().listFilters).toEqual({
+      failingOnly: false,
+      pendingOnly: false,
+      myTeamOnly: false,
+    });
+
+    useAppStore.getState().toggleListFilter("myTeamOnly");
+    useAppStore.getState().reset();
+    expect(useAppStore.getState().listFilters.myTeamOnly).toBe(false);
+  });
+
   test("setRateLimit stores the latest rate-limit snapshot", () => {
     useAppStore
       .getState()

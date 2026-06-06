@@ -39,6 +39,31 @@ function clampDetailWidth(w: number): number {
   return Math.min(DETAIL_WIDTH_MAX, Math.max(DETAIL_WIDTH_MIN, Math.round(w)));
 }
 
+// Scroll a list section to the top of the ListPane.
+//
+// We can't use `element.scrollIntoView()` here: it scrolls *every* scrollable
+// ancestor — including the window/body — to bring the element into view. The
+// section headers live inside the ListPane, which starts below the TitleBar, so
+// aligning a header to the top of the viewport drags the whole app upward. We
+// instead scroll only the ListPane container by computing the header's offset
+// within it.
+function scrollSectionIntoView(section: string): void {
+  const el = document.getElementById(`section-${section}`);
+  if (!el) return;
+  const container = el.closest<HTMLElement>('[aria-label="List"]');
+  // No container, or a non-browser env (jsdom) that lacks Element.scrollTo:
+  // fall back to scrollIntoView, which jsdom stubs as a no-op.
+  if (!container || typeof container.scrollTo !== "function") {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  const top =
+    el.getBoundingClientRect().top -
+    container.getBoundingClientRect().top +
+    container.scrollTop;
+  container.scrollTo({ top, behavior: "smooth" });
+}
+
 function pickAutoSelect(
   reviewRequests: ActionableItem[],
   showAll: boolean,
@@ -126,9 +151,7 @@ export function MainWindowShell({
     setActiveSection(section);
     setPendingNotificationItemId(null);
     requestAnimationFrame(() => {
-      document
-        .getElementById(`section-${section}`)
-        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollSectionIntoView(section);
     });
   }, [
     pendingNotificationItemId,
@@ -252,8 +275,7 @@ export function MainWindowShell({
                 return;
               }
               setActiveSection(section);
-              const el = document.getElementById(`section-${section}`);
-              el?.scrollIntoView({ behavior: "smooth", block: "start" });
+              scrollSectionIntoView(section);
             }}
           />
         </div>
