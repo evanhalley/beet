@@ -23,7 +23,15 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
-        .plugin(tauri_plugin_window_state::Builder::default().build());
+        // Exclude the tray popover: it's sized by tauri.conf.json and positioned
+        // programmatically on each open. Letting window-state persist/restore it
+        // lets a stale per-machine entry shrink the popover (the `main` window
+        // still benefits from remembered size/position).
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["tray"])
+                .build(),
+        );
 
     // OS notifications — macOS only in V1 (§13).
     #[cfg(target_os = "macos")]
@@ -48,6 +56,8 @@ pub fn run() {
             store::mute_pin::add_pin,
             store::mute_pin::remove_pin,
             store::notifications::check_and_record_notification,
+            store::notifications::record_notification_link,
+            store::notifications::get_notification_link,
             github::runs::fetch_run_jobs_command,
             tray::set_badge,
             tray::open_main_window,

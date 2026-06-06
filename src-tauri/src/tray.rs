@@ -2,7 +2,7 @@ use tauri::{
     image::Image,
     menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, LogicalPosition, Manager, Position, Runtime, Size,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Position, Runtime, Size,
 };
 
 use crate::poller::poll_loop::PollHandle;
@@ -92,6 +92,10 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         let popover_width = 440.0_f64;
                         let x = icon_x + (icon_w / 2.0) - (popover_width / 2.0);
                         let y = icon_y + icon_h;
+                        // Force the configured size before showing — a stale
+                        // window-state entry (or any prior resize) must not be
+                        // able to shrink the popover below its design size.
+                        let _ = window.set_size(LogicalSize::new(popover_width, 480.0));
                         let _ = window.set_position(LogicalPosition::new(x, y));
                         let _ = window.show();
                         let _ = window.set_focus();

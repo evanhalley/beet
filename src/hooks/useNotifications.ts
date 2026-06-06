@@ -7,10 +7,15 @@ import {
   requestPermission,
   sendNotification,
 } from "@choochmeque/tauri-plugin-notifications-api";
+import { invoke } from "@tauri-apps/api/core";
 import { applyMutes, useAppStore } from "@/lib/store";
 import type { MuteRule } from "@/lib/store";
-import { openInBrowser } from "@/lib/openInBrowser";
-import { checkAndRecord } from "@/lib/storage/notifications";
+import {
+  checkAndRecord,
+  getNotificationLink,
+  notifIdFromKey,
+  recordNotificationLink,
+} from "@/lib/storage/notifications";
 import type { ActionableItem } from "@/lib/types";
 
 // Snapshot of the previous poll's data so we can compute diffs.
@@ -100,15 +105,18 @@ async function maybeNotify(
   dedupeKey: string,
   title: string,
   body: string,
-  // GitHub URL opened when the user clicks the notification. Stored in `extra`
-  // and surfaced back via the onNotificationClicked listener below.
-  url: string,
+  // ActionableItem id selected when the user clicks the notification. Routed
+  // through a persisted id→item map (notifIdFromKey) because the macOS plugin
+  // drops the `extra` payload on click and only round-trips the numeric `id`.
+  itemId: string,
 ): Promise<void> {
   if (!enabled) return;
   const isNew = await checkAndRecord(dedupeKey);
   if (!isNew) return;
+  const id = notifIdFromKey(dedupeKey);
+  await recordNotificationLink(id, itemId);
   try {
-    sendNotification({ title, body, extra: { url } });
+    sendNotification({ title, body, id });
   } catch {
     // Permission denied or OS error — ignore.
   }
@@ -160,14 +168,21 @@ export function useNotifications(): void {
 
     requestOnce();
 
-    // Open the associated GitHub URL when the user clicks a notification.
-    // The URL is stored in `extra` on send and echoed back here as `data`.
-    // Also covers cold-start: if the app was launched by a notification tap,
-    // the click is delivered when the listener registers.
+    // Bring Beet forward and select the associated item when a notification is
+    // clicked. The plugin round-trips only the numeric `id`, so resolve it to an
+    // ActionableItem id via the persisted link map. Also covers cold-start: if
+    // the app was launched by a notification tap, the click is delivered when
+    // the listener registers (item is selected once the first poll loads it).
     let clickListener: { unregister: () => void } | undefined;
-    onNotificationClicked((data) => {
-      const url = data.data?.url;
-      if (typeof url === "string" && url) void openInBrowser(url);
+    onNotificationClicked(async (data) => {
+      const itemId = await getNotificationLink(data.id);
+      if (!itemId) return;
+      try {
+        await invoke("open_main_window");
+      } catch {
+        // Not in Tauri — ignore.
+      }
+      useAppStore.getState().setPendingNotificationItemId(itemId);
     })
       .then((listener) => {
         if (cancelled) {
@@ -242,7 +257,7 @@ export function useNotifications(): void {
             key,
             `🚨 Kicked from merge queue: ${item.title}`,
             `${item.repoFullName} #${item.pr?.number}`,
-            item.url,
+            item.id,
           ),
         );
       }
@@ -271,7 +286,7 @@ export function useNotifications(): void {
             key,
             `❌ Checks failing: ${item.title}`,
             `${item.repoFullName} #${item.pr.number}${failingNames ? ` · ${failingNames}` : ""}`,
-            item.url,
+            item.id,
           ),
         );
       }
@@ -286,7 +301,7 @@ export function useNotifications(): void {
             key,
             `👀 Review requested: ${item.title}`,
             `${item.repoFullName} #${item.pr?.number} · by @${item.pr?.author ?? ""}`,
-            item.url,
+            item.id,
           ),
         );
       }
@@ -311,7 +326,7 @@ export function useNotifications(): void {
             key,
             `💬 New activity: ${item.title}`,
             `${item.repoFullName} #${item.pr?.number}`,
-            item.url,
+            item.id,
           ),
         );
       }
@@ -335,7 +350,7 @@ export function useNotifications(): void {
             key,
             `${item.run.workflowName} ${verb}`,
             `${item.repoFullName} · ${item.run.branch ?? item.run.sha.slice(0, 7)}`,
-            item.run?.runUrl ?? item.url,
+            item.id,
           ),
         );
       }

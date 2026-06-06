@@ -69,6 +69,15 @@ if (typeof window !== "undefined" && !window.matchMedia) {
   })) as unknown as typeof window.matchMedia;
 }
 
+// jsdom doesn't implement scrollIntoView; several components call it to reveal
+// a section/row. Stub it so those code paths don't throw in tests.
+if (
+  typeof Element !== "undefined" &&
+  !Element.prototype.scrollIntoView
+) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 
 beforeEach(async () => {

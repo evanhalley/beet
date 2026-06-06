@@ -59,23 +59,87 @@ export function MainWindowShell({
 }: MainWindowShellProps) {
   const selectedItemId = useAppStore((s) => s.selectedItemId);
   const setSelectedItemId = useAppStore((s) => s.setSelectedItemId);
+  const pendingNotificationItemId = useAppStore(
+    (s) => s.pendingNotificationItemId,
+  );
+  const setPendingNotificationItemId = useAppStore(
+    (s) => s.setPendingNotificationItemId,
+  );
   const selected = useSelectedItem();
-  const { reviewRequests } = useActionableItems();
+  const { reviewRequests, inFlight, standaloneRuns, recentlyResolved } =
+    useActionableItems();
+  const pollState = useAppStore((s) => s.pollState);
   const showAll = useAppStore(selectShowAllReviews);
   const [activeSection, setActiveSection] =
     useState<"reviews" | "inflight" | "runs" | "recent">("reviews");
 
   // When no item is currently resolved (either nothing selected, or the
   // stored id is a ghost), auto-pick the top-scored Review Request and
-  // mirror it into the store so the row highlights.
+  // mirror it into the store so the row highlights. Skip while a notification
+  // click is pending so it doesn't clobber that target before the data loads.
   useEffect(() => {
     if (selected) return;
+    if (pendingNotificationItemId) return;
     const autoPick = pickAutoSelect(reviewRequests, showAll);
     const targetId = autoPick?.id ?? null;
     if (targetId !== selectedItemId) {
       setSelectedItemId(targetId);
     }
-  }, [selected, reviewRequests, showAll, selectedItemId, setSelectedItemId]);
+  }, [
+    selected,
+    pendingNotificationItemId,
+    reviewRequests,
+    showAll,
+    selectedItemId,
+    setSelectedItemId,
+  ]);
+
+  // Resolve a pending notification-click selection once its target appears in
+  // the loaded data. On the warm path this is immediate; on cold start it
+  // resolves after the first poll lands. Selects the item, reveals its section,
+  // and clears the pending marker.
+  useEffect(() => {
+    if (!pendingNotificationItemId) return;
+    const id = pendingNotificationItemId;
+    const section = reviewRequests.some((it) => it.id === id)
+      ? "reviews"
+      : inFlight.some((it) => it.id === id)
+        ? "inflight"
+        : standaloneRuns.some((it) => it.id === id)
+          ? "runs"
+          : recentlyResolved.some((it) => it.id === id)
+            ? "recent"
+            : null;
+    if (!section) {
+      // Target not in the loaded data. While no poll has completed yet this is
+      // the expected cold-start gap, so keep waiting. But once a poll cycle has
+      // finished ("ok"/"error") and the item is still absent — it merged, was
+      // untracked, or aged out — give up and clear the marker so auto-pick can
+      // resume instead of the app sitting stuck in a pending state forever.
+      if (pollState === "ok" || pollState === "error") {
+        setPendingNotificationItemId(null);
+      }
+      return;
+    }
+    setSelectedItemId(id);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setActiveSection(section);
+    setPendingNotificationItemId(null);
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`section-${section}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [
+    pendingNotificationItemId,
+    pollState,
+    reviewRequests,
+    inFlight,
+    standaloneRuns,
+    recentlyResolved,
+    setSelectedItemId,
+    setPendingNotificationItemId,
+  ]);
 
   const gridRef = useRef<HTMLDivElement | null>(null);
   const searchButtonRef = useRef<HTMLButtonElement | null>(null);
