@@ -10,7 +10,7 @@ import { SkeletonRows } from "./SkeletonRow";
 
 export function StandaloneRunsSection() {
   const { standaloneRuns: items, isLoading } = useActionableItems();
-  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters));
+  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
   const [collapsed, setCollapsed] = useState(false);
 
   // Newest first by completion / update time. Stable sort preserves the order

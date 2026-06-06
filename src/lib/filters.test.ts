@@ -268,4 +268,16 @@ describe("hasActiveListFilter", () => {
     expect(hasActiveListFilter(FAILING)).toBe(true);
     expect(hasActiveListFilter(MY_TEAM)).toBe(true);
   });
+
+  test("myTeamOnly does not count as active when teams are unconfigured", () => {
+    // Consistent with the passesListFilters guard: an inert toggle must not
+    // read as "active" (Clear action / filter-aware empty copy).
+    expect(hasActiveListFilter(MY_TEAM, false)).toBe(false);
+    expect(hasActiveListFilter(FAILING, false)).toBe(true);
+  });
+
+  test("applyListFilters is a true no-op when only myTeamOnly is on but unconfigured", () => {
+    const items = [prItem("a"), prItem("b", { isAuthorOnMyTeam: true })];
+    expect(applyListFilters(items, MY_TEAM, false)).toBe(items);
+  });
 });

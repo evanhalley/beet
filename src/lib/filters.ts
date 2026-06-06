@@ -15,8 +15,15 @@ export const EMPTY_LIST_FILTERS: ListFilters = {
   myTeamOnly: false,
 };
 
-export function hasActiveListFilter(f: ListFilters): boolean {
-  return f.failingOnly || f.pendingOnly || f.myTeamOnly;
+// Whether any filter is *effectively* active. `myTeamOnly` only counts when
+// teams are configured — with no teams it's an inert toggle that `passesListFilters`
+// ignores, so it must not read as "active" to the UI (Clear action, filter-aware
+// empty copy) or trigger a needless `.filter()` pass in `applyListFilters`.
+export function hasActiveListFilter(
+  f: ListFilters,
+  teamsConfigured = true,
+): boolean {
+  return f.failingOnly || f.pendingOnly || (f.myTeamOnly && teamsConfigured);
 }
 
 // An item is "failing" when any of its checks reached a `failure` conclusion.
@@ -96,6 +103,6 @@ export function applyListFilters(
   f: ListFilters,
   teamsConfigured: boolean,
 ): ActionableItem[] {
-  if (!hasActiveListFilter(f)) return items;
+  if (!hasActiveListFilter(f, teamsConfigured)) return items;
   return items.filter((item) => passesListFilters(item, f, teamsConfigured));
 }

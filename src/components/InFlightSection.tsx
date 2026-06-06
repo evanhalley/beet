@@ -10,7 +10,7 @@ import { SkeletonRows } from "./SkeletonRow";
 
 export function InFlightSection() {
   const { inFlight: items, isLoading } = useActionableItems();
-  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters));
+  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...items].sort((a, b) =>

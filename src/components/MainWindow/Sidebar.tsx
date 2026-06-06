@@ -96,11 +96,13 @@ function SidebarItem({
 }: SidebarItemProps) {
   const [hover, setHover] = useState(false);
   // Resting items light up on hover with the same token the pinned/muted rows
-  // use; active items keep their accent fill and disabled items stay inert.
-  const showHover = hover && !disabled && !active;
+  // use; active items keep their accent fill and disabled items stay inert. Only
+  // these resting items track hover — wiring the handlers for disabled/active
+  // ones would re-render on every mouse move with no visual change.
+  const hoverable = !disabled && !active;
   const background = active
     ? "var(--color-accent-soft)"
-    : showHover
+    : hover && hoverable
     ? "var(--color-hover)"
     : "transparent";
   return (
@@ -108,8 +110,8 @@ function SidebarItem({
       type="button"
       disabled={disabled}
       onClick={disabled ? undefined : onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
+      onMouseEnter={hoverable ? () => setHover(true) : undefined}
+      onMouseLeave={hoverable ? () => setHover(false) : undefined}
       aria-pressed={active}
       aria-current={current ? "page" : undefined}
       aria-label={label}
@@ -489,9 +491,10 @@ export function Sidebar({
       }}
     >
       {/*
-        Sidebar navigation isn't wired yet — inactive Triage items are
-        disabled so they don't read as clickable to users or assistive
-        tech. The active item gets aria-current="page".
+        Triage nav scrolls the list to the matching section via onSectionClick;
+        the active item gets aria-current="page". "Needs Action" stays disabled
+        until its data source lands (#8) so it doesn't read as clickable to
+        users or assistive tech.
       */}
       <SidebarGroup title="Triage" collapsed={collapsed} action={toggleButton}>
         <SidebarItem

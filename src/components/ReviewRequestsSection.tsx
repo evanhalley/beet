@@ -17,7 +17,7 @@ export function ReviewRequestsSection() {
   const showAll = useAppStore(selectShowAllReviews);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
-  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters));
+  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
   const [collapsed, setCollapsed] = useState(false);
 
   // Rust scores every review-request item but never filters; visibility is a
