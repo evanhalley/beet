@@ -3,11 +3,14 @@
 import { useState } from "react";
 import { ChevronDown, Rocket } from "lucide-react";
 import { useActionableItems } from "@/hooks/useActionableItems";
+import { useAppStore } from "@/lib/store";
+import { hasActiveListFilter } from "@/lib/filters";
 import { ActionableRow } from "./ActionableRow";
 import { SkeletonRows } from "./SkeletonRow";
 
 export function InFlightSection() {
   const { inFlight: items, isLoading } = useActionableItems();
+  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
   const [collapsed, setCollapsed] = useState(false);
 
   const sorted = [...items].sort((a, b) =>
@@ -83,7 +86,9 @@ export function InFlightSection() {
                 color: "var(--color-text-faint)",
               }}
             >
-              No PRs in flight right now.
+              {filtersActive
+                ? "No in-flight PRs match the active filters."
+                : "No PRs in flight right now."}
             </p>
           ) : (
             <ul

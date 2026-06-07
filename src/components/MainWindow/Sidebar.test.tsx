@@ -122,16 +122,92 @@ describe("Sidebar", () => {
     expect(onSectionClick).toHaveBeenCalledWith("inflight");
   });
 
-  test("Filters / Pinned / Muted groups render but their rows are disabled", () => {
+  test("Pinned / Muted placeholder rows are disabled", () => {
     render(<Sidebar />);
-    const failing = screen.getByRole("button", { name: /Failing only/ });
-    expect(failing).toBeDisabled();
-    const pending = screen.getByRole("button", { name: /Pending only/ });
-    expect(pending).toBeDisabled();
-    const myteam = screen.getByRole("button", { name: /My team only/ });
-    expect(myteam).toBeDisabled();
     expect(screen.getByRole("button", { name: /No pinned repos/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /No muted repos/ })).toBeDisabled();
+  });
+
+  test("clicking Failing only toggles the store filter on and off", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    render(<Sidebar />);
+    const failing = screen.getByRole("button", { name: /Failing only/ });
+    expect(failing).not.toBeDisabled();
+    expect(failing.getAttribute("aria-pressed")).toBe("false");
+
+    await user.click(failing);
+    expect(useAppStore.getState().listFilters.failingOnly).toBe(true);
+    expect(
+      screen.getByRole("button", { name: /Failing only/ }).getAttribute("aria-pressed"),
+    ).toBe("true");
+
+    await user.click(screen.getByRole("button", { name: /Failing only/ }));
+    expect(useAppStore.getState().listFilters.failingOnly).toBe(false);
+  });
+
+  test("My team only is disabled until teams are configured", () => {
+    render(<Sidebar />);
+    const myteam = screen.getByRole("button", { name: /My team only/ });
+    expect(myteam).toBeDisabled();
+    expect(myteam).toHaveAttribute(
+      "title",
+      "Add teams in Settings → Account to use this filter",
+    );
+  });
+
+  test("My team only is enabled once a team is configured", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    useAppStore.getState().setSettings({ teams: ["acme/core"] });
+    render(<Sidebar />);
+    const myteam = screen.getByRole("button", { name: /My team only/ });
+    expect(myteam).not.toBeDisabled();
+
+    await user.click(myteam);
+    expect(useAppStore.getState().listFilters.myTeamOnly).toBe(true);
+  });
+
+  test("Clear action appears only when a filter is active and resets all", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    render(<Sidebar />);
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Pending only/ }));
+    const clear = screen.getByRole("button", { name: "Clear filters" });
+    await user.click(clear);
+    expect(useAppStore.getState().listFilters.pendingOnly).toBe(false);
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
+  test("collapsed: filters, pinned and muted still render as icon buttons", () => {
+    useAppStore.setState({
+      pins: ["acme/repo"],
+      mutes: [{ scope: "repo", value: "acme/old" }],
+    });
+    render(<Sidebar collapsed />);
+
+    // Filters remain reachable on the narrow rail (icon-only, label via aria).
+    expect(
+      screen.getByRole("button", { name: /Failing only/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Pending only/ }),
+    ).toBeInTheDocument();
+
+    // Pinned / muted collapse to their remove button, tooltip carries the name.
+    expect(
+      screen.getByRole("button", { name: "Unpin acme/repo" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Unmute acme/old" }),
+    ).toBeInTheDocument();
+  });
+
+  test("collapsed: removing a pinned repo still works from the rail", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    useAppStore.setState({ pins: ["acme/repo"] });
+    render(<Sidebar collapsed />);
+    await user.click(screen.getByRole("button", { name: "Unpin acme/repo" }));
+    expect(vi.mocked(removePin)).toHaveBeenCalledWith("acme/repo");
   });
 
   test("pinned repo: name is plain text; removal is a dedicated Unpin button", async () => {

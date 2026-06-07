@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Eye } from "lucide-react";
 import {
   isReviewRequestVisible,
   selectShowAllReviews,
   useAppStore,
 } from "@/lib/store";
+import { hasActiveListFilter } from "@/lib/filters";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { ActionableRow } from "./ActionableRow";
 import { SkeletonRows } from "./SkeletonRow";
@@ -16,6 +17,7 @@ export function ReviewRequestsSection() {
   const showAll = useAppStore(selectShowAllReviews);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
+  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
   const [collapsed, setCollapsed] = useState(false);
 
   // Rust scores every review-request item but never filters; visibility is a
@@ -57,7 +59,7 @@ export function ReviewRequestsSection() {
             padding: 0,
           }}
         >
-          <span aria-hidden>👀</span>
+          <Eye size={12} aria-hidden />
           <span>Review Requests</span>
           <span
             className="mono"
@@ -138,7 +140,9 @@ export function ReviewRequestsSection() {
                 color: "var(--color-text-faint)",
               }}
             >
-              No review requests right now.
+              {filtersActive
+                ? "No review requests match the active filters."
+                : "No review requests right now."}
             </p>
           ) : (
             <ul

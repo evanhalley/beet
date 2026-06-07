@@ -5,8 +5,8 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   Eye,
-  Filter,
   Pin,
   Rocket,
   Settings as Cog,
@@ -18,8 +18,10 @@ import {
   selectShowAllReviews,
   useAppStore,
 } from "@/lib/store";
+import { hasActiveListFilter } from "@/lib/filters";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { removeMute, removePin } from "@/lib/storage/mutePin";
+import { CheckDot } from "@/components/CheckDot";
 
 interface SidebarGroupProps {
   title: string;
@@ -74,6 +76,9 @@ interface SidebarItemProps {
   disabled?: boolean;
   collapsed?: boolean;
   current?: boolean;
+  // Native tooltip shown in both states. When collapsed, `label` is used as a
+  // fallback so the icon-only rail stays legible.
+  title?: string;
   onClick?: () => void;
 }
 
@@ -86,17 +91,31 @@ function SidebarItem({
   disabled = false,
   collapsed = false,
   current = false,
+  title,
   onClick,
 }: SidebarItemProps) {
+  const [hover, setHover] = useState(false);
+  // Resting items light up on hover with the same token the pinned/muted rows
+  // use; active items keep their accent fill and disabled items stay inert. Only
+  // these resting items track hover — wiring the handlers for disabled/active
+  // ones would re-render on every mouse move with no visual change.
+  const hoverable = !disabled && !active;
+  const background = active
+    ? "var(--color-accent-soft)"
+    : hover && hoverable
+    ? "var(--color-hover)"
+    : "transparent";
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={disabled ? undefined : onClick}
+      onMouseEnter={hoverable ? () => setHover(true) : undefined}
+      onMouseLeave={hoverable ? () => setHover(false) : undefined}
       aria-pressed={active}
       aria-current={current ? "page" : undefined}
       aria-label={label}
-      title={collapsed ? label : undefined}
+      title={title ?? (collapsed ? label : undefined)}
       style={{
         position: "relative",
         display: "flex",
@@ -105,7 +124,7 @@ function SidebarItem({
         padding: collapsed ? "6px 0" : "5px 10px",
         justifyContent: collapsed ? "center" : "flex-start",
         borderRadius: 6,
-        background: active ? "var(--color-accent-soft)" : "transparent",
+        background,
         color: active
           ? "var(--color-accent)"
           : muted
@@ -185,20 +204,61 @@ interface RemovableSidebarRowProps {
   label: string;
   // aria-label / tooltip for the remove button, e.g. "Unpin acme/repo".
   removeLabel: string;
+  collapsed?: boolean;
   onRemove: () => void;
 }
 
 // A pinned/muted repo row. The leading icon turns into an ✕ while the row is
 // hovered; clicking that icon — and only that icon — removes the rule. The
 // repo name is plain text, not a click target, so removal is deliberate.
+//
+// Collapsed: the row drops to an icon-only button on the narrow rail. The
+// resting glyph still flips to ✕ on hover, and the tooltip carries the repo
+// name + action ("Unpin acme/repo") so removal stays discoverable without text.
 function RemovableSidebarRow({
   icon,
   label,
   removeLabel,
+  collapsed = false,
   onRemove,
 }: RemovableSidebarRowProps) {
   const [rowHover, setRowHover] = useState(false);
   const [iconHover, setIconHover] = useState(false);
+
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={onRemove}
+        onMouseEnter={() => {
+          setRowHover(true);
+          setIconHover(true);
+        }}
+        onMouseLeave={() => {
+          setRowHover(false);
+          setIconHover(false);
+        }}
+        aria-label={removeLabel}
+        title={removeLabel}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "100%",
+          padding: "6px 0",
+          borderRadius: 6,
+          background: rowHover ? "var(--color-hover)" : "transparent",
+          color: iconHover
+            ? "var(--color-danger)"
+            : "var(--color-text-faint)",
+          cursor: "pointer",
+        }}
+      >
+        {rowHover ? <X size={12} /> : icon}
+      </button>
+    );
+  }
+
   return (
     <div
       onMouseEnter={() => setRowHover(true)}
@@ -380,6 +440,10 @@ export function Sidebar({
   const pins = useAppStore((s) => s.pins);
   const setMutes = useAppStore((s) => s.setMutes);
   const setPins = useAppStore((s) => s.setPins);
+  const listFilters = useAppStore((s) => s.listFilters);
+  const toggleListFilter = useAppStore((s) => s.toggleListFilter);
+  const clearListFilters = useAppStore((s) => s.clearListFilters);
+  const teamsConfigured = useAppStore((s) => s.settings.teams.length > 0);
 
   // reviewRequests/inFlight/standaloneRuns from useActionableItems already have
   // mutes applied — no need to filter again here.
@@ -427,14 +491,16 @@ export function Sidebar({
       }}
     >
       {/*
-        Sidebar navigation isn't wired yet — inactive Triage items are
-        disabled so they don't read as clickable to users or assistive
-        tech. The active item gets aria-current="page".
+        Triage nav scrolls the list to the matching section via onSectionClick;
+        the active item gets aria-current="page". "Needs Action" stays disabled
+        until its data source lands (#8) so it doesn't read as clickable to
+        users or assistive tech.
       */}
       <SidebarGroup title="Triage" collapsed={collapsed} action={toggleButton}>
         <SidebarItem
-          icon={<span aria-hidden>🔴</span>}
+          icon={<CircleAlert size={12} />}
           label="Needs Action"
+          title="Urgent items needing you now: merge-queue ejections, failing checks on your PRs, and unread mentions or replies to your reviews"
           active={activeSection === "needs"}
           current={activeSection === "needs"}
           collapsed={collapsed}
@@ -443,6 +509,7 @@ export function Sidebar({
         <SidebarItem
           icon={<Eye size={12} />}
           label="Review Requests"
+          title="Open PRs where you're a requested reviewer and haven't approved yet"
           badge={reviewCount}
           active={activeSection === "reviews"}
           current={activeSection === "reviews"}
@@ -452,6 +519,7 @@ export function Sidebar({
         <SidebarItem
           icon={<Rocket size={12} />}
           label="In Flight"
+          title="Your authored PRs that are open, in review, or in the merge queue"
           badge={inFlightCount}
           active={activeSection === "inflight"}
           current={activeSection === "inflight"}
@@ -461,6 +529,7 @@ export function Sidebar({
         <SidebarItem
           icon={<Cog size={12} />}
           label="Standalone Runs"
+          title="Workflow runs you triggered with no PR — deploys, manual dispatches, and scheduled runs"
           badge={runsCount}
           active={activeSection === "runs"}
           current={activeSection === "runs"}
@@ -470,6 +539,7 @@ export function Sidebar({
         <SidebarItem
           icon={<CheckCircle2 size={12} />}
           label="Recently Resolved"
+          title="Merged PRs and completed runs from the last 24 hours"
           active={activeSection === "recent"}
           current={activeSection === "recent"}
           collapsed={collapsed}
@@ -477,76 +547,123 @@ export function Sidebar({
         />
       </SidebarGroup>
 
-      {!collapsed && (
-        <>
-          <SidebarGroup title="Filters">
-            <SidebarItem icon={<Filter size={12} />} label="Failing only" disabled />
-            <SidebarItem icon={<Filter size={12} />} label="Pending only" disabled />
-            <SidebarItem
-              icon={<span style={{ fontSize: 11, color: "var(--color-accent)" }}>★</span>}
-              label="My team only"
-              disabled
+      <SidebarGroup
+        title="Filters"
+        collapsed={collapsed}
+        action={
+          !collapsed && hasActiveListFilter(listFilters) ? (
+            <button
+              type="button"
+              onClick={clearListFilters}
+              aria-label="Clear filters"
+              title="Clear filters"
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                textTransform: "none",
+                letterSpacing: 0,
+                color: "var(--color-accent)",
+                background: "transparent",
+                cursor: "pointer",
+                padding: 0,
+              }}
+            >
+              Clear
+            </button>
+          ) : undefined
+        }
+      >
+        <SidebarItem
+          icon={<CheckDot state="failure" />}
+          label="Failing only"
+          active={listFilters.failingOnly}
+          collapsed={collapsed}
+          onClick={() => toggleListFilter("failingOnly")}
+        />
+        <SidebarItem
+          icon={<CheckDot state="pending" />}
+          label="Pending only"
+          active={listFilters.pendingOnly}
+          collapsed={collapsed}
+          onClick={() => toggleListFilter("pendingOnly")}
+        />
+        <SidebarItem
+          icon={
+            <span style={{ fontSize: 11, color: "var(--color-accent)" }}>★</span>
+          }
+          label="My team only"
+          active={teamsConfigured && listFilters.myTeamOnly}
+          disabled={!teamsConfigured}
+          collapsed={collapsed}
+          title={
+            teamsConfigured
+              ? undefined
+              : "Add teams in Settings → Account to use this filter"
+          }
+          onClick={() => toggleListFilter("myTeamOnly")}
+        />
+      </SidebarGroup>
+
+      <SidebarGroup title="Pinned" collapsed={collapsed}>
+        {pins.length === 0 ? (
+          <SidebarItem
+            icon={<Pin size={12} />}
+            label="No pinned repos"
+            muted
+            disabled
+            collapsed={collapsed}
+          />
+        ) : (
+          pins.map((repo) => (
+            <RemovableSidebarRow
+              key={repo}
+              icon={<Pin size={12} />}
+              label={repo}
+              removeLabel={`Unpin ${repo}`}
+              collapsed={collapsed}
+              onRemove={async () => {
+                try {
+                  await removePin(repo);
+                  setPins(useAppStore.getState().pins.filter((p) => p !== repo));
+                } catch { /* storage error — leave state unchanged */ }
+              }}
             />
-          </SidebarGroup>
+          ))
+        )}
+      </SidebarGroup>
 
-          <SidebarGroup title="Pinned">
-            {pins.length === 0 ? (
-              <SidebarItem
-                icon={<Pin size={12} />}
-                label="No pinned repos"
-                muted
-                disabled
-              />
-            ) : (
-              pins.map((repo) => (
-                <RemovableSidebarRow
-                  key={repo}
-                  icon={<Pin size={12} />}
-                  label={repo}
-                  removeLabel={`Unpin ${repo}`}
-                  onRemove={async () => {
-                    try {
-                      await removePin(repo);
-                      setPins(useAppStore.getState().pins.filter((p) => p !== repo));
-                    } catch { /* storage error — leave state unchanged */ }
-                  }}
-                />
-              ))
-            )}
-          </SidebarGroup>
-
-          <SidebarGroup title="Muted">
-            {mutes.length === 0 ? (
-              <SidebarItem
-                icon={<VolumeX size={12} />}
-                label="No muted repos"
-                muted
-                disabled
-              />
-            ) : (
-              mutes.map((rule) => (
-                <RemovableSidebarRow
-                  key={`${rule.scope}:${rule.value}`}
-                  icon={<VolumeX size={12} />}
-                  label={rule.value}
-                  removeLabel={`Unmute ${rule.value}`}
-                  onRemove={async () => {
-                    try {
-                      await removeMute(rule.scope, rule.value);
-                      setMutes(
-                        useAppStore.getState().mutes.filter(
-                          (m) =>
-                            !(m.scope === rule.scope && m.value === rule.value),
-                        ),
-                      );
-                    } catch { /* storage error — leave state unchanged */ }
-                  }}
-                />
-              ))
-            )}
-          </SidebarGroup>
-        </>
-      )}
+      <SidebarGroup title="Muted" collapsed={collapsed}>
+        {mutes.length === 0 ? (
+          <SidebarItem
+            icon={<VolumeX size={12} />}
+            label="No muted repos"
+            muted
+            disabled
+            collapsed={collapsed}
+          />
+        ) : (
+          mutes.map((rule) => (
+            <RemovableSidebarRow
+              key={`${rule.scope}:${rule.value}`}
+              icon={<VolumeX size={12} />}
+              label={rule.value}
+              removeLabel={`Unmute ${rule.value}`}
+              collapsed={collapsed}
+              onRemove={async () => {
+                try {
+                  await removeMute(rule.scope, rule.value);
+                  setMutes(
+                    useAppStore.getState().mutes.filter(
+                      (m) =>
+                        !(m.scope === rule.scope && m.value === rule.value),
+                    ),
+                  );
+                } catch { /* storage error — leave state unchanged */ }
+              }}
+            />
+          ))
+        )}
+      </SidebarGroup>
 
       <span style={{ flex: 1 }} />
       <RateLimitCard collapsed={collapsed} />

@@ -1,13 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Cog } from "lucide-react";
+import { ChevronDown, Settings as Cog } from "lucide-react";
 import { useActionableItems } from "@/hooks/useActionableItems";
+import { useAppStore } from "@/lib/store";
+import { hasActiveListFilter } from "@/lib/filters";
 import { RunRow } from "./RunRow";
 import { SkeletonRows } from "./SkeletonRow";
 
 export function StandaloneRunsSection() {
   const { standaloneRuns: items, isLoading } = useActionableItems();
+  const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
   const [collapsed, setCollapsed] = useState(false);
 
   // Newest first by completion / update time. Stable sort preserves the order
@@ -85,7 +88,9 @@ export function StandaloneRunsSection() {
                 color: "var(--color-text-faint)",
               }}
             >
-              No standalone workflow runs right now.
+              {filtersActive
+                ? "No standalone runs match the active filters."
+                : "No standalone workflow runs right now."}
             </p>
           ) : (
             <ul role="list" style={{ listStyle: "none", margin: 0, padding: 0 }}>

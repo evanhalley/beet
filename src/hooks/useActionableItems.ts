@@ -1,6 +1,7 @@
 "use client";
 
 import { applyMutes, useAppStore } from "@/lib/store";
+import { applyListFilters } from "@/lib/filters";
 import type { ActionableItem } from "@/lib/types";
 
 export interface UseActionableItemsResult {
@@ -26,11 +27,19 @@ export function useActionableItems(): UseActionableItemsResult {
   const byId = useAppStore((s) => s.byId);
   const pollState = useAppStore((s) => s.pollState);
   const mutes = useAppStore((s) => s.mutes);
+  const listFilters = useAppStore((s) => s.listFilters);
+  const teamsConfigured = useAppStore((s) => s.settings.teams.length > 0);
+
+  // Mutes apply everywhere; the session list filters narrow only the live
+  // actionable sections — Recently Resolved keeps its full set, since a
+  // check-status / my-team lens on already-resolved items is noise.
+  const filter = (items: ActionableItem[]) =>
+    applyListFilters(applyMutes(items, mutes), listFilters, teamsConfigured);
 
   return {
-    reviewRequests: applyMutes(reviewRequests, mutes),
-    inFlight: applyMutes(inFlight, mutes),
-    standaloneRuns: applyMutes(standaloneRuns, mutes),
+    reviewRequests: filter(reviewRequests),
+    inFlight: filter(inFlight),
+    standaloneRuns: filter(standaloneRuns),
     recentlyResolved: applyMutes(recentlyResolved, mutes),
     byId,
     // "idle" = no poll cycle has completed yet.
