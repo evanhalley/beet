@@ -2,6 +2,17 @@
   "name": "beet",
   "version": "0.1.0",
   "private": true,
+  "description": "A glanceable, always-running developer dashboard for GitHub — a macOS menu-bar app built on Tauri 2 + Next.js.",
+  "license": "MIT",
+  "author": "Evan Halley",
+  "homepage": "https://github.com/evanhalley/beet#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/evanhalley/beet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/evanhalley/beet/issues"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

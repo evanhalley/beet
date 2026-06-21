@@ -12,7 +12,7 @@ All five OS notifications from §10 fire, dedupe correctly, and respect per-trig
 
 ### OS notifications (the 5 §10 triggers)
 
-- [ ] **`src/hooks/useNotifications.ts`** — extend the placeholder hook (or port from [Action Jackson `useNotifications.ts`](file:///Users/evan/Downloads/src/hooks/useNotifications.ts)) to handle all five triggers. Permission is requested on first launch (one-time prompt, persisted).
+- [ ] **`src/hooks/useNotifications.ts`** — extend the placeholder hook (or port from Action Jackson `useNotifications.ts`) to handle all five triggers. Permission is requested on first launch (one-time prompt, persisted).
 - [ ] **Diff-based dispatch.** On every poll-result delivered by the Rust poller, the frontend computes the diff against the previous tick and emits notifications for:
   | Trigger | Detection | Dedupe key |
   |---|---|---|

@@ -81,7 +81,7 @@ Reuses the toolchain proven in PRZ + Action Jackson.
 
 - **Personal Access Token** pasted by the user into Settings.
 - Stored via Tauri Store plugin in `config.json` (key: `github-pat`), same
-  pattern as Action Jackson's [tauri-bridge.ts](file:///Users/evan/Downloads/src/lib/tauri-bridge.ts).
+  pattern as Action Jackson's tauri-bridge.ts.
 - **Required scopes** (fine-grained PAT):
   - `repo` (or per-repo: Pull Requests R, Issues R, Actions R, Metadata R,
     Contents R).
@@ -207,7 +207,7 @@ The list is filtered/grouped, not paginated. Default sections (in order):
 ## 6. Prioritization
 
 Inherits and refines the PRZ scoring algorithm from
-[pr-prioritization.ts](file:///Users/evan/dev/prz/src/lib/pr-prioritization.ts).
+pr-prioritization.ts.
 
 **Score is computed only for review-request items** (Section 2 above). All
 other sections sort by `updatedAt` desc.

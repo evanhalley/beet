@@ -22,7 +22,7 @@ The simplest possible Beet that builds, runs, and tests cleanly.
 
 ## File layout
 
-Mirrors [PRZ's structure](file:///Users/evan/dev/prz) with the additional directories §14 of the spec calls for. New files only — nothing inherited yet.
+Mirrors PRZ's structure with the additional directories §14 of the spec calls for. New files only — nothing inherited yet.
 
 ```
 beet/
@@ -128,7 +128,7 @@ Plugins deferred (added in their owning iteration): `tauri-plugin-store` (#2), `
 - **`next.config.ts`**: `output: "export"`, `images: { unoptimized: true }`. Tauri serves the static bundle.
 - **`vitest.config.ts`**: jsdom environment, setup file at `src/test/setup.ts`, `globals: true`, exclude `src-tauri/**` and `node_modules`.
 - **`eslint.config.mjs`**: extend `next/core-web-vitals` and `next/typescript`. Match PRZ's flat-config shape.
-- **Icons**: copy PRZ's [src-tauri/icons](file:///Users/evan/dev/prz/src-tauri/icons) as placeholders for now. Beet-branded icons land in #9.
+- **Icons**: copy PRZ's src-tauri/icons as placeholders for now. Beet-branded icons land in #9.
 
 ## What `lib.rs` should do
 

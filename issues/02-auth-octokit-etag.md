@@ -11,7 +11,7 @@ User can paste a GitHub PAT, click Validate, and see their login + per-scope sta
 ## Acceptance criteria
 
 - [ ] **Settings panel shell** opens from the main window and renders an Account tab. Nav lists only tabs we've actually implemented (Account); future iterations register their own.
-- [ ] **PAT field** persists the token via `tauri-plugin-store` (key `github-pat`, matching Action Jackson's pattern in [tauri-bridge.ts](file:///Users/evan/Downloads/src/lib/tauri-bridge.ts)). Survives app restart.
+- [ ] **PAT field** persists the token via `tauri-plugin-store` (key `github-pat`, matching Action Jackson's pattern in tauri-bridge.ts). Survives app restart.
 - [ ] **Validate button** calls `users.getAuthenticated` via the Octokit wrapper. On success, shows a green `● valid` pill, the resolved login, and "last checked Ns ago".
 - [ ] **Scopes grid** lists the five required scopes from §4 (`repo`, `read:org`, `read:user`, `user:email`, `notifications`) and marks each as `ok` / `missing` based on the `X-OAuth-Scopes` response header.
 - [ ] **SQLite database** initializes on app launch via `tauri-plugin-sql` and runs the first migration creating `etag_cache` (per §9). Subsequent launches are no-ops.

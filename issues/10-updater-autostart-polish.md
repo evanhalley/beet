@@ -31,7 +31,7 @@ Launching Beet (or every 24 h thereafter) checks GitHub Releases for a newer sig
 
 ### Polish (the §16 sweep)
 
-- [ ] **Task chips.** Port PRZ's task-URL regex extraction from [/Users/evan/dev/prz/src/lib/github.ts](file:///Users/evan/dev/prz/src/lib/github.ts) into `src/lib/tasks.ts`. Render up to 3 chips on the PR row from `pr.taskUrls`, with a `+N` overflow chip; clicking a chip opens the ticket via `tauri-plugin-shell`. Full list rendered in the DetailPane's Body tab. Regex is user-configurable in Settings → General (default: the Atlassian pattern from PRZ).
+- [ ] **Task chips.** Port PRZ's task-URL regex extraction from github.ts into `src/lib/tasks.ts`. Render up to 3 chips on the PR row from `pr.taskUrls`, with a `+N` overflow chip; clicking a chip opens the ticket via `tauri-plugin-shell`. Full list rendered in the DetailPane's Body tab. Regex is user-configurable in Settings → General (default: the Atlassian pattern from PRZ).
 - [ ] **PinGlyph** (carried from #9) is rendered in the row's repo-label chrome for pinned repos.
 - [ ] **Density toggle.** Settings → Appearance → Compact / Comfy. Toggles a `data-density` attribute on the root container; Tailwind utility classes branch on `[data-density=compact]:py-1 [data-density=comfy]:py-2` etc.
 - [ ] **Theme.** Settings → Appearance → Auto / Light / Dark. `auto` follows `prefers-color-scheme`; the other two pin. Implemented by toggling the `dark` class on `<html>`.
