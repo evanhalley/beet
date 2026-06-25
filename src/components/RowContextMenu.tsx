@@ -2,17 +2,22 @@
 
 import { useEffect, useRef } from "react";
 import type { CSSProperties, MouseEvent } from "react";
-import { Pin, PinOff, VolumeX } from "lucide-react";
+import { Eye, EyeOff, Pin, PinOff, VolumeX } from "lucide-react";
 
 export interface RowContextMenuProps {
   x: number;
   y: number;
   repoFullName: string;
   isPinned: boolean;
+  // When true the row is currently suppressed (visible only because Show-All is
+  // on); the action becomes "Unsuppress". Omitted for rows that can't be
+  // suppressed (e.g. standalone runs).
+  isSuppressed?: boolean;
   onClose: () => void;
   onMuteRepo: () => void;
   onMuteOrg: () => void;
   onTogglePin: () => void;
+  onToggleSuppress?: () => void;
 }
 
 const menuItemStyle: CSSProperties = {
@@ -36,10 +41,12 @@ export function RowContextMenu({
   y,
   repoFullName,
   isPinned,
+  isSuppressed = false,
   onClose,
   onMuteRepo,
   onMuteOrg,
   onTogglePin,
+  onToggleSuppress,
 }: RowContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const owner = repoFullName.split("/")[0] ?? repoFullName;
@@ -146,6 +153,27 @@ export function RowContextMenu({
         )}
         {isPinned ? `Unpin ${repoFullName}` : `Pin ${repoFullName}`}
       </button>
+
+      {onToggleSuppress && (
+        <button
+          type="button"
+          role="menuitem"
+          style={menuItemStyle}
+          onClick={() => {
+            onToggleSuppress();
+            onClose();
+          }}
+          onMouseEnter={onItemEnter}
+          onMouseLeave={onItemLeave}
+        >
+          {isSuppressed ? (
+            <Eye size={13} style={{ color: "var(--color-accent)" }} />
+          ) : (
+            <EyeOff size={13} style={{ color: "var(--color-text-faint)" }} />
+          )}
+          {isSuppressed ? "Unsuppress this PR" : "Suppress this PR"}
+        </button>
+      )}
     </div>
   );
 }

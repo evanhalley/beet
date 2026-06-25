@@ -17,6 +17,11 @@ export interface RowShellProps {
    * button-in-button nesting.
    */
   actions?: ReactNode;
+  /**
+   * Visually de-emphasize the row. Used for suppressed PRs revealed by
+   * Show-All so they read as intentionally hidden.
+   */
+  dimmed?: boolean;
 }
 
 export function RowShell({
@@ -28,9 +33,13 @@ export function RowShell({
   children,
   aside,
   actions,
+  dimmed = false,
 }: RowShellProps) {
   return (
-    <div style={{ position: "relative" }} onContextMenu={onContextMenu}>
+    <div
+      style={{ position: "relative", opacity: dimmed ? 0.55 : 1 }}
+      onContextMenu={onContextMenu}
+    >
       <button
         type="button"
         onClick={onSelect}

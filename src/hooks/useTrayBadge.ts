@@ -11,14 +11,18 @@ export function useTrayBadge(): void {
   const mutes = useAppStore((s) => s.mutes);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     // Apply mute filter before counting so the badge matches what the UI shows.
     const visible = applyMutes(reviewRequests, mutes);
-    // Only count unread items that are actually visible (score > 0, or showAll).
+    // Only count unread items that are actually visible (score > 0, or showAll),
+    // and not suppressed — so the badge matches the rendered Review Requests list.
     const count = visible
-      .filter((r) => r.unread && isReviewRequestVisible(r, showAll))
+      .filter(
+        (r) => r.unread && isReviewRequestVisible(r, showAll, suppressedIds),
+      )
       .length;
 
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -29,5 +33,5 @@ export function useTrayBadge(): void {
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [reviewRequests, mutes, paused, showAll]);
+  }, [reviewRequests, mutes, paused, showAll, suppressedIds]);
 }

@@ -19,6 +19,7 @@ export function useSelectedItem(): ActionableItem | null {
   const standaloneRuns = useAppStore((s) => s.standaloneRuns);
   const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const showAll = useAppStore(selectShowAllReviews);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
   if (!selectedItemId) return null;
 
   // In-flight items are always visible — no filter applies here.
@@ -37,5 +38,7 @@ export function useSelectedItem(): ActionableItem | null {
   // Review-requests honor the same visibility predicate as the rendered list.
   const reviewHit = reviewRequests.find((it) => it.id === selectedItemId);
   if (!reviewHit) return null;
-  return isReviewRequestVisible(reviewHit, showAll) ? reviewHit : null;
+  return isReviewRequestVisible(reviewHit, showAll, suppressedIds)
+    ? reviewHit
+    : null;
 }

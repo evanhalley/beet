@@ -4,6 +4,7 @@ import { useState, type MouseEvent } from "react";
 import { AlertTriangle, Check, Link2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { addMute, addPin, removePin } from "@/lib/storage/mutePin";
+import { addSuppression, removeSuppression } from "@/lib/storage/suppress";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -31,11 +32,17 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
   const setMutes = useAppStore((s) => s.setMutes);
   const setPins = useAppStore((s) => s.setPins);
   const mutes = useAppStore((s) => s.mutes);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
+  const setSuppressedIds = useAppStore((s) => s.setSuppressedIds);
   const [copied, setCopied] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   if (!pr) return null;
 
   const isPinned = pins.includes(item.repoFullName);
+  // Suppression is a Review-Requests-only affordance (§ suppress). In-flight
+  // rows are your own PRs and aren't part of the "needs my review" list.
+  const canSuppress = variant === "review";
+  const isSuppressed = suppressedIds.includes(item.id);
   const wasEjected = (pr.mergeQueue?.ejectedChecks?.length ?? 0) > 0;
 
   const aside =
@@ -81,6 +88,22 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
       const latest = useAppStore.getState().mutes;
       if (!latest.some((m) => m.scope === "org" && m.value === owner)) {
         setMutes([...latest, { scope: "org" as const, value: owner }]);
+      }
+    } catch { /* storage error — leave state unchanged */ }
+  };
+
+  const handleToggleSuppress = async () => {
+    try {
+      if (isSuppressed) {
+        await removeSuppression(item.id);
+        const latest = useAppStore.getState().suppressedIds;
+        setSuppressedIds(latest.filter((id) => id !== item.id));
+      } else {
+        await addSuppression(item.id);
+        const latest = useAppStore.getState().suppressedIds;
+        if (!latest.includes(item.id)) {
+          setSuppressedIds([...latest, item.id]);
+        }
       }
     } catch { /* storage error — leave state unchanged */ }
   };
@@ -133,6 +156,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
         aside={aside}
         actions={copyButton}
         onContextMenu={onContextMenu}
+        dimmed={canSuppress && isSuppressed}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
           <span
@@ -150,6 +174,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
           </span>
           {variant === "review" ? (
             <>
+              {isSuppressed && <Pill tone="neutral">suppressed</Pill>}
               {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}
               {pr.isDraft && <Pill tone="neutral">draft</Pill>}
             </>
@@ -225,10 +250,12 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
           y={ctxMenu.y}
           repoFullName={item.repoFullName}
           isPinned={isPinned}
+          isSuppressed={isSuppressed}
           onClose={() => setCtxMenu(null)}
           onMuteRepo={handleMuteRepo}
           onMuteOrg={handleMuteOrg}
           onTogglePin={handleTogglePin}
+          onToggleSuppress={canSuppress ? handleToggleSuppress : undefined}
         />
       )}
     </>
