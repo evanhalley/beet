@@ -8,7 +8,7 @@ import { invoke } from "@tauri-apps/api/core";
 // usePollEvents.
 export async function isMockMode(): Promise<boolean> {
   try {
-    return await invoke<boolean>("is_mock_mode");
+    return (await invoke<boolean | null>("is_mock_mode")) ?? false;
   } catch {
     return false;
   }
