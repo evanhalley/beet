@@ -436,6 +436,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { reviewRequests, inFlight, standaloneRuns } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
   const mutes = useAppStore((s) => s.mutes);
   const pins = useAppStore((s) => s.pins);
   const setMutes = useAppStore((s) => s.setMutes);
@@ -448,7 +449,7 @@ export function Sidebar({
   // reviewRequests/inFlight/standaloneRuns from useActionableItems already have
   // mutes applied — no need to filter again here.
   const reviewCount = reviewRequests.filter((it) =>
-    isReviewRequestVisible(it, showAll),
+    isReviewRequestVisible(it, showAll, suppressedIds),
   ).length;
   const inFlightCount = inFlight.length;
   const runsCount = standaloneRuns.length;

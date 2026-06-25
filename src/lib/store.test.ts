@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { selectShowAllReviews, useAppStore } from "./store";
+import {
+  isReviewRequestVisible,
+  selectShowAllReviews,
+  useAppStore,
+} from "./store";
 import type { ActionableItem } from "./types";
 
 beforeEach(() => {
@@ -121,6 +125,13 @@ describe("app store (client/UI state)", () => {
     expect(hit?.pr?.author).toBe("rina");
   });
 
+  test("setSuppressedIds stores the suppressed-id list and reset() clears it", () => {
+    useAppStore.getState().setSuppressedIds(["pr:acme/repo#1"]);
+    expect(useAppStore.getState().suppressedIds).toEqual(["pr:acme/repo#1"]);
+    useAppStore.getState().reset();
+    expect(useAppStore.getState().suppressedIds).toEqual([]);
+  });
+
   test("reset restores initial state", () => {
     const s = useAppStore.getState();
     s.setSelectedItemId("x");
@@ -132,5 +143,30 @@ describe("app store (client/UI state)", () => {
     expect(after.selectedItemId).toBeNull();
     expect(after.uiError).toBeNull();
     expect(after.showAllReviewsOverride).toBeNull();
+  });
+});
+
+describe("isReviewRequestVisible", () => {
+  test("hides zero/negative-score items unless Show-All is on", () => {
+    const zero = prItem("pr:acme/repo#1", "low", "rina"); // score 0
+    expect(isReviewRequestVisible(zero, false)).toBe(false);
+    expect(isReviewRequestVisible(zero, true)).toBe(true);
+
+    const positive = prItem("pr:acme/repo#2", "high", "rina");
+    positive.pr!.score = 5;
+    expect(isReviewRequestVisible(positive, false)).toBe(true);
+  });
+
+  test("a suppressed item is hidden even with a positive score, and revealed only by Show-All", () => {
+    const item = prItem("pr:acme/repo#3", "wip", "rina");
+    item.pr!.score = 8; // would normally be visible
+    const suppressed = [item.id];
+
+    // Suppressed + Show-All off → hidden, regardless of score.
+    expect(isReviewRequestVisible(item, false, suppressed)).toBe(false);
+    // Suppressed + Show-All on → revealed so it can be un-suppressed.
+    expect(isReviewRequestVisible(item, true, suppressed)).toBe(true);
+    // Not in the suppressed set → unaffected.
+    expect(isReviewRequestVisible(item, false, [])).toBe(true);
   });
 });

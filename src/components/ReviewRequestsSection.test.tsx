@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ReviewRequestsSection } from "./ReviewRequestsSection";
 import { useAppStore } from "@/lib/store";
@@ -8,6 +8,13 @@ import type { ActionableItem } from "@/lib/types";
 
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
+}));
+
+// The Suppress context-menu action persists via these; stub them so tests
+// exercise the store wiring without a Tauri backend.
+vi.mock("@/lib/storage/suppress", () => ({
+  addSuppression: vi.fn(async () => {}),
+  removeSuppression: vi.fn(async () => {}),
 }));
 
 // ReviewRequestsSection reads from the store (fed by the Rust poll loop in
@@ -192,5 +199,46 @@ describe("ReviewRequestsSection", () => {
     render(<ReviewRequestsSection />);
     const list = screen.getByRole("list");
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  test("right-click → Suppress this PR persists and drops the row from the default list", async () => {
+    const user = userEvent.setup();
+    const suppressMod = (await import("@/lib/storage/suppress")) as unknown as {
+      addSuppression: ReturnType<typeof vi.fn>;
+    };
+    seedItems([makeItem("pr:acme/repo#1", 8)]);
+    render(<ReviewRequestsSection />);
+
+    const row = screen.getByRole("button", {
+      name: "Select Title pr:acme/repo#1",
+    });
+    fireEvent.contextMenu(row);
+    await user.click(screen.getByRole("menuitem", { name: /suppress this pr/i }));
+
+    expect(suppressMod.addSuppression).toHaveBeenCalledWith("pr:acme/repo#1");
+    expect(useAppStore.getState().suppressedIds).toContain("pr:acme/repo#1");
+    // Show-All is off by default → the suppressed row is gone.
+    expect(
+      screen.queryByRole("button", { name: "Select Title pr:acme/repo#1" }),
+    ).toBeNull();
+  });
+
+  test("a suppressed PR reappears (marked) when Show all is on and offers Unsuppress", async () => {
+    seedItems([makeItem("pr:acme/repo#1", 8)]);
+    useAppStore.setState({
+      suppressedIds: ["pr:acme/repo#1"],
+      showAllReviewsOverride: true,
+    });
+    render(<ReviewRequestsSection />);
+
+    const row = screen.getByRole("button", {
+      name: "Select Title pr:acme/repo#1",
+    });
+    expect(within(row).getByText(/suppressed/i)).toBeInTheDocument();
+
+    fireEvent.contextMenu(row);
+    expect(
+      screen.getByRole("menuitem", { name: /unsuppress this pr/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -15,6 +15,7 @@ import { SkeletonRows } from "./SkeletonRow";
 export function ReviewRequestsSection() {
   const { reviewRequests: items, isLoading } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
   const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
@@ -26,7 +27,9 @@ export function ReviewRequestsSection() {
   const sorted = [...items].sort(
     (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
   );
-  const visible = sorted.filter((it) => isReviewRequestVisible(it, showAll));
+  const visible = sorted.filter((it) =>
+    isReviewRequestVisible(it, showAll, suppressedIds),
+  );
 
   return (
     <section aria-label="Review Requests" id="section-reviews">

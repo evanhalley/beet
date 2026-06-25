@@ -1,21 +1,25 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Pin, VolumeX, X } from "lucide-react";
+import { EyeOff, Pin, VolumeX, X } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { removeMute, removePin } from "@/lib/storage/mutePin";
+import { removeSuppression } from "@/lib/storage/suppress";
 import { H, Stack } from "./atoms";
 
 export function MutePinTab() {
   const pins = useAppStore((s) => s.pins);
   const mutes = useAppStore((s) => s.mutes);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
   const setPins = useAppStore((s) => s.setPins);
   const setMutes = useAppStore((s) => s.setMutes);
+  const setSuppressedIds = useAppStore((s) => s.setSuppressedIds);
 
   const repoMutes = mutes.filter((m) => m.scope === "repo");
   const orgMutes = mutes.filter((m) => m.scope === "org");
 
-  const isEmpty = pins.length === 0 && mutes.length === 0;
+  const isEmpty =
+    pins.length === 0 && mutes.length === 0 && suppressedIds.length === 0;
 
   return (
     <Stack>
@@ -23,7 +27,8 @@ export function MutePinTab() {
 
       {isEmpty && (
         <p style={{ fontSize: 12.5, color: "var(--color-text-faint)" }}>
-          No rules yet. Right-click any row to mute a repo/org or pin a repo.
+          No rules yet. Right-click any row to mute a repo/org, pin a repo, or
+          suppress a single PR.
         </p>
       )}
 
@@ -117,6 +122,41 @@ export function MutePinTab() {
                     useAppStore.getState().mutes.filter(
                       (m) => !(m.scope === "org" && m.value === rule.value),
                     ),
+                  );
+                } catch { /* storage error — leave state unchanged */ }
+              }}
+            />
+          ))}
+        </section>
+      )}
+
+      {suppressedIds.length > 0 && (
+        <section>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+              color: "var(--color-text-muted)",
+              marginBottom: 8,
+            }}
+          >
+            Suppressed PRs
+          </div>
+          {suppressedIds.map((id) => (
+            <RuleRow
+              key={id}
+              icon={
+                <EyeOff size={12} style={{ color: "var(--color-accent)" }} />
+              }
+              // Item ids are "pr:owner/repo#42"; drop the kind prefix for display.
+              label={id.replace(/^pr:/, "")}
+              onRemove={async () => {
+                try {
+                  await removeSuppression(id);
+                  setSuppressedIds(
+                    useAppStore.getState().suppressedIds.filter((s) => s !== id),
                   );
                 } catch { /* storage error — leave state unchanged */ }
               }}

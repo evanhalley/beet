@@ -64,6 +64,7 @@ export function TrayPopover() {
   const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
+  const suppressedIds = useAppStore((s) => s.suppressedIds);
 
   const [collapsed, setCollapsed] = useState<SectionCollapse>({
     needs: false,
@@ -78,7 +79,7 @@ export function TrayPopover() {
 
   const visibleReviews = [...reviewRequests]
     .sort((a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0))
-    .filter((it) => isReviewRequestVisible(it, showAll));
+    .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds));
 
   const totalUnread =
     visibleReviews.filter((r) => r.unread).length;

@@ -96,6 +96,15 @@ const MIGRATIONS: &[&str] = &[
         item_id    TEXT NOT NULL,
         created_at TEXT NOT NULL
     );",
+    // v10: per-PR suppression. A suppressed PR (keyed by its stable
+    // ActionableItem id, e.g. "pr:owner/repo#42") is hidden from the Review
+    // Requests list unless "Show all" is on — finer-grained than a repo/org
+    // mute. Filtered at the frontend visibility layer so un-suppressing never
+    // triggers a refetch.
+    "CREATE TABLE IF NOT EXISTS suppress_rules (
+        item_id    TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL
+    );",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.
@@ -149,7 +158,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         for table in [
             "etag_cache",
             "pr_lifecycle_history",
@@ -160,6 +169,7 @@ mod tests {
             "mute_rules",
             "pin_rules",
             "notification_links",
+            "suppress_rules",
         ] {
             let count: i64 = conn
                 .query_row(
@@ -182,7 +192,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
     }
 
     #[test]
@@ -205,7 +215,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

@@ -92,6 +92,12 @@ export interface AppStore {
   mutes: MuteRule[];
   pins: string[]; // owner/repo strings
 
+  // Per-PR suppressions (§ suppress). Set of stable ActionableItem ids
+  // (e.g. "pr:owner/repo#42"). A suppressed review-request is hidden unless
+  // Show-All is on — filtered at the visibility layer, like mutes, so the raw
+  // poll cache stays intact and un-suppressing never refetches.
+  suppressedIds: string[];
+
   setPollResult: (payload: PollResultPayload) => void;
   setPollStatus: (payload: PollStatusPayload) => void;
   setPaused: (paused: boolean) => void;
@@ -106,6 +112,7 @@ export interface AppStore {
   hydrateSettings: (settings: BeetSettings) => void;
   setMutes: (mutes: MuteRule[]) => void;
   setPins: (pins: string[]) => void;
+  setSuppressedIds: (ids: string[]) => void;
 
   reset: () => void;
 }
@@ -133,6 +140,7 @@ const initialState = {
   settingsHydrated: false,
   mutes: [] as MuteRule[],
   pins: [] as string[],
+  suppressedIds: [] as string[],
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -203,6 +211,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   hydrateSettings: (settings) => set({ settings, settingsHydrated: true }),
   setMutes: (mutes) => set({ mutes }),
   setPins: (pins) => set({ pins }),
+  setSuppressedIds: (suppressedIds) => set({ suppressedIds }),
   reset: () =>
     set({
       ...initialState,
@@ -218,13 +227,18 @@ export function selectShowAllReviews(s: AppStore): boolean {
 }
 
 // Visibility predicate shared by the Review Requests section, the Sidebar
-// count, and selection resolution: with Show-All off, only positive-score
-// items are visible. Rust scores every review-request but never filters,
-// so this is the single point that decides what the user actually sees.
+// count, the tray popover/badge, and selection resolution: with Show-All off,
+// only positive-score, non-suppressed items are visible. Rust scores every
+// review-request but never filters, so this is the single point that decides
+// what the user actually sees. A user-suppressed PR (right-click → Suppress)
+// is hidden regardless of score and reappears only when Show-All reveals it,
+// the same way approved/low-score items do.
 export function isReviewRequestVisible(
   item: ActionableItem,
   showAll: boolean,
+  suppressedIds: string[] = [],
 ): boolean {
+  if (suppressedIds.includes(item.id)) return showAll;
   return showAll || (item.pr?.score ?? 0) > 0;
 }
 
