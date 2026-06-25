@@ -219,6 +219,26 @@ async fn run<R: Runtime>(
             continue;
         }
 
+        // Mock mode: emit the static fixture and skip all GitHub access
+        // (no keychain read, no network). The sleep/select below still runs
+        // so refresh_now, pause, and shutdown behave normally.
+        if crate::mock::is_enabled() {
+            emit_status(&app, "polling", None, false, None);
+            emit_mock(&app);
+            let interval = std::time::Duration::from_secs(config.polling_interval_sec.max(1));
+            tokio::select! {
+                _ = cancel.cancelled() => break,
+                _ = tokio::time::sleep(interval) => {}
+                changed = config_rx.changed() => {
+                    if changed.is_err() { break; }
+                }
+                changed = paused_rx.changed() => {
+                    if changed.is_err() { break; }
+                }
+            }
+            continue;
+        }
+
         emit_status(&app, "polling", None, false, None);
 
         if token.is_none() {
@@ -529,6 +549,23 @@ async fn fetch_username(client: &GithubClient, db: &Db) -> BeetResult<String> {
         .beet_get::<AuthUser>(db, "user:authenticated", &url)
         .await?;
     Ok(res.body.login)
+}
+
+/// Build the `poll:result` payload from the static mock fixture and emit it,
+/// followed by an `ok` status. Used only when `BEET_MOCK=1` (demo / offline).
+fn emit_mock<R: Runtime>(app: &AppHandle<R>) {
+    let lists = crate::mock::mock_payload();
+    let payload = PollResultPayload {
+        review_requests: lists.review_requests,
+        in_flight: lists.in_flight,
+        standalone_runs: lists.standalone_runs,
+        recently_resolved: lists.recently_resolved,
+        rate_limit: lists.rate_limit,
+        polled_at: now_iso(),
+        auto_requeue_errors: Vec::new(),
+    };
+    let _ = app.emit(EVENT_POLL_RESULT, payload);
+    emit_status(app, "ok", None, false, None);
 }
 
 fn emit_status<R: Runtime>(

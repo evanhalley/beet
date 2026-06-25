@@ -201,6 +201,9 @@ pub async fn fetch_run_jobs_command(
     repo: String,
     run_id: i64,
 ) -> Result<Vec<WorkflowJobSummary>, String> {
+    if crate::mock::is_enabled() {
+        return Ok(crate::mock::mock_run_jobs());
+    }
     if !is_valid_path_segment(&owner) || !is_valid_path_segment(&repo) {
         return Err("invalid owner or repo".to_string());
     }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dayjs from "@/lib/dayjs";
 import { useAuth } from "@/hooks/useAuth";
+import { useMockMode } from "@/hooks/useMockMode";
 import { REQUIRED_SCOPES } from "@/lib/github/auth";
 import { useAppStore } from "@/lib/store";
 import { parseLineList, setTeams } from "@/lib/storage/settings";
@@ -22,6 +23,7 @@ const TOKEN_PLACEHOLDER = "ghp_••••••••••••••••�
 export function AccountTab() {
   const { auth, token, lastCheckedAt, validateAndSave, revalidate, isLoading, lastValidation } =
     useAuth();
+  const mockMode = useMockMode();
   const [draft, setDraft] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
@@ -59,6 +61,12 @@ export function AccountTab() {
   return (
     <Stack>
       <H>Account</H>
+
+      {mockMode && (
+        <Pill tone="warn" soft>
+          ● Mock mode active — showing The Cypher fixture data, no PAT needed
+        </Pill>
+      )}
 
       <Field
         label="GitHub username"
