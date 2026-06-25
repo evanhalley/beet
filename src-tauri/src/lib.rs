@@ -2,6 +2,7 @@ use tauri::Manager;
 
 mod error;
 mod github;
+mod mock;
 mod poller;
 mod scoring;
 mod secure_token;
@@ -62,6 +63,7 @@ pub fn run() {
             store::notifications::record_notification_link,
             store::notifications::get_notification_link,
             github::runs::fetch_run_jobs_command,
+            mock::is_mock_mode,
             tray::set_badge,
             tray::open_main_window,
         ])

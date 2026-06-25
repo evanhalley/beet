@@ -19,6 +19,7 @@
     "start": "next start",
     "lint": "eslint --max-warnings 0",
     "tauri": "tauri",
+    "tauri:mock": "BEET_MOCK=1 tauri dev",
     "test": "vitest run"
   },
   "dependencies": {

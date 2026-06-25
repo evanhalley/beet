@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { X } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { useAuth } from "@/hooks/useAuth";
+import { useMockMode } from "@/hooks/useMockMode";
 import { useNotifications } from "@/hooks/useNotifications";
 import { usePollEvents } from "@/hooks/usePollEvents";
 import { useTrayBadge } from "@/hooks/useTrayBadge";
@@ -19,6 +20,7 @@ const ERROR_BANNER_TIMEOUT_MS = 4000;
 export default function Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { token, auth, isLoading } = useAuth();
+  const mockMode = useMockMode();
   usePollEvents();
   useNotifications();
   useTrayBadge();
@@ -51,6 +53,9 @@ export default function Page() {
   }
 
   const bannerReason: MissingTokenReason | null = (() => {
+    // In mock mode the backend serves a fixture and needs no PAT, so never
+    // nag for a token — render the populated UI directly.
+    if (mockMode) return null;
     if (isLoading) return null;
     if (!token) return "no_token";
     if (auth?.error === "invalid") return "invalid";
