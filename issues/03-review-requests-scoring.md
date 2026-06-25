@@ -10,7 +10,7 @@ User opens the main window, sees the **Review Requests** section populated with 
 
 ## Acceptance criteria
 
-- [ ] **Scoring is a verbatim port.** [pr-prioritization.ts](file:///Users/evan/dev/prz/src/lib/pr-prioritization.ts) moves to `src/lib/scoring.ts` with no logic changes — same weights, same thresholds, same `score = 0` stale rule, same `-10` penalized-bot reset. The existing [pr-prioritization.test.ts](file:///Users/evan/dev/prz/src/lib/pr-prioritization.test.ts) ports alongside it and passes.
+- [ ] **Scoring is a verbatim port.** pr-prioritization.ts moves to `src/lib/scoring.ts` with no logic changes — same weights, same thresholds, same `score = 0` stale rule, same `-10` penalized-bot reset. The existing pr-prioritization.test.ts ports alongside it and passes.
 - [ ] **`fetchReviewRequests`** in `src/lib/github/prs.ts` does what PRZ's `fetchPrioritizedPRs` does, on top of #2's ETag wrapper:
   - Runs the search query through `beetGet` with `cacheKey: "search:review-requested:@me"`.
   - Resolves team membership via `octokit.teams.listMembersInOrg` for each `org/team` in settings (cached, one `cacheKey` per team).

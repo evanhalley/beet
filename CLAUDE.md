@@ -10,7 +10,7 @@ This repository is **pre-scaffold**. Today it contains only [README.md](README.m
 
 ## What Beet is
 
-Beet 🫜 is a personal, always-running developer dashboard for GitHub — a menu-bar Tauri app that surfaces PRs needing action, your authored PRs (with check status / merge-queue position), workflow runs you triggered, and @mentions/review-replies directed at you. It's the unified successor to two prior apps the same author built (see "Prior projects" below).
+Beet 🫜 is a personal, always-running developer dashboard for GitHub — a menu-bar Tauri app that surfaces PRs needing action, your authored PRs (with check status / merge-queue position), workflow runs you triggered, and @mentions/review-replies directed at you. It consolidates the functionality of two earlier PR-triage / workflow-run apps the author wrote into a single tool.
 
 Core design principle: **glanceable over comprehensive**, **tight notification budget**, **action-oriented**. The default view answers *what needs me right now?* — already-approved PRs, drafts, and stale items are demoted or hidden.
 
@@ -27,20 +27,14 @@ Core design principle: **glanceable over comprehensive**, **tight notification b
 
 V1 is **polling-only** with ETag conditional requests. No webhooks, no GitHub App, no OAuth. Auth is a Personal Access Token pasted into Settings.
 
-## Prior projects (carry-overs)
+## Heritage
 
-Two existing codebases the author wrote that Beet consolidates. The migration table in §14 of SPECS.md maps file-by-file what to lift; consult those files directly when implementing the corresponding Beet module.
+Beet consolidates two earlier apps the author wrote — a PR-triage app and a workflow-run tracker. The patterns those apps established now live in this repo:
 
-- **PRZ** at [/Users/evan/dev/prz](file:///Users/evan/dev/prz) — Tauri+Next.js PR triage app.
-  - [src/lib/github.ts](file:///Users/evan/dev/prz/src/lib/github.ts): `parseRepoAndOwnerFromURL`, `fetchPrioritizedPRs` (uses `search.issuesAndPullRequests` with `review-requested:${user}`, resolves team membership, extracts task URLs).
-  - [src/lib/pr-prioritization.ts](file:///Users/evan/dev/prz/src/lib/pr-prioritization.ts): the scoring algorithm Beet inherits verbatim (§6).
-- **Action Jackson** at [/Users/evan/Downloads/src](file:///Users/evan/Downloads/src) — Tauri+Next.js workflow-run tracker.
-  - `lib/github.ts`: `fetchUser`, `fetchRepos`, `fetchRunsForRepo` (with `actor` filter), `fetchAllRuns`.
-  - `lib/store.ts`: Zustand store pattern for filters/settings/data.
-  - `lib/tauri-bridge.ts`: PAT storage via `@tauri-apps/plugin-store` — copy this pattern.
-  - `hooks/useNotifications.ts`: Tauri notification permission + `sendNotification`. Beet extends this with the five triggers in §10.
-  - `hooks/useWorkflowRuns.ts`: TanStack Query → Zustand sync pattern that the Beet `useActionableItems` hook should follow.
-  - `components/{StatusBadge,RunCard,FilterBar,RunList}.tsx`: reusable UI primitives.
+- GitHub fetching (`parseRepoAndOwnerFromURL`, prioritized-PR search via `search.issuesAndPullRequests` with `review-requested:${user}`, team-membership resolution, task-URL extraction, workflow-run fetching with `actor` filter) → `src/lib/github/`.
+- The PR-prioritization scoring algorithm (§6) → `src/lib/`.
+- PAT storage via `@tauri-apps/plugin-store`, notification permission + `sendNotification`, and the TanStack Query → Zustand sync pattern → `src/lib/storage/`, `src/hooks/`.
+- Reusable UI primitives (status badges, run cards, filter bar, lists) → `src/components/`.
 
 ## Match the design mockups
 
@@ -86,7 +80,7 @@ The project is not yet scaffolded, so there are no `npm` scripts to document. On
 - `npx vitest path/to/file.test.ts` — single test file
 - `npx vitest -t "test name"` — single test by name
 
-When scaffolding, model the layout on PRZ's directory structure ([src/app](file:///Users/evan/dev/prz/src/app), [src/lib](file:///Users/evan/dev/prz/src/lib), [src-tauri](file:///Users/evan/dev/prz/src-tauri)) but plan for the additional directories implied by §14's migration table (`src/lib/github/`, `src/lib/storage/`, `src/hooks/`, `src/components/`, `src/test/`).
+Source is laid out as `src/app/`, `src/lib/` (with `src/lib/github/` and `src/lib/storage/`), `src/hooks/`, `src/components/`, `src/test/`, and the Tauri shell in `src-tauri/`.
 
 ## GitHub CLI
 

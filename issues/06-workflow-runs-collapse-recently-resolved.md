@@ -8,7 +8,7 @@ This unblocks #8 (mentions / Needs Action Now) and #9 (OS notifications), both o
 
 ### Data layer (Rust poller)
 
-- **NEW** `src-tauri/src/poller/runs.rs` — port `fetchRunsForRepo` / `fetchAllRuns` from [/Users/evan/Downloads/src/lib/github.ts](file:///Users/evan/Downloads/src/lib/github.ts). Use the existing octocrab client + ETag cache. Call `actions.listWorkflowRunsForRepo` with `actor={me}`, `per_page=30`, across the user's tracked repos (same repo list the PR poller builds).
+- **NEW** `src-tauri/src/poller/runs.rs` — port `fetchRunsForRepo` / `fetchAllRuns` from github.ts. Use the existing octocrab client + ETag cache. Call `actions.listWorkflowRunsForRepo` with `actor={me}`, `per_page=30`, across the user's tracked repos (same repo list the PR poller builds).
 - **Collapse logic** — for each run, inspect `pull_requests[]`. If any PR id matches an item currently in `reviewRequests` ∪ `inFlight`, attach an `AssociatedRun` (most recent per workflow name) to that PR's `associated_runs` and drop the run from the standalone list. Otherwise emit it as a standalone `ActionableItem { kind: Run, run: Some(...), pr: None }`. Push-event runs without a PR are surfaced — branch filtering is *not* used (per SPECS §7).
 - **Schema migration v5** — `src-tauri/src/store/db.rs`: add
   ```sql
@@ -53,8 +53,8 @@ Collected from two streams, sorted by resolution time desc, capped at ~50 items:
 
 ## Reuse
 
-- Lift `fetchRunsForRepo` / `fetchAllRuns` signatures verbatim from [/Users/evan/Downloads/src/lib/github.ts](file:///Users/evan/Downloads/src/lib/github.ts) (per SPECS §14).
-- `RunStatus` / `StatusBadge` from [/Users/evan/Downloads/src/components/](file:///Users/evan/Downloads/src/components/).
+- Lift `fetchRunsForRepo` / `fetchAllRuns` signatures verbatim from github.ts (per SPECS §14).
+- `RunStatus` / `StatusBadge` from components.
 - Existing ETag cache (`etag_cache` table) — no schema change needed for caching, only for completion history.
 - Existing `ActionableRow` already switches on `kind` and can render run rows.
 
