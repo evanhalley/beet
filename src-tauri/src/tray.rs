@@ -19,6 +19,9 @@ pub const POPOVER_HEIGHT: f64 = 480.0;
 /// interaction so the toggle can't fight itself.
 pub const BLUR_CLICK_GRACE_MS: u128 = 300;
 
+/// Single source of truth for the summon chord until a recorder UI exists.
+pub const TOGGLE_SHORTCUT: &str = "Alt+Shift+B";
+
 pub struct TrayState {
     pub pause_item: tauri::menu::MenuItem<tauri::Wry>,
 }
@@ -203,6 +206,58 @@ fn clamp_to_visible_area<R: Runtime>(
     }
 }
 
+/// Toggle the popover without a tray-icon rect (global shortcut). Position
+/// falls back to where the popover last opened, then to the top-center of the
+/// monitor under the cursor, then to the primary monitor.
+pub fn toggle_popover<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("tray") else {
+        return;
+    };
+    if window.is_visible().unwrap_or(false) {
+        let _ = window.hide();
+        return;
+    }
+    let state = app.state::<TrayInteraction>();
+    let (x, y) = match *state.last_popover_pos.lock().unwrap() {
+        Some(pos) => pos,
+        None => {
+            let monitor = app
+                .cursor_position()
+                .ok()
+                .and_then(|p| app.monitor_from_point(p.x, p.y).ok().flatten())
+                .or_else(|| app.primary_monitor().ok().flatten());
+            match monitor {
+                Some(m) => {
+                    let ms = m.scale_factor();
+                    let (x, y) = fallback_position(
+                        m.position().x as f64 / ms,
+                        m.position().y as f64 / ms,
+                        m.size().width as f64 / ms,
+                    );
+                    clamp_to_monitor(
+                        (x, y),
+                        (POPOVER_WIDTH, POPOVER_HEIGHT),
+                        (
+                            m.position().x as f64 / ms,
+                            m.position().y as f64 / ms,
+                            m.size().width as f64 / ms,
+                            m.size().height as f64 / ms,
+                        ),
+                    )
+                }
+                None => (0.0, 30.0),
+            }
+        }
+    };
+    show_popover_at(&window, x, y);
+    *state.last_popover_pos.lock().unwrap() = Some((x, y));
+}
+
+/// Top-center of a monitor (logical coords), just below the menu bar.
+pub fn fallback_position(mon_x: f64, mon_y: f64, mon_w: f64) -> (f64, f64) {
+    (mon_x + (mon_w - POPOVER_WIDTH) / 2.0, mon_y + 30.0)
+}
+
 fn show_popover_at<R: Runtime>(window: &tauri::WebviewWindow<R>, x: f64, y: f64) {
     // Force the configured size before showing — a stale window-state entry
     // (or any prior resize) must not be able to shrink the popover below its
@@ -229,6 +284,30 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 #[tauri::command]
 pub fn open_main_window(app: AppHandle) {
     show_main_window(&app);
+}
+
+/// Register or unregister the summon chord at runtime (Settings toggle).
+#[tauri::command]
+pub fn set_global_shortcut_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    set_shortcut_registered(&app, enabled)
+}
+
+pub fn set_shortcut_registered<R: Runtime>(
+    app: &AppHandle<R>,
+    enabled: bool,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let shortcuts = app.global_shortcut();
+    if enabled {
+        if !shortcuts.is_registered(TOGGLE_SHORTCUT) {
+            shortcuts
+                .register(TOGGLE_SHORTCUT)
+                .map_err(|e| format!("failed to register {TOGGLE_SHORTCUT}: {e}"))?;
+        }
+    } else {
+        let _ = shortcuts.unregister(TOGGLE_SHORTCUT);
+    }
+    Ok(())
 }
 
 fn toggle_pause<R: Runtime>(app: &AppHandle<R>) {
@@ -328,6 +407,18 @@ mod tests {
     fn clamp_pulls_right_edge_overflow_back_on_screen() {
         let (x, y) = clamp_to_monitor((1400.0, 30.0), POPOVER, (0.0, 0.0, 1512.0, 982.0));
         assert_eq!((x, y), (1512.0 - 440.0 - 8.0, 30.0));
+    }
+
+    #[test]
+    fn fallback_position_centers_on_primary_monitor() {
+        let (x, y) = fallback_position(0.0, 0.0, 1512.0);
+        assert_eq!((x, y), ((1512.0 - POPOVER_WIDTH) / 2.0, 30.0));
+    }
+
+    #[test]
+    fn fallback_position_centers_on_monitor_left_of_primary() {
+        let (x, y) = fallback_position(-1920.0, 0.0, 1920.0);
+        assert_eq!((x, y), (-1920.0 + (1920.0 - POPOVER_WIDTH) / 2.0, 30.0));
     }
 
     #[test]

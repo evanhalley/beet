@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { GeneralTab } from "./GeneralTab";
+import { useAppStore } from "@/lib/store";
 
 vi.mock("@tauri-apps/plugin-autostart", () => ({
   isEnabled: vi.fn(async () => false),
@@ -16,6 +17,10 @@ async function autostartMod() {
     disable: ReturnType<typeof vi.fn>;
   };
 }
+
+beforeEach(() => {
+  useAppStore.getState().reset();
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -59,5 +64,27 @@ describe("GeneralTab launch at login", () => {
 
     expect(mod.disable).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(toggle).not.toBeChecked());
+  });
+});
+
+describe("GeneralTab global shortcut", () => {
+  test("renders checked by default and unchecks on toggle", async () => {
+    const user = userEvent.setup();
+    const { invoke } = (await import("@tauri-apps/api/core")) as unknown as {
+      invoke: ReturnType<typeof vi.fn>;
+    };
+    render(<GeneralTab />);
+
+    const toggle = screen.getByRole("checkbox", {
+      name: /toggle beet from anywhere/i,
+    });
+    expect(toggle).toBeChecked();
+
+    await user.click(toggle);
+
+    await waitFor(() => expect(toggle).not.toBeChecked());
+    expect(invoke).toHaveBeenCalledWith("set_global_shortcut_enabled", {
+      enabled: false,
+    });
   });
 });

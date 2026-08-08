@@ -14,6 +14,7 @@ import {
   setPollingIntervalSec,
   setShowAllApproved,
   setTaskRegex,
+  setGlobalShortcutEnabled,
   setTeams,
   setTheme,
   parseLineList,
@@ -30,6 +31,24 @@ describe("settings storage", () => {
   test("loadSettings returns defaults when nothing is persisted", async () => {
     const settings = await loadSettings();
     expect(settings).toEqual(SETTINGS_DEFAULTS);
+  });
+
+  test("global shortcut is enabled by default", () => {
+    expect(SETTINGS_DEFAULTS.globalShortcutEnabled).toBe(true);
+  });
+
+  test("setGlobalShortcutEnabled persists and notifies the Rust side", async () => {
+    const { invoke } = (await import("@tauri-apps/api/core")) as unknown as {
+      invoke: ReturnType<typeof import("vitest").vi.fn>;
+    };
+
+    await setGlobalShortcutEnabled(false);
+
+    const settings = await loadSettings();
+    expect(settings.globalShortcutEnabled).toBe(false);
+    expect(invoke).toHaveBeenCalledWith("set_global_shortcut_enabled", {
+      enabled: false,
+    });
   });
 
   test("round-trips each setting", async () => {

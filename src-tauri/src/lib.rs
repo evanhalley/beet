@@ -27,6 +27,17 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    // Only the summon chord is ever registered; ignore repeats
+                    // and the release half of the press.
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        tray::toggle_popover(app);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::default().build())
         // Exclude the tray popover: it's sized by tauri.conf.json and positioned
         // programmatically on each open. Letting window-state persist/restore it
@@ -70,6 +81,7 @@ pub fn run() {
             mock::is_mock_mode,
             tray::set_badge,
             tray::open_main_window,
+            tray::set_global_shortcut_enabled,
         ])
         .setup(|app| {
             // Open the SQLite DB and start the background poll loop before
@@ -87,6 +99,23 @@ pub fn run() {
             app.manage(handle);
 
             tray::setup(app)?;
+
+            // Register the global summon chord unless the user disabled it.
+            // Same config.json store the poller reads; missing key = enabled.
+            {
+                use tauri_plugin_store::StoreExt;
+                let enabled = app
+                    .store("config.json")
+                    .ok()
+                    .and_then(|s| s.get("globalShortcutEnabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                if enabled {
+                    if let Err(e) = tray::set_shortcut_registered(app.handle(), true) {
+                        eprintln!("beet: {e}");
+                    }
+                }
+            }
 
             Ok(())
         })

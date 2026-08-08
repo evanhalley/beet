@@ -23,6 +23,7 @@ export const SETTINGS_KEYS = {
   notifyOnReviewRequest: "notifyOnReviewRequest",
   notifyOnMention: "notifyOnMention",
   notifyOnRunFinished: "notifyOnRunFinished",
+  globalShortcutEnabled: "globalShortcutEnabled",
 } as const;
 
 export const AUTO_REQUEUE_MAX_ATTEMPTS_MIN = 1;
@@ -89,6 +90,8 @@ export interface BeetSettings {
   notifyOnReviewRequest: boolean;
   notifyOnMention: boolean;
   notifyOnRunFinished: boolean;
+  // OS-level ⌥⇧B chord that toggles the tray popover from anywhere.
+  globalShortcutEnabled: boolean;
 }
 
 export const SETTINGS_DEFAULTS: BeetSettings = {
@@ -110,6 +113,7 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   notifyOnReviewRequest: true,
   notifyOnMention: true,
   notifyOnRunFinished: true,
+  globalShortcutEnabled: true,
 };
 
 function clampMaxAttempts(n: number): number {
@@ -171,6 +175,7 @@ export async function loadSettings(): Promise<BeetSettings> {
     notifyOnReviewRequest,
     notifyOnMention,
     notifyOnRunFinished,
+    globalShortcutEnabled,
   ] = await Promise.all([
     getValue<string[]>(SETTINGS_KEYS.teams, SETTINGS_DEFAULTS.teams),
     getValue<string[]>(
@@ -226,6 +231,10 @@ export async function loadSettings(): Promise<BeetSettings> {
       SETTINGS_KEYS.notifyOnRunFinished,
       SETTINGS_DEFAULTS.notifyOnRunFinished,
     ),
+    getValue<boolean>(
+      SETTINGS_KEYS.globalShortcutEnabled,
+      SETTINGS_DEFAULTS.globalShortcutEnabled,
+    ),
   ]);
   const theme = isThemeMode(themeRaw) ? themeRaw : SETTINGS_DEFAULTS.theme;
   const fontScale = isFontScale(fontScaleRaw)
@@ -254,6 +263,7 @@ export async function loadSettings(): Promise<BeetSettings> {
     notifyOnReviewRequest,
     notifyOnMention,
     notifyOnRunFinished,
+    globalShortcutEnabled,
   };
 }
 
@@ -358,6 +368,17 @@ export async function setNotifyOnMention(value: boolean): Promise<void> {
 
 export async function setNotifyOnRunFinished(value: boolean): Promise<void> {
   await setValue(SETTINGS_KEYS.notifyOnRunFinished, value);
+}
+
+// The chord is registered Rust-side, so flipping it pokes the backend to
+// (un)register immediately — no restart needed. Best-effort outside Tauri.
+export async function setGlobalShortcutEnabled(value: boolean): Promise<void> {
+  await setValue(SETTINGS_KEYS.globalShortcutEnabled, value);
+  try {
+    await invoke("set_global_shortcut_enabled", { enabled: value });
+  } catch {
+    // No Tauri host — ignore.
+  }
 }
 
 export function parseLineList(text: string): string[] {
