@@ -13,8 +13,13 @@ npm run build              # Next.js static export → out/
 npm run lint               # ESLint
 npm test                   # Vitest (run once)
 npm run tauri dev          # boot Next.js + Tauri shell in dev mode
+npm run tauri:mock         # same, in demo mode (fixture data, no PAT/network)
 npm run tauri build        # release build → src-tauri/target/release/bundle/macos/Beet.app + .dmg
 ```
+
+### Demo mode
+
+`npm run tauri:mock` boots the full app with `BEET_MOCK=1`: the Rust poller serves bundled fixture data instead of calling GitHub, so no personal access token and no network are needed. Useful for trying out or demoing the UI. Quit any running Beet first — the single-instance guard will otherwise just focus the existing app.
 
 ### cargo (Rust side, run from repo root)
 
