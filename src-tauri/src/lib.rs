@@ -42,10 +42,15 @@ pub fn run() {
         // Exclude the tray popover: it's sized by tauri.conf.json and positioned
         // programmatically on each open. Letting window-state persist/restore it
         // lets a stale per-machine entry shrink the popover (the `main` window
-        // still benefits from remembered size/position).
+        // still benefits from remembered size/position). VISIBLE is excluded so
+        // a restored session can't override the hidden-at-launch default (§12).
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_denylist(&["tray"])
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        & !tauri_plugin_window_state::StateFlags::VISIBLE,
+                )
                 .build(),
         );
 
@@ -87,6 +92,14 @@ pub fn run() {
             tray::set_global_shortcut_enabled,
         ])
         .setup(|app| {
+            // Beet launches into the menu bar (§12): the main window starts
+            // hidden, so keep the process out of the Dock from the first frame
+            // instead of only after the window is closed.
+            #[cfg(target_os = "macos")]
+            let _ = app
+                .handle()
+                .set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // Open the SQLite DB and start the background poll loop before
             // setting up the tray — the tray menu handler needs PollHandle.
             let db_path = app.path().app_data_dir()?.join("beet.db");
@@ -118,6 +131,14 @@ pub fn run() {
                         eprintln!("beet: {e}");
                     }
                 }
+            }
+
+            // First-run escape hatch: with no PAT in the keychain there's
+            // nothing to poll and nothing in the tray — launching to an
+            // invisible app would look broken. Show the main window (which
+            // hosts onboarding/Settings) until a token exists.
+            if matches!(secure_token::read_token(), Ok(None)) {
+                tray::open_main_window(app.handle().clone());
             }
 
             Ok(())

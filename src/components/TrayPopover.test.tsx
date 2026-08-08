@@ -119,6 +119,7 @@ function runItem(id: number): ActionableItem {
 
 beforeEach(() => {
   useAppStore.getState().reset();
+  window.localStorage.removeItem("beet:tray-collapsed");
 });
 
 describe("TrayPopover", () => {
@@ -199,6 +200,40 @@ describe("TrayPopover", () => {
 
     // Expand again
     await userEvent.click(header);
+    expect(screen.getByText("PR title 1")).toBeInTheDocument();
+  });
+
+  test("section collapse state survives a remount (SPECS §11)", async () => {
+    useAppStore.getState().setPollResult({
+      reviewRequests: [reviewItem(1)],
+      inFlight: [],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    const first = render(<TrayPopover />);
+    await userEvent.click(screen.getByText("Review Requests"));
+    expect(screen.queryByText("PR title 1")).toBeNull();
+    first.unmount();
+
+    render(<TrayPopover />);
+    // Still collapsed after the popover window is recreated.
+    expect(screen.queryByText("PR title 1")).toBeNull();
+  });
+
+  test("corrupt persisted collapse state falls back to defaults", () => {
+    window.localStorage.setItem("beet:tray-collapsed", "{not json");
+    useAppStore.getState().setPollResult({
+      reviewRequests: [reviewItem(1)],
+      inFlight: [],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    render(<TrayPopover />);
+    // Defaults: reviews expanded, recent collapsed.
     expect(screen.getByText("PR title 1")).toBeInTheDocument();
   });
 

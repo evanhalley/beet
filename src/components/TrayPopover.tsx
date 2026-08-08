@@ -37,6 +37,43 @@ interface SectionCollapse {
   recent: boolean;
 }
 
+// Collapse state persists across popover recreations (SPECS §11). It's
+// per-window UI state, not a setting, so localStorage — not config.json.
+const COLLAPSE_LS_KEY = "beet:tray-collapsed";
+
+const COLLAPSE_DEFAULTS: SectionCollapse = {
+  needs: false,
+  reviews: false,
+  inflight: false,
+  runs: false,
+  recent: true,
+};
+
+export function loadCollapse(): SectionCollapse {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_LS_KEY);
+    if (!raw) return COLLAPSE_DEFAULTS;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return COLLAPSE_DEFAULTS;
+    const out = { ...COLLAPSE_DEFAULTS };
+    for (const key of Object.keys(out) as (keyof SectionCollapse)[]) {
+      const value = (parsed as Record<string, unknown>)[key];
+      if (typeof value === "boolean") out[key] = value;
+    }
+    return out;
+  } catch {
+    return COLLAPSE_DEFAULTS;
+  }
+}
+
+function saveCollapse(collapse: SectionCollapse): void {
+  try {
+    window.localStorage.setItem(COLLAPSE_LS_KEY, JSON.stringify(collapse));
+  } catch {
+    // Storage unavailable — collapse state is a nicety, not critical.
+  }
+}
+
 const iconBtn: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
@@ -75,16 +112,14 @@ export function TrayPopover() {
   const inFlight = applySnoozes(rawInFlight, snoozes);
   const standaloneRuns = applySnoozes(rawStandaloneRuns, snoozes);
 
-  const [collapsed, setCollapsed] = useState<SectionCollapse>({
-    needs: false,
-    reviews: false,
-    inflight: false,
-    runs: false,
-    recent: true,
-  });
+  const [collapsed, setCollapsed] = useState<SectionCollapse>(loadCollapse);
 
   const toggle = (key: keyof SectionCollapse) =>
-    setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+    setCollapsed((c) => {
+      const next = { ...c, [key]: !c[key] };
+      saveCollapse(next);
+      return next;
+    });
 
   const visibleReviews = [...reviewRequests]
     .sort((a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0))
