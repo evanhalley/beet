@@ -98,6 +98,12 @@ export interface AppStore {
   // poll cache stays intact and un-suppressing never refetches.
   suppressedIds: string[];
 
+  // Per-item snoozes: ActionableItem id → ISO-8601 `snoozed_until`. A snoozed
+  // item is hidden from the live sections until the timestamp passes. Same
+  // visibility-layer filtering as suppressions; time-based only (fingerprint
+  // dismissal is issue #25).
+  snoozes: Record<string, string>;
+
   setPollResult: (payload: PollResultPayload) => void;
   setPollStatus: (payload: PollStatusPayload) => void;
   setPaused: (paused: boolean) => void;
@@ -113,6 +119,7 @@ export interface AppStore {
   setMutes: (mutes: MuteRule[]) => void;
   setPins: (pins: string[]) => void;
   setSuppressedIds: (ids: string[]) => void;
+  setSnoozes: (snoozes: Record<string, string>) => void;
 
   reset: () => void;
 }
@@ -141,6 +148,7 @@ const initialState = {
   mutes: [] as MuteRule[],
   pins: [] as string[],
   suppressedIds: [] as string[],
+  snoozes: {} as Record<string, string>,
 };
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -212,6 +220,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   setMutes: (mutes) => set({ mutes }),
   setPins: (pins) => set({ pins }),
   setSuppressedIds: (suppressedIds) => set({ suppressedIds }),
+  setSnoozes: (snoozes) => set({ snoozes }),
   reset: () =>
     set({
       ...initialState,
@@ -237,9 +246,38 @@ export function isReviewRequestVisible(
   item: ActionableItem,
   showAll: boolean,
   suppressedIds: string[] = [],
+  snoozes: Record<string, string> = {},
+  now: number = Date.now(),
 ): boolean {
+  if (isSnoozed(item.id, snoozes, now)) return showAll;
   if (suppressedIds.includes(item.id)) return showAll;
   return showAll || (item.pr?.score ?? 0) > 0;
+}
+
+// True while `id` has a snooze whose until-timestamp is still in the future.
+// An unparseable timestamp counts as not snoozed — a corrupt row must never
+// hide an item forever.
+export function isSnoozed(
+  id: string,
+  snoozes: Record<string, string>,
+  now: number = Date.now(),
+): boolean {
+  const until = snoozes[id];
+  if (until === undefined) return false;
+  const ts = Date.parse(until);
+  return Number.isFinite(ts) && ts > now;
+}
+
+// Filter out actively snoozed items. Applied at the selector layer (In Flight,
+// Standalone Runs) like applyMutes, so the raw poll cache stays intact and an
+// expiring snooze restores the item without a refetch.
+export function applySnoozes(
+  items: ActionableItem[],
+  snoozes: Record<string, string>,
+  now: number = Date.now(),
+): ActionableItem[] {
+  if (Object.keys(snoozes).length === 0) return items;
+  return items.filter((item) => !isSnoozed(item.id, snoozes, now));
 }
 
 // Filter `items` by the active mute rules (§8). Called at the Zustand selector

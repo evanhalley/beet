@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { CSSProperties, MouseEvent } from "react";
-import { Eye, EyeOff, Pin, PinOff, VolumeX } from "lucide-react";
+import { Clock, Eye, EyeOff, Pin, PinOff, VolumeX } from "lucide-react";
 
 export interface RowContextMenuProps {
   x: number;
@@ -13,12 +13,23 @@ export interface RowContextMenuProps {
   // on); the action becomes "Unsuppress". Omitted for rows that can't be
   // suppressed (e.g. standalone runs).
   isSuppressed?: boolean;
+  // When true the row is actively snoozed; the three durations collapse into a
+  // single "Unsnooze" item. Omit onSnooze for rows that can't be snoozed.
+  isSnoozed?: boolean;
   onClose: () => void;
   onMuteRepo: () => void;
   onMuteOrg: () => void;
   onTogglePin: () => void;
   onToggleSuppress?: () => void;
+  onSnooze?: (hours: number) => void;
+  onUnsnooze?: () => void;
 }
+
+const SNOOZE_OPTIONS: readonly { label: string; hours: number }[] = [
+  { label: "Snooze 1 hour", hours: 1 },
+  { label: "Snooze 4 hours", hours: 4 },
+  { label: "Snooze 1 day", hours: 24 },
+];
 
 const menuItemStyle: CSSProperties = {
   display: "flex",
@@ -42,11 +53,14 @@ export function RowContextMenu({
   repoFullName,
   isPinned,
   isSuppressed = false,
+  isSnoozed = false,
   onClose,
   onMuteRepo,
   onMuteOrg,
   onTogglePin,
   onToggleSuppress,
+  onSnooze,
+  onUnsnooze,
 }: RowContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const owner = repoFullName.split("/")[0] ?? repoFullName;
@@ -173,6 +187,52 @@ export function RowContextMenu({
           )}
           {isSuppressed ? "Unsuppress this PR" : "Suppress this PR"}
         </button>
+      )}
+
+      {onSnooze && (
+        <>
+          <div
+            style={{
+              height: 1,
+              background: "var(--color-border)",
+              margin: "4px 8px",
+            }}
+          />
+          {isSnoozed ? (
+            <button
+              type="button"
+              role="menuitem"
+              style={menuItemStyle}
+              onClick={() => {
+                onUnsnooze?.();
+                onClose();
+              }}
+              onMouseEnter={onItemEnter}
+              onMouseLeave={onItemLeave}
+            >
+              <Clock size={13} style={{ color: "var(--color-accent)" }} />
+              Unsnooze
+            </button>
+          ) : (
+            SNOOZE_OPTIONS.map(({ label, hours }) => (
+              <button
+                key={hours}
+                type="button"
+                role="menuitem"
+                style={menuItemStyle}
+                onClick={() => {
+                  onSnooze(hours);
+                  onClose();
+                }}
+                onMouseEnter={onItemEnter}
+                onMouseLeave={onItemLeave}
+              >
+                <Clock size={13} style={{ color: "var(--color-text-faint)" }} />
+                {label}
+              </button>
+            ))
+          )}
+        </>
       )}
     </div>
   );

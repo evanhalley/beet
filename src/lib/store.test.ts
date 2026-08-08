@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import {
+  applySnoozes,
   isReviewRequestVisible,
+  isSnoozed,
   selectShowAllReviews,
   useAppStore,
 } from "./store";
@@ -168,5 +170,51 @@ describe("isReviewRequestVisible", () => {
     expect(isReviewRequestVisible(item, true, suppressed)).toBe(true);
     // Not in the suppressed set → unaffected.
     expect(isReviewRequestVisible(item, false, [])).toBe(true);
+  });
+
+  test("an actively snoozed item is hidden even with a positive score, and revealed only by Show-All", () => {
+    const item = prItem("pr:acme/repo#4", "hot", "rina");
+    item.pr!.score = 8;
+    const now = Date.parse("2026-08-08T12:00:00.000Z");
+    const snoozes = { [item.id]: "2026-08-08T13:00:00.000Z" };
+
+    expect(isReviewRequestVisible(item, false, [], snoozes, now)).toBe(false);
+    expect(isReviewRequestVisible(item, true, [], snoozes, now)).toBe(true);
+    // Expired snooze → unaffected.
+    const expired = { [item.id]: "2026-08-08T11:00:00.000Z" };
+    expect(isReviewRequestVisible(item, false, [], expired, now)).toBe(true);
+  });
+});
+
+describe("isSnoozed / applySnoozes", () => {
+  const now = Date.parse("2026-08-08T12:00:00.000Z");
+
+  test("isSnoozed is true only while the until timestamp is in the future", () => {
+    expect(isSnoozed("a", { a: "2026-08-08T13:00:00.000Z" }, now)).toBe(true);
+    expect(isSnoozed("a", { a: "2026-08-08T11:00:00.000Z" }, now)).toBe(false);
+    expect(isSnoozed("a", {}, now)).toBe(false);
+    expect(isSnoozed("a", { a: "not-a-date" }, now)).toBe(false);
+  });
+
+  test("applySnoozes filters actively snoozed items and keeps the rest", () => {
+    const active = prItem("pr:acme/repo#1", "snoozed", "rina");
+    const expired = prItem("pr:acme/repo#2", "expired", "rina");
+    const untouched = prItem("pr:acme/repo#3", "normal", "rina");
+    const snoozes = {
+      [active.id]: "2026-08-08T13:00:00.000Z",
+      [expired.id]: "2026-08-08T11:00:00.000Z",
+    };
+
+    const out = applySnoozes([active, expired, untouched], snoozes, now);
+    expect(out.map((i) => i.id)).toEqual([expired.id, untouched.id]);
+  });
+
+  test("setSnoozes stores the map and reset() clears it", () => {
+    useAppStore.getState().setSnoozes({ "pr:acme/repo#1": "2099-01-01T00:00:00.000Z" });
+    expect(useAppStore.getState().snoozes).toEqual({
+      "pr:acme/repo#1": "2099-01-01T00:00:00.000Z",
+    });
+    useAppStore.getState().reset();
+    expect(useAppStore.getState().snoozes).toEqual({});
   });
 });

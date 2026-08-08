@@ -11,7 +11,12 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, isReviewRequestVisible, selectShowAllReviews } from "@/lib/store";
+import {
+  applySnoozes,
+  useAppStore,
+  isReviewRequestVisible,
+  selectShowAllReviews,
+} from "@/lib/store";
 import { openInBrowser } from "@/lib/openInBrowser";
 import type { ActionableItem } from "@/lib/types";
 import { BeetMark } from "./BeetMark";
@@ -59,12 +64,16 @@ const footBtn: React.CSSProperties = {
 
 export function TrayPopover() {
   const reviewRequests = useAppStore((s) => s.reviewRequests);
-  const inFlight = useAppStore((s) => s.inFlight);
-  const standaloneRuns = useAppStore((s) => s.standaloneRuns);
+  const rawInFlight = useAppStore((s) => s.inFlight);
+  const rawStandaloneRuns = useAppStore((s) => s.standaloneRuns);
   const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
+  const snoozes = useAppStore((s) => s.snoozes);
+
+  const inFlight = applySnoozes(rawInFlight, snoozes);
+  const standaloneRuns = applySnoozes(rawStandaloneRuns, snoozes);
 
   const [collapsed, setCollapsed] = useState<SectionCollapse>({
     needs: false,
@@ -79,7 +88,7 @@ export function TrayPopover() {
 
   const visibleReviews = [...reviewRequests]
     .sort((a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0))
-    .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds));
+    .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds, snoozes));
 
   const totalUnread =
     visibleReviews.filter((r) => r.unread).length;

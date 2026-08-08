@@ -105,6 +105,16 @@ const MIGRATIONS: &[&str] = &[
         item_id    TEXT PRIMARY KEY,
         created_at TEXT NOT NULL
     );",
+    // v11: per-item snooze. A snoozed item (keyed by its stable ActionableItem
+    // id) is hidden from the live sections until `snoozed_until` passes.
+    // ISO-8601 UTC strings (now_iso format) compare lexically, so expiry is a
+    // plain string comparison. Time-based only — fingerprint-based dismissal
+    // (SPECS §9) is tracked separately in issue #25.
+    "CREATE TABLE IF NOT EXISTS snooze_rules (
+        item_id       TEXT PRIMARY KEY,
+        snoozed_until TEXT NOT NULL,
+        created_at    TEXT NOT NULL
+    );",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.
@@ -158,7 +168,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         for table in [
             "etag_cache",
             "pr_lifecycle_history",
@@ -170,6 +180,7 @@ mod tests {
             "pin_rules",
             "notification_links",
             "suppress_rules",
+            "snooze_rules",
         ] {
             let count: i64 = conn
                 .query_row(
@@ -192,7 +203,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
     }
 
     #[test]
@@ -215,7 +226,7 @@ mod tests {
                 r.get(0)
             })
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         // Pre-existing row survives.
         let rows: i64 = conn
             .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

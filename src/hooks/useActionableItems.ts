@@ -1,6 +1,6 @@
 "use client";
 
-import { applyMutes, useAppStore } from "@/lib/store";
+import { applyMutes, applySnoozes, useAppStore } from "@/lib/store";
 import { applyListFilters } from "@/lib/filters";
 import type { ActionableItem } from "@/lib/types";
 
@@ -27,6 +27,7 @@ export function useActionableItems(): UseActionableItemsResult {
   const byId = useAppStore((s) => s.byId);
   const pollState = useAppStore((s) => s.pollState);
   const mutes = useAppStore((s) => s.mutes);
+  const snoozes = useAppStore((s) => s.snoozes);
   const listFilters = useAppStore((s) => s.listFilters);
   const teamsConfigured = useAppStore((s) => s.settings.teams.length > 0);
 
@@ -37,9 +38,11 @@ export function useActionableItems(): UseActionableItemsResult {
     applyListFilters(applyMutes(items, mutes), listFilters, teamsConfigured);
 
   return {
+    // Review requests keep snoozed items here — isReviewRequestVisible hides
+    // them downstream, and Show-All must still be able to reveal them.
     reviewRequests: filter(reviewRequests),
-    inFlight: filter(inFlight),
-    standaloneRuns: filter(standaloneRuns),
+    inFlight: applySnoozes(filter(inFlight), snoozes),
+    standaloneRuns: applySnoozes(filter(standaloneRuns), snoozes),
     recentlyResolved: applyMutes(recentlyResolved, mutes),
     byId,
     // "idle" = no poll cycle has completed yet.
