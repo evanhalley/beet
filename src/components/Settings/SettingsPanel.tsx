@@ -45,7 +45,7 @@ const ITEMS: readonly NavItem[] = [
 ] as const;
 
 export function SettingsPanel({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<NavItem["id"]>("account");
+  const [tab, setTab] = useState<NavItem["id"]>("general");
   const appVersion = useAppVersion();
 
   return (
