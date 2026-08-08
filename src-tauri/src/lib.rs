@@ -97,7 +97,20 @@ pub fn run() {
                     .set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
             tauri::WindowEvent::Focused(false) if window.label() == "tray" => {
-                let _ = window.hide();
+                // Clicking the tray icon blurs the popover; that blur must not
+                // hide the window the click handler is about to show (and the
+                // click handler must know a blur already closed it). See
+                // tray::TrayInteraction.
+                let state = window.app_handle().state::<tray::TrayInteraction>();
+                let recently_clicked = state
+                    .last_click
+                    .lock()
+                    .unwrap()
+                    .is_some_and(|t| t.elapsed().as_millis() < tray::BLUR_CLICK_GRACE_MS);
+                if !recently_clicked && window.is_visible().unwrap_or(false) {
+                    let _ = window.hide();
+                    *state.hidden_by_blur.lock().unwrap() = Some(std::time::Instant::now());
+                }
             }
             _ => {}
         })

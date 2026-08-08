@@ -33,7 +33,9 @@
         "transparent": false,
         "resizable": false,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true
       }
     ],
     "security": {
