@@ -1,4 +1,5 @@
 export type NavIconName =
+  | "sliders"
   | "user"
   | "bell"
   | "refresh"
@@ -22,6 +23,15 @@ const COMMON = {
 
 export function NavIcon({ name }: { name: NavIconName }) {
   switch (name) {
+    case "sliders":
+      // Horizontal sliders motif — general preferences.
+      return (
+        <svg {...COMMON}>
+          <path d="M2.5 5h11M2.5 11h11" />
+          <circle cx="6" cy="5" r="1.5" fill="var(--color-panel)" />
+          <circle cx="10" cy="11" r="1.5" fill="var(--color-panel)" />
+        </svg>
+      );
     case "user":
       return (
         <svg {...COMMON}>

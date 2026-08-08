@@ -23,6 +23,10 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .plugin(tauri_plugin_store::Builder::default().build())
         // Exclude the tray popover: it's sized by tauri.conf.json and positioned
         // programmatically on each open. Letting window-state persist/restore it

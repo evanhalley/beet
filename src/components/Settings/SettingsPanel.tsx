@@ -6,6 +6,7 @@ import { useAppVersion } from "@/hooks/useAppVersion";
 import { AboutTab } from "./AboutTab";
 import { AccountTab } from "./AccountTab";
 import { AppearanceTab } from "./AppearanceTab";
+import { GeneralTab } from "./GeneralTab";
 import { MergeQueueTab } from "./MergeQueueTab";
 import { MutePinTab } from "./MutePinTab";
 import { NotificationsTab } from "./NotificationsTab";
@@ -16,6 +17,7 @@ import { NavIcon, type NavIconName } from "./NavIcon";
 
 interface NavItem {
   id:
+    | "general"
     | "account"
     | "notifications"
     | "scoring"
@@ -30,6 +32,7 @@ interface NavItem {
 }
 
 const ITEMS: readonly NavItem[] = [
+  { id: "general", label: "General", icon: "sliders" },
   { id: "account", label: "Account", icon: "user" },
   { id: "notifications", label: "Notifications", icon: "bell" },
   { id: "appearance", label: "Appearance", icon: "theme" },
@@ -132,6 +135,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
         </nav>
 
         <div className="overflow-y-auto" style={{ padding: "20px 28px" }}>
+          {tab === "general" && <GeneralTab />}
           {tab === "account" && <AccountTab />}
           {tab === "notifications" && <NotificationsTab />}
           {tab === "scoring" && <ScoringTab />}
