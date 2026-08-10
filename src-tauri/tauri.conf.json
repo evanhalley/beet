@@ -21,7 +21,8 @@
         "resizable": true,
         "fullscreen": false,
         "titleBarStyle": "Overlay",
-        "hiddenTitle": true
+        "hiddenTitle": true,
+        "visible": false
       },
       {
         "label": "tray",
@@ -33,7 +34,9 @@
         "transparent": false,
         "resizable": false,
         "skipTaskbar": true,
-        "visible": false
+        "visible": false,
+        "alwaysOnTop": true,
+        "visibleOnAllWorkspaces": true
       }
     ],
     "security": {

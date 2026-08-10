@@ -11,7 +11,12 @@ import {
   Settings as SettingsIcon,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
-import { useAppStore, isReviewRequestVisible, selectShowAllReviews } from "@/lib/store";
+import {
+  applySnoozes,
+  useAppStore,
+  isReviewRequestVisible,
+  selectShowAllReviews,
+} from "@/lib/store";
 import { openInBrowser } from "@/lib/openInBrowser";
 import type { ActionableItem } from "@/lib/types";
 import { BeetMark } from "./BeetMark";
@@ -30,6 +35,43 @@ interface SectionCollapse {
   inflight: boolean;
   runs: boolean;
   recent: boolean;
+}
+
+// Collapse state persists across popover recreations (SPECS §11). It's
+// per-window UI state, not a setting, so localStorage — not config.json.
+const COLLAPSE_LS_KEY = "beet:tray-collapsed";
+
+const COLLAPSE_DEFAULTS: SectionCollapse = {
+  needs: false,
+  reviews: false,
+  inflight: false,
+  runs: false,
+  recent: true,
+};
+
+export function loadCollapse(): SectionCollapse {
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_LS_KEY);
+    if (!raw) return COLLAPSE_DEFAULTS;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return COLLAPSE_DEFAULTS;
+    const out = { ...COLLAPSE_DEFAULTS };
+    for (const key of Object.keys(out) as (keyof SectionCollapse)[]) {
+      const value = (parsed as Record<string, unknown>)[key];
+      if (typeof value === "boolean") out[key] = value;
+    }
+    return out;
+  } catch {
+    return COLLAPSE_DEFAULTS;
+  }
+}
+
+function saveCollapse(collapse: SectionCollapse): void {
+  try {
+    window.localStorage.setItem(COLLAPSE_LS_KEY, JSON.stringify(collapse));
+  } catch {
+    // Storage unavailable — collapse state is a nicety, not critical.
+  }
 }
 
 const iconBtn: React.CSSProperties = {
@@ -59,27 +101,29 @@ const footBtn: React.CSSProperties = {
 
 export function TrayPopover() {
   const reviewRequests = useAppStore((s) => s.reviewRequests);
-  const inFlight = useAppStore((s) => s.inFlight);
-  const standaloneRuns = useAppStore((s) => s.standaloneRuns);
+  const rawInFlight = useAppStore((s) => s.inFlight);
+  const rawStandaloneRuns = useAppStore((s) => s.standaloneRuns);
   const recentlyResolved = useAppStore((s) => s.recentlyResolved);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
+  const snoozes = useAppStore((s) => s.snoozes);
 
-  const [collapsed, setCollapsed] = useState<SectionCollapse>({
-    needs: false,
-    reviews: false,
-    inflight: false,
-    runs: false,
-    recent: true,
-  });
+  const inFlight = applySnoozes(rawInFlight, snoozes);
+  const standaloneRuns = applySnoozes(rawStandaloneRuns, snoozes);
+
+  const [collapsed, setCollapsed] = useState<SectionCollapse>(loadCollapse);
 
   const toggle = (key: keyof SectionCollapse) =>
-    setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+    setCollapsed((c) => {
+      const next = { ...c, [key]: !c[key] };
+      saveCollapse(next);
+      return next;
+    });
 
   const visibleReviews = [...reviewRequests]
     .sort((a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0))
-    .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds));
+    .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds, snoozes));
 
   const totalUnread =
     visibleReviews.filter((r) => r.unread).length;

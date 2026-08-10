@@ -5,6 +5,8 @@ import { AlertTriangle, Check, Link2 } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { addMute, addPin, removePin } from "@/lib/storage/mutePin";
 import { addSuppression, removeSuppression } from "@/lib/storage/suppress";
+import { addSnooze, removeSnooze, snoozeUntil } from "@/lib/storage/snooze";
+import { isSnoozed as isItemSnoozed } from "@/lib/store";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
@@ -34,6 +36,8 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
   const mutes = useAppStore((s) => s.mutes);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
   const setSuppressedIds = useAppStore((s) => s.setSuppressedIds);
+  const snoozes = useAppStore((s) => s.snoozes);
+  const setSnoozes = useAppStore((s) => s.setSnoozes);
   const [copied, setCopied] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   if (!pr) return null;
@@ -43,6 +47,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
   // rows are your own PRs and aren't part of the "needs my review" list.
   const canSuppress = variant === "review";
   const isSuppressed = suppressedIds.includes(item.id);
+  const isSnoozed = isItemSnoozed(item.id, snoozes);
   const wasEjected = (pr.mergeQueue?.ejectedChecks?.length ?? 0) > 0;
 
   const aside =
@@ -108,6 +113,25 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
     } catch { /* storage error — leave state unchanged */ }
   };
 
+  const handleSnooze = async (hours: number) => {
+    const until = snoozeUntil(hours);
+    try {
+      await addSnooze(item.id, until);
+      // Read fresh state after the await — same staleness rule as mutes above.
+      const latest = useAppStore.getState().snoozes;
+      setSnoozes({ ...latest, [item.id]: until });
+    } catch { /* storage error — leave state unchanged */ }
+  };
+
+  const handleUnsnooze = async () => {
+    try {
+      await removeSnooze(item.id);
+      const latest = { ...useAppStore.getState().snoozes };
+      delete latest[item.id];
+      setSnoozes(latest);
+    } catch { /* storage error — leave state unchanged */ }
+  };
+
   const handleTogglePin = async () => {
     try {
       if (isPinned) {
@@ -156,7 +180,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
         aside={aside}
         actions={copyButton}
         onContextMenu={onContextMenu}
-        dimmed={canSuppress && isSuppressed}
+        dimmed={(canSuppress && isSuppressed) || isSnoozed}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
           <span
@@ -172,6 +196,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
           >
             #{pr.number}
           </span>
+          {isSnoozed && <Pill tone="neutral">snoozed</Pill>}
           {variant === "review" ? (
             <>
               {isSuppressed && <Pill tone="neutral">suppressed</Pill>}
@@ -251,11 +276,14 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
           repoFullName={item.repoFullName}
           isPinned={isPinned}
           isSuppressed={isSuppressed}
+          isSnoozed={isSnoozed}
           onClose={() => setCtxMenu(null)}
           onMuteRepo={handleMuteRepo}
           onMuteOrg={handleMuteOrg}
           onTogglePin={handleTogglePin}
           onToggleSuppress={canSuppress ? handleToggleSuppress : undefined}
+          onSnooze={handleSnooze}
+          onUnsnooze={handleUnsnooze}
         />
       )}
     </>

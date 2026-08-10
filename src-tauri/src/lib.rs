@@ -23,14 +23,34 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    // Only the summon chord is ever registered; ignore repeats
+                    // and the release half of the press.
+                    if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        tray::toggle_popover(app);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_store::Builder::default().build())
         // Exclude the tray popover: it's sized by tauri.conf.json and positioned
         // programmatically on each open. Letting window-state persist/restore it
         // lets a stale per-machine entry shrink the popover (the `main` window
-        // still benefits from remembered size/position).
+        // still benefits from remembered size/position). VISIBLE is excluded so
+        // a restored session can't override the hidden-at-launch default (§12).
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_denylist(&["tray"])
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::all()
+                        & !tauri_plugin_window_state::StateFlags::VISIBLE,
+                )
                 .build(),
         );
 
@@ -59,6 +79,9 @@ pub fn run() {
             store::suppress::list_suppressions,
             store::suppress::add_suppression,
             store::suppress::remove_suppression,
+            store::snooze::list_snoozes,
+            store::snooze::add_snooze,
+            store::snooze::remove_snooze,
             store::notifications::check_and_record_notification,
             store::notifications::record_notification_link,
             store::notifications::get_notification_link,
@@ -66,8 +89,17 @@ pub fn run() {
             mock::is_mock_mode,
             tray::set_badge,
             tray::open_main_window,
+            tray::set_global_shortcut_enabled,
         ])
         .setup(|app| {
+            // Beet launches into the menu bar (§12): the main window starts
+            // hidden, so keep the process out of the Dock from the first frame
+            // instead of only after the window is closed.
+            #[cfg(target_os = "macos")]
+            let _ = app
+                .handle()
+                .set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             // Open the SQLite DB and start the background poll loop before
             // setting up the tray — the tray menu handler needs PollHandle.
             let db_path = app.path().app_data_dir()?.join("beet.db");
@@ -84,6 +116,31 @@ pub fn run() {
 
             tray::setup(app)?;
 
+            // Register the global summon chord unless the user disabled it.
+            // Same config.json store the poller reads; missing key = enabled.
+            {
+                use tauri_plugin_store::StoreExt;
+                let enabled = app
+                    .store("config.json")
+                    .ok()
+                    .and_then(|s| s.get("globalShortcutEnabled"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(true);
+                if enabled {
+                    if let Err(e) = tray::set_shortcut_registered(app.handle(), true) {
+                        eprintln!("beet: {e}");
+                    }
+                }
+            }
+
+            // First-run escape hatch: with no PAT in the keychain there's
+            // nothing to poll and nothing in the tray — launching to an
+            // invisible app would look broken. Show the main window (which
+            // hosts onboarding/Settings) until a token exists.
+            if matches!(secure_token::read_token(), Ok(None)) {
+                tray::open_main_window(app.handle().clone());
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -97,7 +154,20 @@ pub fn run() {
                     .set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
             tauri::WindowEvent::Focused(false) if window.label() == "tray" => {
-                let _ = window.hide();
+                // Clicking the tray icon blurs the popover; that blur must not
+                // hide the window the click handler is about to show (and the
+                // click handler must know a blur already closed it). See
+                // tray::TrayInteraction.
+                let state = window.app_handle().state::<tray::TrayInteraction>();
+                let recently_clicked = state
+                    .last_click
+                    .lock()
+                    .unwrap()
+                    .is_some_and(|t| t.elapsed().as_millis() < tray::BLUR_CLICK_GRACE_MS);
+                if !recently_clicked && window.is_visible().unwrap_or(false) {
+                    let _ = window.hide();
+                    *state.hidden_by_blur.lock().unwrap() = Some(std::time::Instant::now());
+                }
             }
             _ => {}
         })

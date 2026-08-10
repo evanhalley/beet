@@ -6,6 +6,7 @@ import { useAppStore } from "@/lib/store";
 import { loadSettings } from "@/lib/storage/settings";
 import { listMutes, listPins } from "@/lib/storage/mutePin";
 import { listSuppressions } from "@/lib/storage/suppress";
+import { listSnoozes } from "@/lib/storage/snooze";
 import {
   applyAccent,
   applyDensity,
@@ -29,14 +30,21 @@ export function Providers({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([loadSettings(), listMutes(), listPins(), listSuppressions()])
-      .then(([settings, mutes, pins, suppressedIds]) => {
+    Promise.all([
+      loadSettings(),
+      listMutes(),
+      listPins(),
+      listSuppressions(),
+      listSnoozes(),
+    ])
+      .then(([settings, mutes, pins, suppressedIds, snoozes]) => {
         if (cancelled) return;
         const store = useAppStore.getState();
         store.hydrateSettings(settings);
         store.setMutes(mutes);
         store.setPins(pins);
         store.setSuppressedIds(suppressedIds);
+        store.setSnoozes(snoozes);
         applyTheme(settings.theme);
         applyFontScale(settings.fontScale);
         applyAccent(settings.accent);

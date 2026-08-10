@@ -16,6 +16,7 @@ export function ReviewRequestsSection() {
   const { reviewRequests: items, isLoading } = useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
+  const snoozes = useAppStore((s) => s.snoozes);
   const override = useAppStore((s) => s.showAllReviewsOverride);
   const setOverride = useAppStore((s) => s.setShowAllReviewsOverride);
   const filtersActive = useAppStore((s) => hasActiveListFilter(s.listFilters, s.settings.teams.length > 0));
@@ -28,7 +29,7 @@ export function ReviewRequestsSection() {
     (a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0),
   );
   const visible = sorted.filter((it) =>
-    isReviewRequestVisible(it, showAll, suppressedIds),
+    isReviewRequestVisible(it, showAll, suppressedIds, snoozes),
   );
 
   return (
