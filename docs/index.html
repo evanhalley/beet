@@ -32,9 +32,16 @@
   <h1 class="tagline">Review PRs<br>like Evan.</h1>
 
   <p class="sub">
-    A glanceable, always-running GitHub dashboard that lives in your macOS menu bar.
-    One glance answers the only question that matters: <em>what needs me right now?</em>
+    <b>Beet is a free, open-source GitHub dashboard that lives in your macOS menu bar.</b>
+    It watches the pull requests and CI runs you actually have a stake in, so one glance
+    answers the only question that matters: <em>what needs me right now?</em>
   </p>
+
+  <ul class="trust">
+    <li>Runs entirely on your Mac</li>
+    <li>No server, no account, no telemetry</li>
+    <li>MIT licensed</li>
+  </ul>
 
   <div class="cta">
     <a class="btn btn-primary" href="https://github.com/evanhalley/beet/releases/latest">
@@ -176,6 +183,38 @@
         </p>
       </article>
     </div>
+  </section>
+
+  <!-- ── Setup ──────────────────────────────────────────────────── -->
+  <section class="setup" aria-label="Getting started">
+    <h2 class="section-title">Running in three steps</h2>
+
+    <ol class="steps">
+      <li>
+        <h3>Install it</h3>
+        <p>
+          Download the <code>.dmg</code> and drag Beet to Applications. The build isn't
+          signed yet, so right-click the app and choose <b>Open</b> the first time.
+        </p>
+      </li>
+      <li>
+        <h3>Paste a token</h3>
+        <p>
+          Beet authenticates with a GitHub personal access token you paste into Settings —
+          <code>repo</code>, <code>read:org</code>, <code>read:user</code>, and
+          <code>notifications</code>. It's stored on your Mac and used to call
+          <code>api.github.com</code> directly. There is no Beet server for it to travel to.
+        </p>
+      </li>
+      <li>
+        <h3>Let it watch</h3>
+        <p>
+          Beet follows the repos you've pushed to in the last 30 days (7 or 90 if you
+          prefer) plus any you pin — not every repo you can see. Mute the ones you don't
+          care about and the list stays short.
+        </p>
+      </li>
+    </ol>
   </section>
 
   <section class="closer">

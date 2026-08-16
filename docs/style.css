@@ -223,6 +223,29 @@ a:hover { color: #7ff0ff; }
   box-shadow: inset 0 0 22px rgba(34,224,255,.16), 0 10px 30px -12px rgba(34,224,255,.7);
 }
 
+.sub b { color: var(--text); font-weight: 600; }
+
+/* Trust chips — the "can I run this safely" answer, above the fold. */
+.trust {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trust li {
+  padding: 5px 13px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  letter-spacing: .02em;
+  color: var(--text-dim);
+  border: 1px solid rgba(34,224,255,.32);
+  background: rgba(34,224,255,.06);
+}
+
 .fineprint {
   margin-top: 18px;
   font-size: 13px;
@@ -447,6 +470,82 @@ a:hover { color: #7ff0ff; }
 }
 .card p:last-child { margin-bottom: 0; }
 .card em { color: var(--text); font-style: italic; }
+
+/* ── Setup steps ──────────────────────────────────────────────── */
+
+.setup {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 0 24px 72px;
+}
+
+.steps {
+  counter-reset: step;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.steps li {
+  counter-increment: step;
+  position: relative;
+  padding: 0 0 26px 62px;
+}
+
+.steps li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: -2px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  border: 1px solid rgba(34,224,255,.5);
+  background: rgba(34,224,255,.08);
+  box-shadow: 0 0 18px -4px rgba(34,224,255,.6);
+}
+
+/* Connecting line between the step markers. */
+.steps li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 44px;
+  bottom: 8px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(34,224,255,.4), rgba(160,107,255,.05));
+}
+
+.steps h3 {
+  margin: 6px 0 8px;
+  font-size: 19px;
+  letter-spacing: -0.01em;
+}
+
+.steps p {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-dim);
+}
+
+code {
+  font-family: var(--mono);
+  font-size: .88em;
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: #ffb3d3;
+  background: rgba(255,61,139,.12);
+  border: 1px solid rgba(255,61,139,.28);
+  white-space: nowrap;
+}
+
+.steps b { color: var(--text); }
 
 /* ── Closer + footer ──────────────────────────────────────────── */
 
