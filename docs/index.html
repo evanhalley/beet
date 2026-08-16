@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Beet — Review PRs like Evan.</title>
-<meta name="description" content="Beet is a glanceable, always-running GitHub dashboard that lives in your macOS menu bar. It ranks your review queue, badges what needs you now, and updates in the background.">
+<meta name="description" content="A lightweight, menu bar dashboard that ranks your GitHub review queue, surfaces blocked PRs, and cuts through notification noise.">
 <meta name="color-scheme" content="dark">
 <meta property="og:title" content="Beet — Review PRs like Evan.">
-<meta property="og:description" content="A glanceable, always-running GitHub dashboard for your macOS menu bar.">
+<meta property="og:description" content="A lightweight, menu bar dashboard that ranks your GitHub review queue and surfaces blocked PRs.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://beet.sh/">
 <link rel="canonical" href="https://beet.sh/">
@@ -32,15 +32,14 @@
   <h1 class="tagline">Review PRs<br>like Evan.</h1>
 
   <p class="sub">
-    <b>Beet is a free, open-source GitHub dashboard that lives in your macOS menu bar.</b>
-    It watches the pull requests and CI runs you actually have a stake in, so one glance
-    answers the only question that matters: <em>what needs me right now?</em>
+    <b>A fast, open-source macOS menu bar dashboard for GitHub.</b>
+    Beet tracks the pull requests, mentions, and CI runs that actually need your attention—no browser tabs required.
   </p>
 
   <ul class="trust">
-    <li>Runs entirely on your Mac</li>
-    <li>No server, no account, no telemetry</li>
-    <li>MIT licensed</li>
+    <li>Runs locally on your Mac</li>
+    <li>No tracking, accounts, or middleman servers</li>
+    <li>Free &amp; MIT licensed</li>
   </ul>
 
   <div class="cta">
@@ -53,7 +52,7 @@
   </div>
 
   <p class="fineprint">
-    macOS, Apple&nbsp;Silicon &middot; unsigned build &mdash; right-click the app and choose <b>Open</b> the first time.
+    Apple Silicon &middot; unsigned build &mdash; right-click and choose <b>Open</b> on first run.
   </p>
 </header>
 
@@ -137,49 +136,35 @@
         </div>
       </div>
     </div>
-    <p class="caption">The tray popover. Sample data.</p>
+    <p class="caption">The tray popover in action.</p>
   </section>
 
   <!-- ── Features ───────────────────────────────────────────────── -->
   <section class="features" aria-label="Features">
-    <h2 class="section-title">Three things it does</h2>
+    <h2 class="section-title">Why use Beet?</h2>
 
     <div class="cards">
       <article class="card">
         <div class="card-num">01</div>
-        <h3>A queue that ranks itself</h3>
+        <h3>Smart PR Prioritization</h3>
         <p>
-          Every review request gets scored. PRs from people on your team and requests
-          aimed straight at you rise to the top; drafts, stale PRs, and anything you
-          already approved sink or drop off entirely.
+          Beet automatically scores incoming review requests. Teammate PRs and direct review requests float to the top; drafts, stale branches, and already-approved PRs stay out of your way.
         </p>
-        <p>The top of the list <em>is</em> your answer. No triage tax.</p>
       </article>
 
       <article class="card">
         <div class="card-num">02</div>
-        <h3>Lives in the menu bar</h3>
+        <h3>Always at hand in your menu bar</h3>
         <p>
-          A beet in your menu bar with a badge count of unread items that actually need
-          you. Click for the popover, open the full window when you're ready to triage.
-        </p>
-        <p>
-          Closing the window doesn't quit it — the tray keeps watching until you say
-          otherwise.
+          Check unread counts at a glance from your menu bar. Pop it open to triage quickly, or expand the main view when you're ready for focused reviews.
         </p>
       </article>
 
       <article class="card">
         <div class="card-num">03</div>
-        <h3>Updates in the background</h3>
+        <h3>Quiet, battery-aware polling</h3>
         <p>
-          Polling adapts on its own: in-flight work refreshes fast, everything else slow,
-          and intervals back off when the window is hidden, you're on battery, or the rate
-          limit gets tight.
-        </p>
-        <p>
-          Notifications stay on a tight budget — merge-queue ejections, failing checks,
-          and @mentions. Everything else updates silently.
+          Polling intervals adapt automatically—speeding up for active PRs and slowing down when you're on battery or hitting rate limits. Alerts are reserved for what matters: broken builds, dropped queues, and direct mentions.
         </p>
       </article>
     </div>
@@ -187,44 +172,35 @@
 
   <!-- ── Setup ──────────────────────────────────────────────────── -->
   <section class="setup" aria-label="Getting started">
-    <h2 class="section-title">Running in three steps</h2>
+    <h2 class="section-title">Get set up in two minutes</h2>
 
     <ol class="steps">
       <li>
-        <h3>Install it</h3>
+        <h3>Download the app</h3>
         <p>
-          Download the <code>.dmg</code> and drag Beet to Applications. The build isn't
-          signed yet, so right-click the app and choose <b>Open</b> the first time.
+          Grab the latest <code>.dmg</code> and move Beet to your Applications folder. Because the build is currently unsigned, right-click the icon and choose <b>Open</b> the first time you launch it.
         </p>
       </li>
       <li>
-        <h3>Paste a token</h3>
+        <h3>Add your GitHub token</h3>
         <p>
-          Beet authenticates with a
-          <a href="https://github.com/settings/tokens/new?description=Beet&amp;scopes=repo,read:org,read:user,user:email,notifications">classic
-          personal access token</a> you paste into Settings — <code>repo</code>,
-          <code>read:org</code>, <code>read:user</code>, <code>user:email</code>, and
-          <code>notifications</code>. It's stored on your Mac and used to call
-          <code>api.github.com</code> directly. There is no Beet server for it to travel to.
+          Generate a <a href="https://github.com/settings/tokens/new?description=Beet&amp;scopes=repo,read:org,read:user,user:email,notifications">classic personal access token</a> with standard read scopes (<code>repo</code>, <code>read:org</code>, <code>read:user</code>, <code>user:email</code>, <code>notifications</code>).
         </p>
         <p class="step-note">
-          Fine-grained tokens aren't supported yet — Beet checks the classic scope list,
-          so a <code>github_pat_</code> token reads as missing every scope.
+          Your token is stored locally and communicates directly with GitHub. Fine-grained PATs are not supported yet.
         </p>
       </li>
       <li>
-        <h3>Let it watch</h3>
+        <h3>Focus on active repos</h3>
         <p>
-          Beet follows the repos you've pushed to in the last 30 days (7 or 90 if you
-          prefer) plus any you pin — not every repo you can see. Mute the ones you don't
-          care about and the list stays short.
+          Beet automatically monitors repositories you've contributed to recently. Pin important projects or mute noisy ones to keep your feed clean.
         </p>
       </li>
     </ol>
   </section>
 
   <section class="closer">
-    <h2>Stop refreshing the PR page.</h2>
+    <h2>Ditch the endless tab-refreshing.</h2>
     <a class="btn btn-primary" href="https://github.com/evanhalley/beet/releases/latest">Download for macOS</a>
   </section>
 
@@ -234,7 +210,7 @@
   <p>
     <a href="https://github.com/evanhalley/beet">github.com/evanhalley/beet</a>
     &middot; <a href="https://github.com/evanhalley/beet/blob/main/LICENSE">MIT</a>
-    &middot; built with Tauri 2 + Next.js
+    &middot; Built with Tauri 2 + Next.js
   </p>
 </footer>
 
