@@ -2,6 +2,8 @@
 
 A glanceable, always-running developer dashboard for GitHub. macOS menu-bar app built on Tauri 2 + Next.js. See [SPECS.md](SPECS.md) for the full product spec and [ISSUES.md](ISSUES.md) for the V1 build plan.
 
+Landing page: **[beet.sh](https://beet.sh)** (source in [docs/](docs/), published by GitHub Pages from `main`).
+
 ## Commands
 
 ### npm (frontend + Tauri orchestration)

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beet — Review PRs like Evan.</title>
+<meta name="description" content="Beet is a glanceable, always-running GitHub dashboard that lives in your macOS menu bar. It ranks your review queue, badges what needs you now, and updates in the background.">
+<meta name="color-scheme" content="dark">
+<meta property="og:title" content="Beet — Review PRs like Evan.">
+<meta property="og:description" content="A glanceable, always-running GitHub dashboard for your macOS menu bar.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://beet.sh/">
+<link rel="canonical" href="https://beet.sh/">
+<link rel="icon" href="beet-mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="backdrop" aria-hidden="true">
+  <div class="horizon"></div>
+  <div class="grid"></div>
+  <div class="scanlines"></div>
+</div>
+<div class="sun-anchor" aria-hidden="true"><div class="sun"></div></div>
+
+<header class="hero">
+  <div class="wordmark">
+    <img src="beet-mark.svg" alt="" width="34" height="34">
+    <span>BEET</span>
+  </div>
+
+  <h1 class="tagline">Review PRs<br>like Evan.</h1>
+
+  <p class="sub">
+    <b>Beet is a free, open-source GitHub dashboard that lives in your macOS menu bar.</b>
+    It watches the pull requests and CI runs you actually have a stake in, so one glance
+    answers the only question that matters: <em>what needs me right now?</em>
+  </p>
+
+  <ul class="trust">
+    <li>Runs entirely on your Mac</li>
+    <li>No server, no account, no telemetry</li>
+    <li>MIT licensed</li>
+  </ul>
+
+  <div class="cta">
+    <a class="btn btn-primary" href="https://github.com/evanhalley/beet/releases/latest">
+      Download for macOS
+    </a>
+    <a class="btn btn-ghost" href="https://github.com/evanhalley/beet">
+      View on GitHub
+    </a>
+  </div>
+
+  <p class="fineprint">
+    macOS, Apple&nbsp;Silicon &middot; unsigned build &mdash; right-click the app and choose <b>Open</b> the first time.
+  </p>
+</header>
+
+<main>
+
+  <!-- ── App mockup ─────────────────────────────────────────────── -->
+  <section class="showcase" aria-label="What Beet looks like">
+    <div class="popover">
+      <div class="pop-bar">
+        <img src="beet-mark.svg" alt="" width="16" height="16">
+        <span class="pop-title">Beet</span>
+        <span class="badge">3</span>
+        <span class="spacer"></span>
+        <span class="dot-live" title="polling"></span>
+      </div>
+
+      <div class="pop-body">
+        <div class="sec-head"><span class="sec-icon">🔴</span> Needs Action <span class="sec-count">2</span></div>
+
+        <div class="row is-urgent">
+          <span class="unread" aria-label="unread"></span>
+          <div class="row-main">
+            <div class="row-title">Fix race condition in auth token refresh</div>
+            <div class="row-meta"><span class="mono">acme/api #412</span> <span class="pill pill-danger">Ejected from merge queue</span></div>
+          </div>
+        </div>
+
+        <div class="row is-urgent">
+          <span class="unread" aria-label="unread"></span>
+          <div class="row-main">
+            <div class="row-title">Ship payment retry with exponential backoff</div>
+            <div class="row-meta"><span class="mono">acme/billing #389</span> <span class="pill pill-danger">2 checks failing</span></div>
+          </div>
+        </div>
+
+        <div class="sec-head"><span class="sec-icon">👀</span> Review Requests <span class="sec-count">3</span></div>
+
+        <div class="row">
+          <span class="unread" aria-label="unread"></span>
+          <div class="row-main">
+            <div class="row-title">Refactor auth provider to support OIDC</div>
+            <div class="row-meta"><span class="mono">acme/platform #501</span> <span class="pill">@rina mentioned you</span></div>
+          </div>
+          <span class="score">14</span>
+        </div>
+
+        <div class="row">
+          <span class="unread is-read" aria-hidden="true"></span>
+          <div class="row-main">
+            <div class="row-title">Add pagination to the search endpoint</div>
+            <div class="row-meta"><span class="mono">acme/api #398</span> <span class="pill pill-ok">checks passed</span></div>
+          </div>
+          <span class="score">9</span>
+        </div>
+
+        <div class="row">
+          <span class="unread is-read" aria-hidden="true"></span>
+          <div class="row-main">
+            <div class="row-title">Bump tracing-subscriber and clean up spans</div>
+            <div class="row-meta"><span class="mono">acme/infra #77</span> <span class="pill pill-warn">checks running</span></div>
+          </div>
+          <span class="score">5</span>
+        </div>
+
+        <div class="sec-head"><span class="sec-icon">🚀</span> In Flight <span class="sec-count">2</span></div>
+
+        <div class="row is-quiet">
+          <span class="unread is-read" aria-hidden="true"></span>
+          <div class="row-main">
+            <div class="row-title">Cache team membership lookups</div>
+            <div class="row-meta"><span class="mono">acme/platform #488</span> <span class="pill pill-ok">merge queue · #2</span></div>
+          </div>
+        </div>
+
+        <div class="row is-quiet">
+          <span class="unread is-read" aria-hidden="true"></span>
+          <div class="row-main">
+            <div class="row-title">Drop the legacy webhook receiver</div>
+            <div class="row-meta"><span class="mono">acme/api #402</span> <span class="pill">2 reviews requested</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="caption">The tray popover. Sample data.</p>
+  </section>
+
+  <!-- ── Features ───────────────────────────────────────────────── -->
+  <section class="features" aria-label="Features">
+    <h2 class="section-title">Three things it does</h2>
+
+    <div class="cards">
+      <article class="card">
+        <div class="card-num">01</div>
+        <h3>A queue that ranks itself</h3>
+        <p>
+          Every review request gets scored. PRs from people on your team and requests
+          aimed straight at you rise to the top; drafts, stale PRs, and anything you
+          already approved sink or drop off entirely.
+        </p>
+        <p>The top of the list <em>is</em> your answer. No triage tax.</p>
+      </article>
+
+      <article class="card">
+        <div class="card-num">02</div>
+        <h3>Lives in the menu bar</h3>
+        <p>
+          A beet in your menu bar with a badge count of unread items that actually need
+          you. Click for the popover, open the full window when you're ready to triage.
+        </p>
+        <p>
+          Closing the window doesn't quit it — the tray keeps watching until you say
+          otherwise.
+        </p>
+      </article>
+
+      <article class="card">
+        <div class="card-num">03</div>
+        <h3>Updates in the background</h3>
+        <p>
+          Polling adapts on its own: in-flight work refreshes fast, everything else slow,
+          and intervals back off when the window is hidden, you're on battery, or the rate
+          limit gets tight.
+        </p>
+        <p>
+          Notifications stay on a tight budget — merge-queue ejections, failing checks,
+          and @mentions. Everything else updates silently.
+        </p>
+      </article>
+    </div>
+  </section>
+
+  <!-- ── Setup ──────────────────────────────────────────────────── -->
+  <section class="setup" aria-label="Getting started">
+    <h2 class="section-title">Running in three steps</h2>
+
+    <ol class="steps">
+      <li>
+        <h3>Install it</h3>
+        <p>
+          Download the <code>.dmg</code> and drag Beet to Applications. The build isn't
+          signed yet, so right-click the app and choose <b>Open</b> the first time.
+        </p>
+      </li>
+      <li>
+        <h3>Paste a token</h3>
+        <p>
+          Beet authenticates with a
+          <a href="https://github.com/settings/tokens/new?description=Beet&amp;scopes=repo,read:org,read:user,user:email,notifications">classic
+          personal access token</a> you paste into Settings — <code>repo</code>,
+          <code>read:org</code>, <code>read:user</code>, <code>user:email</code>, and
+          <code>notifications</code>. It's stored on your Mac and used to call
+          <code>api.github.com</code> directly. There is no Beet server for it to travel to.
+        </p>
+        <p class="step-note">
+          Fine-grained tokens aren't supported yet — Beet checks the classic scope list,
+          so a <code>github_pat_</code> token reads as missing every scope.
+        </p>
+      </li>
+      <li>
+        <h3>Let it watch</h3>
+        <p>
+          Beet follows the repos you've pushed to in the last 30 days (7 or 90 if you
+          prefer) plus any you pin — not every repo you can see. Mute the ones you don't
+          care about and the list stays short.
+        </p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="closer">
+    <h2>Stop refreshing the PR page.</h2>
+    <a class="btn btn-primary" href="https://github.com/evanhalley/beet/releases/latest">Download for macOS</a>
+  </section>
+
+</main>
+
+<footer>
+  <p>
+    <a href="https://github.com/evanhalley/beet">github.com/evanhalley/beet</a>
+    &middot; <a href="https://github.com/evanhalley/beet/blob/main/LICENSE">MIT</a>
+    &middot; built with Tauri 2 + Next.js
+  </p>
+</footer>
+
+</body>
+</html>
