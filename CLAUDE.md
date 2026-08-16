@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo state
 
-This repository is **pre-scaffold**. Today it contains only [README.md](README.md) and [SPECS.md](SPECS.md). There is no `package.json`, no `src/`, no Tauri setup yet. The first major task is to scaffold the app per the spec.
+The app is scaffolded and shipping releases (`v0.1.6` as of this writing) — this is no longer a pre-scaffold repo. Issues #1–#7, #9, plus most side-quest issues (search, sidebar filters, merge-queue auto-requeue, release workflow) are closed; #8 (mentions hybrid + Needs Action Now + fingerprints) and #10 (updater + autostart + final polish) are still open. The repo is public/open source under MIT.
 
 **[SPECS.md](SPECS.md) is the source of truth** for what Beet is, what it does, and how it should be built. Read it before making implementation decisions. Section numbers below refer to SPECS.md.
 
@@ -71,14 +71,18 @@ Items with `score <= 0` are hidden unless **Show All** is on.
 
 ## Commands
 
-The project is not yet scaffolded, so there are no `npm` scripts to document. Once Tauri + Next.js are wired up per SPECS.md §3, the expected commands will mirror PRZ:
-
 - `npm install` — install deps
 - `npm run tauri dev` — run the desktop app in dev mode (boots Next.js + Tauri window)
-- `npm run tauri build` — produce a signed `.app`/`.dmg` in `src-tauri/target/release/bundle`
-- `npx vitest` — run the unit tests
+- `npm run tauri:mock` — same, in demo mode (`BEET_MOCK=1`, fixture data, no PAT/network needed)
+- `npm run tauri build` — produce `.app`/`.dmg` in `src-tauri/target/release/bundle`
+- `npm run lint` — ESLint (`--max-warnings 0`)
+- `npm test` / `npx vitest` — run the unit tests
 - `npx vitest path/to/file.test.ts` — single test file
 - `npx vitest -t "test name"` — single test by name
+- `cargo build --manifest-path src-tauri/Cargo.toml --locked` — Rust build, matches CI
+- `cargo clippy --manifest-path src-tauri/Cargo.toml --locked -- -D warnings` — Rust lint, matches CI
+
+See [README.md](README.md) for the full command list, including icon regeneration.
 
 Source is laid out as `src/app/`, `src/lib/` (with `src/lib/github/` and `src/lib/storage/`), `src/hooks/`, `src/components/`, `src/test/`, and the Tauri shell in `src-tauri/`.
 
