@@ -200,10 +200,16 @@
       <li>
         <h3>Paste a token</h3>
         <p>
-          Beet authenticates with a GitHub personal access token you paste into Settings —
-          <code>repo</code>, <code>read:org</code>, <code>read:user</code>, and
+          Beet authenticates with a
+          <a href="https://github.com/settings/tokens/new?description=Beet&amp;scopes=repo,read:org,read:user,user:email,notifications">classic
+          personal access token</a> you paste into Settings — <code>repo</code>,
+          <code>read:org</code>, <code>read:user</code>, <code>user:email</code>, and
           <code>notifications</code>. It's stored on your Mac and used to call
           <code>api.github.com</code> directly. There is no Beet server for it to travel to.
+        </p>
+        <p class="step-note">
+          Fine-grained tokens aren't supported yet — Beet checks the classic scope list,
+          so a <code>github_pat_</code> token reads as missing every scope.
         </p>
       </li>
       <li>
