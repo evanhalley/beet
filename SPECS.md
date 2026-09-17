@@ -142,6 +142,8 @@ interface ActionableItem {
     additions: number;
     deletions: number;
     createdAt: string;
+    headRef?: string;                // head branch name; shown in rows + detail, copyable
+    headForkOwner?: string;          // set for fork PRs: shown as owner:branch, copy gives `gh pr checkout N`
     lifecycle: PrLifecycle;
     taskUrls: string[];                // matched by configurable regex (PRZ feature)
     mergeQueue?: {

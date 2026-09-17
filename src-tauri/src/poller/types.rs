@@ -159,6 +159,15 @@ pub struct ActionableItemPr {
     pub additions: i64,
     pub deletions: i64,
     pub created_at: String,
+    /// Head branch name (`pull.head.ref`). Absent for items persisted by
+    /// older versions, hence `default`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_ref: Option<String>,
+    /// Owner of the fork the head branch lives in; absent for same-repo PRs.
+    /// The UI copies `gh pr checkout` for fork PRs, since the bare branch
+    /// name doesn't exist upstream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_fork_owner: Option<String>,
     pub lifecycle: PrLifecycle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_queue: Option<ActionableItemMergeQueue>,

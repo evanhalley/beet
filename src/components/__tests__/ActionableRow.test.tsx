@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ActionableRow } from "../ActionableRow";
+import { rowActionsReserve } from "../RowShell";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 
@@ -80,5 +81,63 @@ describe("ActionableRow snooze", () => {
     expect(screen.getByRole("menuitem", { name: "Snooze 1 hour" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Snooze 4 hours" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Snooze 1 day" })).toBeInTheDocument();
+  });
+});
+
+describe("ActionableRow branch", () => {
+  test("shows the head branch and copies it without selecting the row", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const item = prItem("pr:acme/repo#45");
+    item.pr = { ...item.pr!, headRef: "feat/flux" };
+    render(<ActionableRow item={item} variant="review" />);
+
+    expect(screen.getByText("feat/flux")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Copy branch name feat/flux" }));
+
+    expect(writeText).toHaveBeenCalledWith("feat/flux");
+    expect(useAppStore.getState().selectedItemId).not.toBe(item.id);
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  test("renders no branch copy button when the branch is unknown", () => {
+    render(<ActionableRow item={prItem("pr:acme/repo#46")} variant="inflight" />);
+    expect(screen.queryByRole("button", { name: /Copy branch name/ })).toBeNull();
+    // The existing copy-link button is still there.
+    expect(screen.getByRole("button", { name: /Copy link to/ })).toBeInTheDocument();
+  });
+
+  test("a fork PR shows owner:branch and copies gh pr checkout", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const item = prItem("pr:acme/repo#47");
+    item.pr = { ...item.pr!, headRef: "main", headForkOwner: "alice" };
+    render(<ActionableRow item={item} variant="review" />);
+
+    expect(screen.getByText("alice:main")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Copy checkout command gh pr checkout 42" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("gh pr checkout 42");
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  test("the first line reserves room for the overlaid buttons", () => {
+    const item = prItem("pr:acme/repo#48");
+    const { rerender } = render(<ActionableRow item={item} variant="review" />);
+    const firstLine = () => screen.getByText("acme/repo").parentElement!;
+    expect(firstLine()).toHaveStyle({ paddingRight: `${rowActionsReserve(1)}px` });
+
+    item.pr = { ...item.pr!, headRef: "feat/flux" };
+    rerender(<ActionableRow item={{ ...item }} variant="review" />);
+    expect(firstLine()).toHaveStyle({ paddingRight: `${rowActionsReserve(2)}px` });
   });
 });

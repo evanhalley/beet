@@ -99,6 +99,10 @@ export interface ActionableItemPr {
   additions: number;
   deletions: number;
   createdAt: string;
+  /** Head branch name (`pull.head.ref`). Absent when unknown. */
+  headRef?: string;
+  /** Owner of the fork the head branch lives in; absent for same-repo PRs. */
+  headForkOwner?: string;
   lifecycle: PrLifecycle;
   mergeQueue?: ActionableItemMergeQueue;
   taskUrls: string[];

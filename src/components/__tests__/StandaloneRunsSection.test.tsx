@@ -1,5 +1,6 @@
-import { describe, expect, test, beforeEach } from "vitest";
+import { describe, expect, test, beforeEach, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
 import { StandaloneRunsSection } from "../StandaloneRunsSection";
@@ -47,6 +48,28 @@ describe("StandaloneRunsSection", () => {
     render(<StandaloneRunsSection />);
     expect(screen.queryByText(/no standalone workflow runs/i)).toBeNull();
     expect(screen.getByRole("status", { name: /loading/i })).toBeInTheDocument();
+  });
+
+  test("each run row offers a copy-branch button that copies the branch", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    useAppStore.getState().setPollResult({
+      reviewRequests: [],
+      inFlight: [],
+      standaloneRuns: [runItem(1, "Deploy", "2026-01-01T00:00:00.000Z")],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:01:00.000Z",
+    });
+    render(<StandaloneRunsSection />);
+    await user.click(screen.getByRole("button", { name: "Copy branch name main" }));
+    expect(writeText).toHaveBeenCalledWith("main");
+    expect(useAppStore.getState().selectedItemId).toBeNull();
+    Reflect.deleteProperty(navigator, "clipboard");
   });
 
   test("renders a relative timestamp on each row with the ISO time as a tooltip", () => {

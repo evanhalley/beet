@@ -181,6 +181,59 @@ describe("TrayPopover", () => {
     spy.mockRestore();
   });
 
+  test("rows show the branch name and copying it does not open the browser", async () => {
+    const openMod = await import("@/lib/openInBrowser");
+    const spy = vi.spyOn(openMod, "openInBrowser").mockResolvedValue();
+    const user = userEvent.setup();
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    const review = reviewItem(1);
+    review.pr = { ...review.pr!, headRef: "feat/review-branch" };
+    const mine = inflightItem(2);
+    mine.pr = { ...mine.pr!, headRef: "feat/my-branch" };
+    useAppStore.getState().setPollResult({
+      reviewRequests: [review],
+      inFlight: [mine],
+      standaloneRuns: [runItem(3)],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    render(<TrayPopover />);
+
+    expect(screen.getByText("feat/review-branch")).toBeInTheDocument();
+    expect(screen.getByText("feat/my-branch")).toBeInTheDocument();
+    expect(screen.getByText("main")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Copy branch name feat/my-branch" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("feat/my-branch");
+    expect(spy).not.toHaveBeenCalled();
+
+    spy.mockRestore();
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  test("rows without a branch render no copy-branch button", () => {
+    useAppStore.getState().setPollResult({
+      reviewRequests: [reviewItem(1)],
+      inFlight: [],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    render(<TrayPopover />);
+    expect(
+      screen.queryByRole("button", { name: /Copy branch name/ }),
+    ).toBeNull();
+  });
+
   test("section collapse toggles visibility", async () => {
     useAppStore.getState().setPollResult({
       reviewRequests: [reviewItem(1)],

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { DetailPane } from "../DetailPane";
 import { useAppStore } from "@/lib/store";
 import type { ActionableItem } from "@/lib/types";
@@ -11,6 +11,22 @@ beforeEach(() => {
 vi.mock("@tauri-apps/plugin-shell", () => ({
   open: vi.fn(async () => {}),
 }));
+
+// Run detail fetches jobs over IPC; the branch tests only need the header.
+vi.mock("@/hooks/useRunJobs", () => ({
+  useRunJobs: () => ({ jobs: [], isLoading: false, error: null }),
+}));
+
+async function setupClipboard() {
+  const userEvent = (await import("@testing-library/user-event")).default;
+  const user = userEvent.setup();
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  return { user, writeText };
+}
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -68,6 +84,76 @@ describe("DetailPane", () => {
     expect(
       screen.getByRole("button", { name: "Open Patch the migrator on GitHub" }),
     ).toBeInTheDocument();
+  });
+
+  test("PR header omits the branch and its copy button when the branch is unknown", () => {
+    render(<DetailPane item={pr} />);
+    expect(screen.queryByText("branch")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Copy branch name/ })).toBeNull();
+  });
+
+  test("PR header shows the head branch with a copy button", async () => {
+    const withBranch: ActionableItem = {
+      ...pr,
+      pr: { ...pr.pr!, headRef: "fix/migrator" },
+    };
+    const { user, writeText } = await setupClipboard();
+    render(<DetailPane item={withBranch} />);
+
+    expect(screen.getByText("fix/migrator")).toBeInTheDocument();
+    const copy = screen.getByRole("button", { name: "Copy branch name fix/migrator" });
+    await user.click(copy);
+    expect(writeText).toHaveBeenCalledWith("fix/migrator");
+    await waitFor(() => expect(copy).toHaveAttribute("title", "Copied!"));
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  test("fork PR header shows owner:branch and copies gh pr checkout", async () => {
+    const fork: ActionableItem = {
+      ...pr,
+      pr: { ...pr.pr!, headRef: "main", headForkOwner: "alice" },
+    };
+    const { user, writeText } = await setupClipboard();
+    render(<DetailPane item={fork} />);
+    expect(screen.getByText("alice:main")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", { name: "Copy checkout command gh pr checkout 42" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("gh pr checkout 42");
+    Reflect.deleteProperty(navigator, "clipboard");
+  });
+
+  test("run detail header shows the branch with a copy button", async () => {
+    const run: ActionableItem = {
+      id: "run:acme/repo#7",
+      kind: "standalone_run",
+      title: "Deploy",
+      url: "https://github.com/acme/repo/actions/runs/7",
+      repoFullName: "acme/repo",
+      updatedAt: "2026-05-09T10:00:00Z",
+      unread: false,
+      dismissedUntilFingerprint: null,
+      run: {
+        workflowName: "Deploy",
+        event: "push",
+        status: "completed",
+        conclusion: "success",
+        branch: "release/2026-05",
+        sha: "abcdef1234",
+        runNumber: 7,
+        actorLogin: "me",
+        runUrl: "https://github.com/acme/repo/actions/runs/7",
+        startedAt: "2026-05-09T09:58:00Z",
+        completedAt: "2026-05-09T10:00:00Z",
+      },
+    };
+    const { user, writeText } = await setupClipboard();
+    render(<DetailPane item={run} />);
+    await user.click(
+      screen.getByRole("button", { name: "Copy branch name release/2026-05" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("release/2026-05");
+    Reflect.deleteProperty(navigator, "clipboard");
   });
 
   test("renders Body / Reviewers / Checks / Activity blocks", () => {

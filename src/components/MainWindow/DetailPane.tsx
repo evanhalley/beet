@@ -7,11 +7,13 @@ import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Avatar } from "@/components/Avatar";
 import { CheckDot, deriveCheckDotState } from "@/components/CheckDot";
+import { BranchWithCopy } from "@/components/CopyBranchButton";
 import { Lifecycle } from "@/components/Lifecycle";
 import { Pill, type PillTone } from "@/components/Pill";
 import { ScoreBar } from "@/components/ScoreBar";
 import { useRequeueHistory } from "@/hooks/useRequeueHistory";
 import { useRunJobs } from "@/hooks/useRunJobs";
+import { prBranchTarget } from "@/lib/branch";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import dayjs from "@/lib/dayjs";
 import { durationSeconds, formatDuration } from "@/lib/duration";
@@ -545,6 +547,16 @@ function JobRow({ job }: { job: WorkflowJobSummary }) {
   );
 }
 
+// Repo name in a detail header: ellipsizes and shrinks at the same rate as
+// the branch name beside it, so a long repo can't squeeze the branch away.
+const headerRepoStyle = {
+  minWidth: 0,
+  flexShrink: 100,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} as const;
+
 function RunDetail({ item }: { item: ActionableItem }) {
   const run = item.run;
   const [copied, setCopied] = useState(false);
@@ -587,8 +599,14 @@ function RunDetail({ item }: { item: ActionableItem }) {
             color: "var(--color-text-faint)",
           }}
         >
-          <span className="mono">{item.repoFullName}</span>
-          {branchLabel && <span className="mono">{branchLabel}</span>}
+          <span className="mono" title={item.repoFullName} style={headerRepoStyle}>
+            {item.repoFullName}
+          </span>
+          {run.branch ? (
+            <BranchWithCopy target={run.branch ? { branch: run.branch } : null} />
+          ) : (
+            branchLabel && <span className="mono">{branchLabel}</span>
+          )}
           <Pill tone="neutral">{run.event}</Pill>
         </div>
         <h2
@@ -824,12 +842,12 @@ export function DetailPane({ item }: DetailPaneProps) {
             color: "var(--color-text-faint)",
           }}
         >
-          <span className="mono">{item.repoFullName}</span>
-          <span className="mono">#{pr.number}</span>
-          <span className="mono" style={{ color: "var(--color-text-faint)" }}>
-            {/* Branch placeholder — fetched in #5. */}
-            branch
+          <span className="mono" title={item.repoFullName} style={headerRepoStyle}>
+            {item.repoFullName}
           </span>
+          <span className="mono">#{pr.number}</span>
+          {pr.headRef && <span>·</span>}
+          <BranchWithCopy target={prBranchTarget(pr)} />
         </div>
         <h2
           style={{

@@ -7,15 +7,17 @@ import { addMute, addPin, removePin } from "@/lib/storage/mutePin";
 import { addSuppression, removeSuppression } from "@/lib/storage/suppress";
 import { addSnooze, removeSnooze, snoozeUntil } from "@/lib/storage/snooze";
 import { isSnoozed as isItemSnoozed } from "@/lib/store";
+import { prBranchTarget } from "@/lib/branch";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import type { ActionableItem } from "@/lib/types";
 import { Avatar } from "./Avatar";
+import { CopyBranchButton } from "./CopyBranchButton";
 import { Lifecycle } from "./Lifecycle";
 import { Pill } from "./Pill";
 import { PinGlyph } from "./PinGlyph";
 import { ReasonBadge } from "./ReasonBadge";
 import { RowContextMenu } from "./RowContextMenu";
-import { RowShell } from "./RowShell";
+import { RowShell, rowActionsReserve } from "./RowShell";
 import { ScoreBar } from "./ScoreBar";
 import { TaskChips } from "./TaskChips";
 
@@ -148,6 +150,8 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
     } catch { /* storage error — leave state unchanged */ }
   };
 
+  const branch = prBranchTarget(pr);
+
   const copyButton = (
     <button
       type="button"
@@ -178,11 +182,26 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
         active={active}
         onSelect={() => setSelectedItemId(item.id)}
         aside={aside}
-        actions={copyButton}
+        actions={
+          <>
+            {branch && <CopyBranchButton {...branch} />}
+            {copyButton}
+          </>
+        }
         onContextMenu={onContextMenu}
         dimmed={(canSuppress && isSuppressed) || isSnoozed}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 3,
+            minWidth: 0,
+            overflow: "hidden",
+            paddingRight: rowActionsReserve(branch ? 2 : 1),
+          }}
+        >
           <span
             className="mono"
             style={{ display: "flex", alignItems: "center", gap: 3, color: "var(--color-text-faint)", fontSize: 11 }}
@@ -261,12 +280,29 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
           <Avatar login={pr.author} size={12} />
           <span>{pr.author}</span>
           <span>·</span>
-          <span className="mono">
+          <span className="mono" style={{ flexShrink: 0 }}>
             <span style={{ color: "var(--color-success)" }}>+{pr.additions}</span>
             <span style={{ color: "var(--color-danger)", marginLeft: 4 }}>
               −{pr.deletions}
             </span>
           </span>
+          {branch && (
+            <>
+              <span>·</span>
+              <span
+                className="mono"
+                title={branch.branch}
+                style={{
+                  minWidth: 0,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {branch.branch}
+              </span>
+            </>
+          )}
         </div>
       </RowShell>
       {ctxMenu && (
