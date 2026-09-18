@@ -109,12 +109,30 @@ describe("url helpers", () => {
     );
   });
 
-  test("prFilesKey changes with the head sha and is null for non-PR items", () => {
-    expect(prFilesKey(prItem())).toBe("pr:acme/repo#42@head1");
-    expect(prFilesKey(prItem({ headSha: "head2" }))).toBe("pr:acme/repo#42@head2");
-    expect(prFilesKey(prItem({ headSha: undefined }))).toBe("pr:acme/repo#42@");
+  test("prFilesKey changes with the head or base sha and is null for non-PR items", () => {
+    const key = prFilesKey(prItem());
+    expect(prFilesKey(prItem())).toBe(key);
+    expect(prFilesKey(prItem({ headSha: "head2" }))).not.toBe(key);
+    expect(prFilesKey(prItem({ baseSha: "base2" }))).not.toBe(key);
+    expect(prFilesKey(prItem({ headSha: undefined }))).not.toBe(key);
     expect(prFilesKey(runItem())).toBeNull();
     expect(prFilesKey(null)).toBeNull();
+  });
+
+  test("refetches when the base branch advances without a new push", async () => {
+    // A CODEOWNERS change merged to main moves base_sha; the row badge is
+    // recomputed by the poller, so the Files block must follow.
+    invokeMock.mockResolvedValue(result);
+    const { result: hook, rerender } = renderHook(({ item }) => usePrFiles(item), {
+      initialProps: { item: prItem() },
+    });
+    await waitFor(() => expect(hook.current.isLoading).toBe(false));
+    rerender({ item: prItem({ baseSha: "base2" }) });
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(2));
+    expect(invokeMock).toHaveBeenLastCalledWith(
+      "fetch_pr_files_command",
+      expect.objectContaining({ baseSha: "base2" }),
+    );
   });
 });
 

@@ -294,3 +294,132 @@ async fn cache_returns_parsed_codeowners_and_clear_refetches() {
         .unwrap();
     assert!(!Arc::ptr_eq(&a, &c));
 }
+
+// ---------- review follow-ups ----------
+
+#[tokio::test]
+async fn cache_remembers_unreadable_codeowners() {
+    // Fine-grained PAT without Contents:read answers 403. That's definitive
+    // for the session, so it must not be re-asked every poll.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/contents/.github/CODEOWNERS"))
+        .respond_with(ResponseTemplate::new(403).set_body_string("Resource not accessible"))
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let db = db();
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = SessionCache::default();
+    for _ in 0..3 {
+        let co = cache
+            .codeowners(&client, &db, "o", "r", "main", "sha1")
+            .await
+            .unwrap();
+        assert!(co.is_none());
+    }
+}
+
+#[tokio::test]
+async fn slow_codeowners_for_one_repo_does_not_block_another() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/slow/r/contents/.github/CODEOWNERS"))
+        .respond_with(contents_ok("* @a\n").set_delay(std::time::Duration::from_millis(600)))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/fast/r/contents/.github/CODEOWNERS"))
+        .respond_with(contents_ok("* @b\n"))
+        .mount(&server)
+        .await;
+
+    let db = db();
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = SessionCache::default();
+    let started = tokio::time::Instant::now();
+    let slow = cache.codeowners(&client, &db, "slow", "r", "main", "s1");
+    let fast = async {
+        // Let the slow lookup take whatever lock it takes first.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        let r = cache
+            .codeowners(&client, &db, "fast", "r", "main", "s2")
+            .await;
+        (r, started.elapsed())
+    };
+    let (slow_res, (fast_res, fast_elapsed)) = tokio::join!(slow, fast);
+    assert!(slow_res.unwrap().is_some());
+    assert!(fast_res.unwrap().is_some());
+    assert!(
+        fast_elapsed < std::time::Duration::from_millis(400),
+        "fast repo waited {fast_elapsed:?} behind the slow one"
+    );
+}
+
+#[tokio::test]
+async fn clear_during_an_in_flight_teams_fetch_discards_its_result() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/user/teams"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .set_body_json(team_rows(1, "old", "team"))
+                .set_delay(std::time::Duration::from_millis(300)),
+        )
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/user/teams"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(team_rows(1, "new", "team")))
+        .mount(&server)
+        .await;
+
+    let db = db();
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = SessionCache::default();
+    let in_flight = cache.user_teams(&client, &db);
+    let rotate = async {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        cache.clear();
+    };
+    let (stale, ()) = tokio::join!(in_flight, rotate);
+    // The caller that started before the rotation still gets its answer...
+    assert!(stale.unwrap().teams.contains("old/team0"));
+    // ...but it must not be what the next session sees.
+    let fresh = cache.user_teams(&client, &db).await.unwrap();
+    assert!(fresh.teams.contains("new/team0"), "got {:?}", fresh.teams);
+}
+
+#[tokio::test]
+async fn clear_during_an_in_flight_codeowners_fetch_discards_its_result() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/contents/.github/CODEOWNERS"))
+        .respond_with(contents_ok("* @old\n").set_delay(std::time::Duration::from_millis(300)))
+        .up_to_n_times(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/contents/.github/CODEOWNERS"))
+        .respond_with(contents_ok("* @new\n"))
+        .mount(&server)
+        .await;
+
+    let db = db();
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = SessionCache::default();
+    let in_flight = cache.codeowners(&client, &db, "o", "r", "main", "sha1");
+    let rotate = async {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        cache.clear();
+    };
+    let (_stale, ()) = tokio::join!(in_flight, rotate);
+    let fresh = cache
+        .codeowners(&client, &db, "o", "r", "main", "sha1")
+        .await
+        .unwrap();
+    let rules = &fresh.as_ref().as_ref().unwrap().rules;
+    assert_eq!(rules[0].owners, vec!["@new".to_string()]);
+}

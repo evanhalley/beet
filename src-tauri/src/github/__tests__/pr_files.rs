@@ -364,3 +364,61 @@ async fn fetch_pr_files_skips_pull_detail_when_refs_are_known() {
         .unwrap();
     assert_eq!(r.owned_count, 1);
 }
+
+#[tokio::test]
+async fn missing_base_skips_codeowners_instead_of_reading_the_head_branch() {
+    // Guessing the head branch would read the PR's own (author-controlled)
+    // CODEOWNERS, or 404 for forks. With no base, ownership is unknown.
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/pulls/7"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "title": "t", "html_url": "https://github.com/o/r/pull/7", "state": "open",
+            "user": { "login": "alice" },
+            "head": { "sha": "head1", "ref": "feat" },
+            "additions": 1, "deletions": 1,
+            "created_at": "2026-01-01T00:00:00Z", "updated_at": "2026-01-02T00:00:00Z",
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/o/r/pulls/7/files"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "filename": "src/a.rs", "status": "modified" },
+        ])))
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path_regex_contents())
+        .respond_with(ResponseTemplate::new(200))
+        .expect(0)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/user/teams"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .mount(&server)
+        .await;
+
+    let db = db();
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = SessionCache::default();
+    let pr = PrRef {
+        owner: "o".into(),
+        repo: "r".into(),
+        number: 7,
+        head_sha: None,
+        base_ref: None,
+        base_sha: None,
+    };
+    let r = fetch_pr_files(&client, &db, &cache, pr, "evan")
+        .await
+        .unwrap();
+    assert!(!r.has_codeowners);
+    assert_eq!(r.total_count, 1);
+    assert_eq!(r.owned_count, 0);
+}
+
+fn path_regex_contents() -> wiremock::matchers::PathRegexMatcher {
+    wiremock::matchers::path_regex(r"^/repos/o/r/contents/")
+}

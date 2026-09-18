@@ -16,6 +16,7 @@ use crate::github::models::{ContentsFile, UserTeamRow};
 use crate::store::Db;
 use base64::Engine;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// Where GitHub looks for CODEOWNERS, in precedence order.
@@ -39,17 +40,27 @@ pub struct UserTeams {
 pub struct SessionCache {
     teams: Mutex<Option<UserTeams>>,
     codeowners: Mutex<HashMap<String, Arc<Option<Codeowners>>>>,
-    // Serialise cache misses so a fan-out of 8 PRs on the first poll doesn't
-    // fire 8 identical fetches. Never held across `clear`.
+    // Single-flight locks so a fan-out of 8 PRs on the first poll doesn't
+    // fire 8 identical fetches. CODEOWNERS locks are per repo + base SHA, so
+    // a slow or retrying repo never stalls lookups for other repos.
     teams_fetch: tokio::sync::Mutex<()>,
-    codeowners_fetch: tokio::sync::Mutex<()>,
+    codeowners_fetch: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    // Bumped by `clear`. A fetch that started under an older generation (the
+    // previous token) returns its answer to its caller but never stores it.
+    generation: AtomicU64,
 }
 
 impl SessionCache {
     /// Forget everything — called when the PAT is rotated or cleared.
     pub fn clear(&self) {
+        self.generation.fetch_add(1, Ordering::SeqCst);
         *lock(&self.teams) = None;
         lock(&self.codeowners).clear();
+        lock(&self.codeowners_fetch).clear();
+    }
+
+    fn generation(&self) -> u64 {
+        self.generation.load(Ordering::SeqCst)
     }
 
     /// The user's teams, fetched at most once per session. A definitive
@@ -64,8 +75,12 @@ impl SessionCache {
         if let Some(t) = lock(&self.teams).clone() {
             return Ok(t);
         }
+        let started = self.generation();
         let fetched = fetch_user_teams(client, db).await?;
-        *lock(&self.teams) = Some(fetched.clone());
+        let mut slot = lock(&self.teams);
+        if self.generation() == started {
+            *slot = Some(fetched.clone());
+        }
         Ok(fetched)
     }
 
@@ -84,16 +99,24 @@ impl SessionCache {
         if let Some(c) = lock(&self.codeowners).get(&key).cloned() {
             return Ok(c);
         }
-        let _guard = self.codeowners_fetch.lock().await;
+        let key_lock = lock(&self.codeowners_fetch)
+            .entry(key.clone())
+            .or_default()
+            .clone();
+        let _guard = key_lock.lock().await;
         if let Some(c) = lock(&self.codeowners).get(&key).cloned() {
             return Ok(c);
         }
+        let started = self.generation();
         let fetched = Arc::new(fetch_codeowners(client, db, owner, repo, base_ref).await?);
         let mut map = lock(&self.codeowners);
-        if map.len() >= CODEOWNERS_MAX_ENTRIES {
-            map.clear();
+        if self.generation() == started {
+            if map.len() >= CODEOWNERS_MAX_ENTRIES {
+                map.clear();
+                lock(&self.codeowners_fetch).retain(|k, _| *k == key);
+            }
+            map.insert(key, fetched.clone());
         }
-        map.insert(key, fetched.clone());
         Ok(fetched)
     }
 }
@@ -141,8 +164,10 @@ pub async fn fetch_user_teams(client: &GithubClient, db: &Db) -> BeetResult<User
 }
 
 /// Fetch and parse the base branch's CODEOWNERS, trying GitHub's locations in
-/// order. `Ok(None)` when none exists. Non-404 failures propagate: the caller
-/// decides whether they're critical.
+/// order. `Ok(None)` when none exists, or when the token can't read repo
+/// contents (403, e.g. a fine-grained PAT without Contents:read) — both are
+/// definitive for the session, so the caller caches them. Other failures
+/// propagate: the caller decides whether they're critical.
 pub async fn fetch_codeowners(
     client: &GithubClient,
     db: &Db,
@@ -169,6 +194,8 @@ pub async fn fetch_codeowners(
                 }));
             }
             Err(BeetError::Github { status: 404, .. }) => continue,
+            // Same token, same answer at every location: stop here.
+            Err(BeetError::Github { status: 403, .. }) => return Ok(None),
             Err(e) => return Err(e),
         }
     }

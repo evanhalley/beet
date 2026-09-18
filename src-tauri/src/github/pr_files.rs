@@ -162,8 +162,10 @@ impl From<&PrFilesResult> for CodeOwnership {
 
 /// Resolve the full Files-block payload for one PR. Fills in missing head /
 /// base refs from `pulls.get` (an ETag 304 whenever the poller has seen the
-/// PR). Errors propagate unclassified: the poll loop swallows non-critical
-/// ones per item, the command surfaces them to the pane.
+/// PR). If the base is still unknown, CODEOWNERS is skipped rather than read
+/// from the head branch, which the PR author controls. Errors propagate
+/// unclassified: the poll loop swallows non-critical ones per item, the
+/// command surfaces them to the pane.
 pub async fn fetch_pr_files(
     client: &GithubClient,
     db: &Db,
@@ -179,24 +181,30 @@ pub async fn fetch_pr_files(
         base_ref,
         base_sha,
     } = pr;
-    let (head_sha, base_ref, base_sha) = match (head_sha, base_ref, base_sha) {
-        (Some(h), Some(r), Some(s)) => (h, r, s),
+    let (head_sha, base) = match (head_sha, base_ref, base_sha) {
+        (Some(h), Some(r), Some(s)) => (h, Some((r, s))),
         _ => {
             let url = client.url(&format!("/repos/{owner}/{repo}/pulls/{number}"));
             let key = format!("pr:{owner}/{repo}#{number}:detail");
             let pull = client.beet_get::<PullDetail>(db, &key, &url).await?.body;
-            let base = pull.base.unwrap_or_else(|| pull.head.clone());
-            (
-                pull.head.sha,
-                base.git_ref.unwrap_or_else(|| "HEAD".to_string()),
-                base.sha,
-            )
+            let base = pull.base.and_then(|b| b.git_ref.map(|r| (r, b.sha)));
+            (pull.head.sha, base)
         }
     };
 
+    let codeowners = async {
+        match &base {
+            Some((base_ref, base_sha)) => {
+                cache
+                    .codeowners(client, db, &owner, &repo, base_ref, base_sha)
+                    .await
+            }
+            None => Ok(Arc::new(None)),
+        }
+    };
     let (files, codeowners, teams) = tokio::join!(
         fetch_changed_files(client, db, &owner, &repo, number, &head_sha),
-        cache.codeowners(client, db, &owner, &repo, &base_ref, &base_sha),
+        codeowners,
         cache.user_teams(client, db),
     );
     let (files, truncated) = files?;

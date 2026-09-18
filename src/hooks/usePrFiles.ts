@@ -10,11 +10,13 @@ export interface UsePrFilesResult {
   error: string | null;
 }
 
-/// Cache key for a PR's files: the item id plus its head SHA, so a new push
-/// refetches while re-renders and view toggles never do.
+/// Cache key for a PR's files: the item id plus its head and base SHAs. A new
+/// push (head) or a CODEOWNERS change landing on the base branch refetches,
+/// keeping the block in step with the poller's row badge. Re-renders and
+/// view toggles never do.
 export function prFilesKey(item: ActionableItem | null): string | null {
   if (!item?.pr) return null;
-  return `${item.id}@${item.pr.headSha ?? ""}`;
+  return `${item.id}@${item.pr.headSha ?? ""}..${item.pr.baseSha ?? ""}`;
 }
 
 const OWNED_BY_PARAM = "owned-by%5B%5D";
@@ -43,8 +45,8 @@ interface KeyedResult {
 const EMPTY: UsePrFilesResult = { data: null, isLoading: false, error: null };
 
 /// Fetch the changed files + CODEOWNERS stake for the selected PR. No-op for
-/// run rows. Re-fetches only when the PR or its head SHA changes; an
-/// in-flight fetch for a previous selection is discarded.
+/// run rows. Re-fetches only when the PR, its head SHA, or its base SHA
+/// changes; an in-flight fetch for a previous selection is discarded.
 export function usePrFiles(item: ActionableItem | null): UsePrFilesResult {
   const key = prFilesKey(item);
   const pr = item?.pr ?? null;
@@ -83,8 +85,8 @@ export function usePrFiles(item: ActionableItem | null): UsePrFilesResult {
     return () => {
       cancelled = true;
     };
-    // `key` already encodes the PR identity + head sha; the coordinates only
-    // change alongside it.
+    // `key` already encodes the PR identity + head/base shas; the coordinates
+    // only change alongside it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
