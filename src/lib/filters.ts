@@ -1,3 +1,4 @@
+import { isCodeOwner } from "@/lib/codeOwnership";
 import type { ActionableItem } from "@/lib/types";
 
 // Session-scoped list filters driven by the sidebar Filters group. All default
@@ -7,12 +8,14 @@ export interface ListFilters {
   failingOnly: boolean;
   pendingOnly: boolean;
   myTeamOnly: boolean;
+  codeOwnerOnly: boolean;
 }
 
 export const EMPTY_LIST_FILTERS: ListFilters = {
   failingOnly: false,
   pendingOnly: false,
   myTeamOnly: false,
+  codeOwnerOnly: false,
 };
 
 // Whether any filter is *effectively* active. `myTeamOnly` only counts when
@@ -23,7 +26,12 @@ export function hasActiveListFilter(
   f: ListFilters,
   teamsConfigured = true,
 ): boolean {
-  return f.failingOnly || f.pendingOnly || (f.myTeamOnly && teamsConfigured);
+  return (
+    f.failingOnly ||
+    f.pendingOnly ||
+    f.codeOwnerOnly ||
+    (f.myTeamOnly && teamsConfigured)
+  );
 }
 
 // An item is "failing" when any of its checks reached a `failure` conclusion.
@@ -70,6 +78,9 @@ export function itemHasPendingChecks(item: ActionableItem): boolean {
 //     toggle is on.
 //   - My team: an item passes only if its PR author is on one of my teams.
 //     Standalone runs (no PR) never match, so they drop out when this is on.
+//   - Code owner: an item passes only if the poller found I own at least one
+//     of its changed files via CODEOWNERS. Ownership is resolved for review
+//     requests only, so In Flight PRs and standalone runs drop out too.
 //
 // `teamsConfigured` guards the My-team axis: with no teams set in Settings,
 // `isAuthorOnMyTeam` is always false, which would strand the whole list — so we
@@ -81,6 +92,10 @@ export function passesListFilters(
   teamsConfigured: boolean,
 ): boolean {
   if (f.myTeamOnly && teamsConfigured && !item.pr?.isAuthorOnMyTeam) {
+    return false;
+  }
+
+  if (f.codeOwnerOnly && !isCodeOwner(item.pr)) {
     return false;
   }
 

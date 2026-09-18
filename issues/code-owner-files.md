@@ -18,6 +18,7 @@ When I open a PR from Beet, show only the changed files I (or one of my teams) o
 - **Caching:** changed files cached per PR + head SHA; parsed CODEOWNERS cached per repo + base SHA for the session (404s carry no ETag, so this avoids re-asking every poll).
 - **Files block (detail pane):** new block under Checks listing changed files with status, +/- stats, and owner pills. Toggle between "My files (n)" and "All files (n)"; the toggle never refetches. A count of files hidden by the filter is always shown. Each row deep-links to that file's diff anchor on GitHub. An "Open my files on GitHub" button opens the Files changed tab with GitHub's owned-by filter applied (`?owned-by[]=<username>`).
 - **Badge:** an "owner" pill on Review Requests rows (main window and tray) and "Code owner · n of m files" in the detail header, computed during polling from the same CODEOWNERS + changed-files data.
+- **Sidebar filter:** a "Code owner only" toggle in the Filters group narrows the live sections to review requests where I own ≥1 changed file. It's its own axis, AND-ed with the others. In Flight PRs and standalone runs drop out while it's on, since ownership is resolved for review requests only.
 - **Mock mode:** fixtures cover all four block states.
 
 ## Behavior
@@ -45,6 +46,7 @@ When I open a PR from Beet, show only the changed files I (or one of my teams) o
 - [ ] The toggle switches views without refetching
 - [ ] The hidden-file count is accurate
 - [ ] Every fallback in the behavior table works as described
+- [ ] "Code owner only" in the sidebar Filters group shows only review requests I own files in, and Clear resets it
 - [ ] "owner" pill appears on main-window and tray review rows and in the detail header only when I own ≥1 changed file
 - [ ] Unit tests cover rule precedence, including a nested-directory case where the last match overrides an earlier one
 - [ ] Unit tests cover team vs. individual owners and repos with no CODEOWNERS file

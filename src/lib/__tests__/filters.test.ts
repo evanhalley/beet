@@ -281,3 +281,55 @@ describe("hasActiveListFilter", () => {
     expect(applyListFilters(items, MY_TEAM, false)).toBe(items);
   });
 });
+
+describe("codeOwnerOnly", () => {
+  const OWNER: ListFilters = { ...EMPTY_LIST_FILTERS, codeOwnerOnly: true };
+  const ownership = (ownedCount: number) => ({
+    ownedCount,
+    totalCount: 9,
+    hasCodeowners: true,
+    teamsResolved: true,
+  });
+
+  test("keeps PRs where I own changed files and drops the rest", () => {
+    const owned = prItem("a", { codeOwnership: ownership(2) });
+    const notOwned = prItem("b", { codeOwnership: ownership(0) });
+    const unknown = prItem("c");
+    expect(passesListFilters(owned, OWNER, false)).toBe(true);
+    expect(passesListFilters(notOwned, OWNER, false)).toBe(false);
+    expect(passesListFilters(unknown, OWNER, false)).toBe(false);
+    expect(passesListFilters(runItem("r"), OWNER, false)).toBe(false);
+  });
+
+  test("counts as active regardless of team configuration", () => {
+    expect(hasActiveListFilter(OWNER, false)).toBe(true);
+    expect(hasActiveListFilter(OWNER, true)).toBe(true);
+  });
+
+  test("is AND-ed with the other axes", () => {
+    const filters: ListFilters = {
+      ...EMPTY_LIST_FILTERS,
+      codeOwnerOnly: true,
+      failingOnly: true,
+    };
+    const ownedFailing = prItem("a", {
+      codeOwnership: ownership(1),
+      checkRuns: [{ name: "t", status: "completed", conclusion: "failure" }],
+    });
+    const ownedGreen = prItem("b", {
+      codeOwnership: ownership(1),
+      checkRuns: [{ name: "t", status: "completed", conclusion: "success" }],
+    });
+    expect(passesListFilters(ownedFailing, filters, true)).toBe(true);
+    expect(passesListFilters(ownedGreen, filters, true)).toBe(false);
+  });
+
+  test("applyListFilters narrows a list to owned PRs", () => {
+    const items = [
+      prItem("a", { codeOwnership: ownership(1) }),
+      prItem("b", { codeOwnership: ownership(0) }),
+      runItem("r"),
+    ];
+    expect(applyListFilters(items, OWNER, false).map((i) => i.id)).toEqual(["a"]);
+  });
+});

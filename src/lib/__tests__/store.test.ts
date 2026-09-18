@@ -76,12 +76,14 @@ describe("app store (client/UI state)", () => {
       failingOnly: true,
       pendingOnly: false,
       myTeamOnly: false,
+      codeOwnerOnly: false,
     });
     useAppStore.getState().toggleListFilter("myTeamOnly");
     expect(useAppStore.getState().listFilters).toEqual({
       failingOnly: true,
       pendingOnly: false,
       myTeamOnly: true,
+      codeOwnerOnly: false,
     });
     useAppStore.getState().toggleListFilter("failingOnly");
     expect(useAppStore.getState().listFilters.failingOnly).toBe(false);
@@ -95,6 +97,7 @@ describe("app store (client/UI state)", () => {
       failingOnly: false,
       pendingOnly: false,
       myTeamOnly: false,
+      codeOwnerOnly: false,
     });
 
     useAppStore.getState().toggleListFilter("myTeamOnly");

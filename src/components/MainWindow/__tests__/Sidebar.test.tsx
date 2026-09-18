@@ -166,6 +166,19 @@ describe("Sidebar", () => {
     expect(useAppStore.getState().listFilters.myTeamOnly).toBe(true);
   });
 
+  test("Code owner only toggles without needing teams configured", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    render(<Sidebar />);
+    const owner = screen.getByRole("button", { name: /Code owner only/ });
+    expect(owner).not.toBeDisabled();
+    expect(owner).toHaveAttribute("aria-pressed", "false");
+
+    await user.click(owner);
+    expect(useAppStore.getState().listFilters.codeOwnerOnly).toBe(true);
+    expect(owner).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
+  });
+
   test("Clear action appears only when a filter is active and resets all", async () => {
     const user = (await import("@testing-library/user-event")).default.setup();
     render(<Sidebar />);
