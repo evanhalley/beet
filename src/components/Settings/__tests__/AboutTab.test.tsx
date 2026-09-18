@@ -55,6 +55,43 @@ describe("AboutTab", () => {
     expect(shellMod.open).toHaveBeenCalledWith("https://beet.sh");
   });
 
+  test("says Beet is open source under the MIT License", () => {
+    render(<AboutTab />);
+    const line = screen.getByText(/Free and open source under the/);
+    expect(line).toHaveTextContent("Free and open source under the MIT License.");
+  });
+
+  test("the MIT License link opens the repo's LICENSE file in the browser", async () => {
+    const user = userEvent.setup();
+    const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
+      open: ReturnType<typeof vi.fn>;
+    };
+    render(<AboutTab />);
+
+    const license = screen.getByRole("link", { name: "MIT License" });
+    expect(license).toHaveAttribute(
+      "href",
+      "https://github.com/evanhalley/beet/blob/main/LICENSE",
+    );
+    await user.click(license);
+    expect(shellMod.open).toHaveBeenCalledWith(
+      "https://github.com/evanhalley/beet/blob/main/LICENSE",
+    );
+  });
+
+  test("the Source on GitHub link opens the repo in the browser", async () => {
+    const user = userEvent.setup();
+    const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
+      open: ReturnType<typeof vi.fn>;
+    };
+    render(<AboutTab />);
+
+    const source = screen.getByRole("link", { name: "Source on GitHub" });
+    expect(source).toHaveAttribute("href", "https://github.com/evanhalley/beet");
+    await user.click(source);
+    expect(shellMod.open).toHaveBeenCalledWith("https://github.com/evanhalley/beet");
+  });
+
   test("check for updates reports up-to-date when versions match", async () => {
     const user = userEvent.setup();
     const { getVersion } = (await import(
