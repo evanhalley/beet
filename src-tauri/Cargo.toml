@@ -36,6 +36,10 @@ regex = "1"
 # so saved patterns from the JS era keep working.
 fancy-regex = "0.14"
 thiserror = "1"
+# CODEOWNERS support: `contents` API bodies are base64; per-file diff anchors
+# on github.com are `diff-<sha256(path)>`.
+base64 = "0.22"
+sha2 = "0.10"
 tauri-plugin-autostart = "2.5.1"
 tauri-plugin-global-shortcut = "2.3.2"
 

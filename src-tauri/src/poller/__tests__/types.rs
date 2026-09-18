@@ -1,4 +1,3 @@
-
 use super::*;
 use serde_json::Value;
 
@@ -40,6 +39,10 @@ fn full_item() -> ActionableItem {
             created_at: "2026-01-01T00:00:00.000Z".into(),
             head_ref: None,
             head_fork_owner: None,
+            head_sha: None,
+            base_ref: None,
+            base_sha: None,
+            code_ownership: None,
             lifecycle: PrLifecycle::MergeQueue,
             merge_queue: Some(ActionableItemMergeQueue {
                 position: None,

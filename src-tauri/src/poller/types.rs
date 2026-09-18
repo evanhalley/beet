@@ -137,6 +137,19 @@ pub struct ActionableItemRun {
     pub completed_at: Option<String>,
 }
 
+/// Summary of the user's CODEOWNERS stake in a PR, computed during polling
+/// so the list rows can show an "owner" badge without a per-row fetch. The
+/// detail pane's Files block fetches the full per-file breakdown on demand.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeOwnership {
+    pub owned_count: usize,
+    pub total_count: usize,
+    pub has_codeowners: bool,
+    /// False when the token lacks `read:org`, so only `@user` rules counted.
+    pub teams_resolved: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionableItemPr {
@@ -163,6 +176,17 @@ pub struct ActionableItemPr {
     /// name doesn't exist upstream.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub head_fork_owner: Option<String>,
+    /// Head / base commit + base branch, so the detail pane's Files block can
+    /// fetch changed files and CODEOWNERS without another `pulls.get`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head_sha: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_sha: Option<String>,
+    /// Present for review requests once ownership resolved this cycle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code_ownership: Option<CodeOwnership>,
     pub lifecycle: PrLifecycle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_queue: Option<ActionableItemMergeQueue>,

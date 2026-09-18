@@ -24,6 +24,7 @@ import { BeetMark } from "./BeetMark";
 import { PollingDot } from "./PollingDot";
 import { Avatar } from "./Avatar";
 import { Pill } from "./Pill";
+import { isCodeOwner } from "@/lib/codeOwnership";
 import { ScoreBar } from "./ScoreBar";
 import { CheckDot, deriveCheckDotState } from "./CheckDot";
 import { Lifecycle } from "./Lifecycle";
@@ -548,6 +549,11 @@ function TrayReviewRow({ item }: { item: ActionableItem }) {
           {pr.isAuthorOnMyTeam && (
             <Pill tone="accent" soft>
               team
+            </Pill>
+          )}
+          {isCodeOwner(pr) && (
+            <Pill tone="accent" soft>
+              owner
             </Pill>
           )}
           {pr.isDraft && (

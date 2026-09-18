@@ -11,14 +11,14 @@ use crate::error::{BeetError, BeetResult};
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::AuthUser;
 use crate::github::prs::{
-    fetch_my_open_prs, fetch_review_requests, FetchMyOpenPrsOptions,
-    FetchReviewRequestsOptions,
+    fetch_my_open_prs, fetch_review_requests, FetchMyOpenPrsOptions, FetchReviewRequestsOptions,
 };
 use crate::github::runs::{
     apply_standalone_allowlist, build_recently_resolved, collapse_runs, dedupe_standalone,
     fetch_runs_for_repos, iso_window_start, record_completed_runs, RunWithRepo,
     RECENTLY_RESOLVED_WINDOW_HOURS,
 };
+use crate::github::session_cache::SessionCache;
 use crate::poller::adaptive::{
     effective_interval, is_on_battery, is_window_hidden, AdaptiveSignals,
 };
@@ -146,7 +146,12 @@ pub fn set_poll_paused(
 /// `storeToken` / `clearToken` on the frontend after the keychain write.
 /// Also wakes the loop for an immediate poll with the new credentials.
 #[tauri::command]
-pub fn notify_token_changed(handle: tauri::State<'_, PollHandle>) -> Result<(), String> {
+pub fn notify_token_changed(
+    handle: tauri::State<'_, PollHandle>,
+    cache: tauri::State<'_, Arc<SessionCache>>,
+) -> Result<(), String> {
+    // Team membership and CODEOWNERS visibility depend on the token.
+    cache.clear();
     let next = handle.token_gen_tx.borrow().wrapping_add(1);
     handle
         .token_gen_tx
@@ -155,7 +160,7 @@ pub fn notify_token_changed(handle: tauri::State<'_, PollHandle>) -> Result<(), 
 }
 
 /// Spawn the poll loop on Tauri's async runtime. Returns immediately.
-pub fn spawn<R: Runtime>(app: AppHandle<R>, db: Arc<Db>) -> PollHandle {
+pub fn spawn<R: Runtime>(app: AppHandle<R>, db: Arc<Db>, cache: Arc<SessionCache>) -> PollHandle {
     let config = PollConfig::load(&app);
     let (config_tx, config_rx) = watch::channel(config);
     let (paused_tx, paused_rx) = watch::channel(false);
@@ -163,7 +168,16 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>, db: Arc<Db>) -> PollHandle {
     let cancel = CancellationToken::new();
     let run_cancel = cancel.clone();
     tauri::async_runtime::spawn(async move {
-        run(app, db, config_rx, paused_rx, token_gen_rx, run_cancel).await;
+        run(
+            app,
+            db,
+            cache,
+            config_rx,
+            paused_rx,
+            token_gen_rx,
+            run_cancel,
+        )
+        .await;
     });
     PollHandle {
         cancel,
@@ -176,6 +190,7 @@ pub fn spawn<R: Runtime>(app: AppHandle<R>, db: Arc<Db>) -> PollHandle {
 async fn run<R: Runtime>(
     app: AppHandle<R>,
     db: Arc<Db>,
+    cache: Arc<SessionCache>,
     mut config_rx: watch::Receiver<PollConfig>,
     mut paused_rx: watch::Receiver<bool>,
     mut token_gen_rx: watch::Receiver<u64>,
@@ -252,7 +267,7 @@ async fn run<R: Runtime>(
         // Capture each cycle's rate-limit signals so the adaptive interval
         // below can stretch backoff appropriately.
         let (rate_limited, retry_after_secs) =
-            match poll_once(&app, &db, &config, token.as_deref()).await {
+            match poll_once(&app, &db, &cache, &config, token.as_deref()).await {
                 Ok(rate_limited) => {
                     emit_status(&app, "ok", None, rate_limited, None);
                     (rate_limited, None)
@@ -314,6 +329,7 @@ async fn run<R: Runtime>(
 async fn poll_once<R: Runtime>(
     app: &AppHandle<R>,
     db: &Db,
+    cache: &SessionCache,
     config: &PollConfig,
     token: Option<&str>,
 ) -> BeetResult<bool> {
@@ -334,7 +350,7 @@ async fn poll_once<R: Runtime>(
     };
 
     let (reviews, mine) = tokio::join!(
-        fetch_review_requests(&client, db, &review_opts),
+        fetch_review_requests(&client, db, cache, &review_opts),
         fetch_my_open_prs(&client, db, &my_opts),
     );
     let reviews = reviews?;
@@ -502,6 +518,10 @@ fn synthesize_resolved_pr_row(
             created_at: resolved_at.to_string(),
             head_ref: None,
             head_fork_owner: None,
+            head_sha: None,
+            base_ref: None,
+            base_sha: None,
+            code_ownership: None,
             lifecycle,
             merge_queue: None,
             task_urls: Vec::new(),
@@ -536,7 +556,7 @@ fn describe_error(err: &BeetError) -> (String, bool, Option<u64>) {
 
 /// The poller needs the authenticated login to build search queries. Token
 /// *validation* (scopes, etc.) stays in the JS auth flow.
-async fn fetch_username(client: &GithubClient, db: &Db) -> BeetResult<String> {
+pub(crate) async fn fetch_username(client: &GithubClient, db: &Db) -> BeetResult<String> {
     let url = client.url("/user");
     let res = client
         .beet_get::<AuthUser>(db, "user:authenticated", &url)

@@ -35,6 +35,17 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          # tauri-plugin-notifications compiles its Swift half into the
+          # crate's *source* dir (~/.cargo/registry/src/**/macos/.build) and
+          # bundles that static lib into its rlib. rust-cache drops
+          # registry/src by default, so a partial restore after a lockfile
+          # change (which recompiles the plugin but reuses its cached
+          # build-script output) fails with "could not find native static
+          # library". Keep the extracted sources alongside the build.
+          cache-directories: ~/.cargo/registry/src
+          # Bumped once so caches built before registry/src was kept are
+          # not restored.
+          prefix-key: v1-rust
 
       - run: npm ci
 

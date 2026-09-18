@@ -82,6 +82,43 @@ export interface ActionableItemRun {
   completedAt: string | null;
 }
 
+// Compact CODEOWNERS summary carried on review-request items so the list rows
+// can show the "owner" badge without a per-row fetch.
+export interface CodeOwnership {
+  ownedCount: number;
+  totalCount: number;
+  hasCodeowners: boolean;
+  // False when the token lacks read:org, so only @user rules were matched.
+  teamsResolved: boolean;
+}
+
+// One changed file in a PR, from the `fetch_pr_files_command` Tauri command.
+export interface PrChangedFile {
+  path: string;
+  previousPath?: string;
+  status: string; // "added" | "modified" | "removed" | "renamed" | "copied" | ...
+  additions: number;
+  deletions: number;
+  // Owner tokens from the winning CODEOWNERS rule, as written (@user, @org/team).
+  owners: string[];
+  ownedByMe: boolean;
+  // `diff-<sha256(path)>` — the URL fragment github.com uses on the Files tab.
+  anchor: string;
+}
+
+// Full Files-block payload for one PR.
+export interface PrFilesResult {
+  files: PrChangedFile[];
+  hasCodeowners: boolean;
+  codeownersPath?: string;
+  teamsResolved: boolean;
+  ownedCount: number;
+  totalCount: number;
+  truncated: boolean;
+  // Authenticated login, for GitHub's owned-by deep link.
+  username: string;
+}
+
 export interface ActionableItemPr {
   number: number;
   author: string;
@@ -101,6 +138,12 @@ export interface ActionableItemPr {
   headRef?: string;
   /** Owner of the fork the head branch lives in; absent for same-repo PRs. */
   headForkOwner?: string;
+  /** Head / base commit + base branch, for the detail pane's Files block. */
+  headSha?: string;
+  baseRef?: string;
+  baseSha?: string;
+  /** CODEOWNERS stake, resolved during polling for review requests only. */
+  codeOwnership?: CodeOwnership;
   lifecycle: PrLifecycle;
   mergeQueue?: ActionableItemMergeQueue;
   taskUrls: string[];

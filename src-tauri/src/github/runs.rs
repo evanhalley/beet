@@ -183,7 +183,7 @@ pub async fn fetch_run_jobs(
 /// segments; rejecting anything else here keeps a misbehaving renderer or
 /// malicious markdown-injected `invoke` from sneaking `..` / slashes into the
 /// path and reaching unrelated endpoints under the user's PAT.
-fn is_valid_path_segment(s: &str) -> bool {
+pub(crate) fn is_valid_path_segment(s: &str) -> bool {
     !s.is_empty()
         && s.len() <= 100
         && s.chars()

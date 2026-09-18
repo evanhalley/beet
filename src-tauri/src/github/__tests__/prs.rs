@@ -1,7 +1,7 @@
-
 use super::*;
 use crate::github::models::{GitRef, UserRef};
 use crate::store::db::open_in_memory;
+use base64::Engine;
 use std::sync::Mutex;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
@@ -68,7 +68,10 @@ async fn fetch_review_requests_assembles_and_scores_end_to_end() {
         task_regex: String::new(),
     };
 
-    let outcome = fetch_review_requests(&client, &db, &opts).await.unwrap();
+    let cache = crate::github::session_cache::SessionCache::default();
+    let outcome = fetch_review_requests(&client, &db, &cache, &opts)
+        .await
+        .unwrap();
     assert_eq!(outcome.items.len(), 1);
     let item = &outcome.items[0];
     assert_eq!(item.id, "pr:foo/bar#1");
@@ -211,7 +214,8 @@ async fn per_pr_rate_limit_propagates_instead_of_silently_dropping() {
         penalized_bots: vec![],
         task_regex: String::new(),
     };
-    let res = fetch_review_requests(&client, &db, &opts).await;
+    let cache = crate::github::session_cache::SessionCache::default();
+    let res = fetch_review_requests(&client, &db, &cache, &opts).await;
     assert!(matches!(
         res,
         Err(crate::error::BeetError::RateLimited {
@@ -236,6 +240,7 @@ fn pull(state: &str, merged: bool) -> PullDetail {
             label: None,
             repo: None,
         },
+        base: None,
         draft: false,
         additions: 0,
         deletions: 0,
@@ -501,4 +506,154 @@ fn head_fork_owner_falls_back_to_label_when_the_fork_was_deleted() {
         None
     );
     assert_eq!(head_fork_owner(&head(None, None), "foo", "bar"), None);
+}
+
+// ---------- code ownership during polling ----------
+
+async fn mount_review_request_pr(server: &MockServer, num: i64) {
+    let now = chrono::Utc::now().to_rfc3339();
+    Mock::given(method("GET"))
+        .and(path("/search/issues"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "items": [{
+                "number": num,
+                "html_url": format!("https://github.com/foo/bar/pull/{num}"),
+                "url": format!("https://api.github.com/repos/foo/bar/issues/{num}"),
+            }]
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path(format!("/repos/foo/bar/pulls/{num}")))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "title": "Owned", "body": null,
+            "html_url": format!("https://github.com/foo/bar/pull/{num}"),
+            "state": "open",
+            "user": { "login": "octocat" },
+            "requested_reviewers": [{ "login": "me" }],
+            "head": { "sha": "head1", "ref": "feat" },
+            "base": { "sha": "base1", "ref": "main" },
+            "additions": 1, "deletions": 1,
+            "created_at": now, "updated_at": now,
+        })))
+        .mount(server)
+        .await;
+    for p in [
+        format!("/repos/foo/bar/issues/{num}/comments"),
+        format!("/repos/foo/bar/pulls/{num}/reviews"),
+    ] {
+        Mock::given(method("GET"))
+            .and(path(p))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+            .mount(server)
+            .await;
+    }
+    Mock::given(method("GET"))
+        .and(path("/repos/foo/bar/commits/head1/check-runs"))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(serde_json::json!({ "check_runs": [] })),
+        )
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/foo/bar/contents/.github/CODEOWNERS"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "content": base64::engine::general_purpose::STANDARD.encode("/src/ @acme/core\n"),
+            "encoding": "base64",
+        })))
+        .mount(server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/user/teams"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "slug": "core", "organization": { "login": "acme" } }
+        ])))
+        .mount(server)
+        .await;
+}
+
+fn review_opts() -> FetchReviewRequestsOptions {
+    FetchReviewRequestsOptions {
+        username: "me".to_string(),
+        teams: vec![],
+        penalized_bots: vec![],
+        task_regex: String::new(),
+    }
+}
+
+#[tokio::test]
+async fn review_requests_carry_code_ownership_and_base_refs() {
+    let server = MockServer::start().await;
+    mount_review_request_pr(&server, 3).await;
+    Mock::given(method("GET"))
+        .and(path("/repos/foo/bar/pulls/3/files"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+            { "filename": "src/a.rs", "status": "modified" },
+            { "filename": "README.md", "status": "modified" },
+        ])))
+        .mount(&server)
+        .await;
+
+    let db: Db = Mutex::new(open_in_memory().unwrap());
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = crate::github::session_cache::SessionCache::default();
+    let outcome = fetch_review_requests(&client, &db, &cache, &review_opts())
+        .await
+        .unwrap();
+    let pr = outcome.items[0].pr.as_ref().unwrap();
+
+    assert_eq!(pr.head_sha.as_deref(), Some("head1"));
+    assert_eq!(pr.base_ref.as_deref(), Some("main"));
+    assert_eq!(pr.base_sha.as_deref(), Some("base1"));
+    assert_eq!(
+        pr.code_ownership,
+        Some(crate::poller::types::CodeOwnership {
+            owned_count: 1,
+            total_count: 2,
+            has_codeowners: true,
+            teams_resolved: true,
+        })
+    );
+}
+
+#[tokio::test]
+async fn review_request_survives_a_non_critical_files_failure() {
+    let server = MockServer::start().await;
+    mount_review_request_pr(&server, 4).await;
+    Mock::given(method("GET"))
+        .and(path("/repos/foo/bar/pulls/4/files"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+
+    let db: Db = Mutex::new(open_in_memory().unwrap());
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = crate::github::session_cache::SessionCache::default();
+    let outcome = fetch_review_requests(&client, &db, &cache, &review_opts())
+        .await
+        .unwrap();
+    assert_eq!(outcome.items.len(), 1);
+    assert_eq!(outcome.items[0].pr.as_ref().unwrap().code_ownership, None);
+}
+
+#[tokio::test]
+async fn review_request_files_rate_limit_aborts_the_cycle() {
+    let server = MockServer::start().await;
+    mount_review_request_pr(&server, 5).await;
+    Mock::given(method("GET"))
+        .and(path("/repos/foo/bar/pulls/5/files"))
+        .respond_with(ResponseTemplate::new(429).insert_header("retry-after", "7"))
+        .mount(&server)
+        .await;
+
+    let db: Db = Mutex::new(open_in_memory().unwrap());
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let cache = crate::github::session_cache::SessionCache::default();
+    let res = fetch_review_requests(&client, &db, &cache, &review_opts()).await;
+    assert!(matches!(
+        res,
+        Err(crate::error::BeetError::RateLimited {
+            retry_after_secs: Some(7)
+        })
+    ));
 }

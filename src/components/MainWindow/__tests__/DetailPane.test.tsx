@@ -17,6 +17,12 @@ vi.mock("@/hooks/useRunJobs", () => ({
   useRunJobs: () => ({ jobs: [], isLoading: false, error: null }),
 }));
 
+// The Files block has its own tests; keep it inert here.
+vi.mock("@/hooks/usePrFiles", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/usePrFiles")>()),
+  usePrFiles: () => ({ data: null, isLoading: true, error: null }),
+}));
+
 async function setupClipboard() {
   const userEvent = (await import("@testing-library/user-event")).default;
   const user = userEvent.setup();
@@ -291,5 +297,36 @@ describe("DetailPane", () => {
     expect(shellMod.open).toHaveBeenCalledWith(
       "https://github.com/acme/repo/pull/42",
     );
+  });
+});
+
+describe("DetailPane code ownership", () => {
+  test("shows the owner pill with counts in the header", () => {
+    const item: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        codeOwnership: { ownedCount: 3, totalCount: 12, hasCodeowners: true, teamsResolved: true },
+      },
+    };
+    render(<DetailPane item={item} />);
+    expect(screen.getByText("Code owner · 3 of 12 files")).toBeInTheDocument();
+  });
+
+  test("omits the pill when nothing is owned", () => {
+    const item: ActionableItem = {
+      ...pr,
+      pr: {
+        ...pr.pr!,
+        codeOwnership: { ownedCount: 0, totalCount: 12, hasCodeowners: true, teamsResolved: true },
+      },
+    };
+    render(<DetailPane item={item} />);
+    expect(screen.queryByText(/Code owner/)).not.toBeInTheDocument();
+  });
+
+  test("renders a Files block for PR items", () => {
+    render(<DetailPane item={pr} />);
+    expect(screen.getByRole("region", { name: "Files" })).toBeInTheDocument();
   });
 });

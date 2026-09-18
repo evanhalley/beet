@@ -10,6 +10,7 @@ import {
   Pin,
   Rocket,
   Settings as Cog,
+  UserCheck,
   VolumeX,
   X,
 } from "lucide-react";
@@ -603,6 +604,14 @@ export function Sidebar({
               : "Add teams in Settings → Account to use this filter"
           }
           onClick={() => toggleListFilter("myTeamOnly")}
+        />
+        <SidebarItem
+          icon={<UserCheck size={12} style={{ color: "var(--color-accent)" }} />}
+          label="Code owner only"
+          title="Review requests where you own at least one changed file (CODEOWNERS)"
+          active={listFilters.codeOwnerOnly}
+          collapsed={collapsed}
+          onClick={() => toggleListFilter("codeOwnerOnly")}
         />
       </SidebarGroup>
 

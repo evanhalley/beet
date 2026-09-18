@@ -58,6 +58,9 @@ pub struct PullDetail {
     #[serde(default)]
     pub requested_reviewers: Option<Vec<UserRef>>,
     pub head: GitRef,
+    /// Optional so fixtures/partial responses without `base` still parse.
+    #[serde(default)]
+    pub base: Option<GitRef>,
     #[serde(default)]
     pub draft: bool,
     pub additions: i64,
@@ -102,6 +105,43 @@ pub struct CheckRunsResult {
 pub struct TeamMember {
     #[serde(default)]
     pub login: Option<String>,
+}
+
+/// One row of `GET /repos/{o}/{r}/pulls/{n}/files`. `patch` is deliberately
+/// not declared: Beet never renders diffs, and the bodies are large.
+#[derive(Debug, Clone, Deserialize)]
+pub struct PullFileRow {
+    pub filename: String,
+    pub status: String,
+    #[serde(default)]
+    pub additions: i64,
+    #[serde(default)]
+    pub deletions: i64,
+    #[serde(default)]
+    pub previous_filename: Option<String>,
+}
+
+/// One row of `GET /user/teams`. Only the slug and owning org are needed to
+/// build the `org/slug` keys CODEOWNERS uses.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserTeamRow {
+    pub slug: String,
+    #[serde(default)]
+    pub organization: Option<OrgRef>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct OrgRef {
+    pub login: String,
+}
+
+/// `GET /repos/{o}/{r}/contents/{path}` for a file: body is base64.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ContentsFile {
+    #[serde(default)]
+    pub content: String,
+    #[serde(default)]
+    pub encoding: String,
 }
 
 /// `GET /user` — the poller needs the authenticated login to build search

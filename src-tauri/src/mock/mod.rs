@@ -27,10 +27,11 @@
 //! Authors are teammates; `evan` is "me".
 
 use crate::github::client::RateLimitInfo;
+use crate::github::pr_files::{diff_anchor, PrChangedFile, PrFilesResult};
 use crate::github::runs::WorkflowJobSummary;
 use crate::poller::types::{
     ActionableItem, ActionableItemMergeQueue, ActionableItemPr, ActionableItemRun, ActionableKind,
-    AssociatedRun, CheckRunSummary, EjectedCheck, PrLifecycle, ReviewerEntry,
+    AssociatedRun, CheckRunSummary, CodeOwnership, EjectedCheck, PrLifecycle, ReviewerEntry,
 };
 use chrono::SecondsFormat;
 
@@ -109,6 +110,10 @@ fn default_pr(number: i64, author: &str) -> ActionableItemPr {
         created_at: ago_days(2),
         head_ref: Some(format!("{author}/mock-{number}")),
         head_fork_owner: None,
+        head_sha: None,
+        base_ref: None,
+        base_sha: None,
+        code_ownership: None,
         lifecycle: PrLifecycle::InReview,
         merge_queue: None,
         task_urls: Vec::new(),
@@ -552,7 +557,7 @@ pub fn mock_payload() -> MockLists {
     ];
 
     MockLists {
-        review_requests,
+        review_requests: with_code_ownership(review_requests),
         in_flight,
         standalone_runs,
         recently_resolved,
@@ -561,6 +566,129 @@ pub fn mock_payload() -> MockLists {
             limit: 5000,
             reset: (chrono::Utc::now() + chrono::Duration::minutes(42)).timestamp(),
         }),
+    }
+}
+
+/// Stamp each review request with the ownership summary that matches its
+/// `mock_pr_files` scenario, so the "owner" badge and the Files block agree.
+fn with_code_ownership(items: Vec<ActionableItem>) -> Vec<ActionableItem> {
+    items
+        .into_iter()
+        .map(|mut item| {
+            if let Some(pr) = item.pr.as_mut() {
+                pr.code_ownership = Some(CodeOwnership::from(&mock_pr_files(pr.number)));
+            }
+            item
+        })
+        .collect()
+}
+
+/// Canned changed-files payload for the DetailPane's Files block in mock
+/// mode. The scenario cycles on `number % 4` so the demo shows every state:
+/// 0 = owned files via team + individual rules, 1 = CODEOWNERS present but
+/// nothing owned, 2 = no CODEOWNERS, 3 = teams unresolved (no `read:org`).
+pub fn mock_pr_files(number: i64) -> PrFilesResult {
+    let scenario = number.rem_euclid(4);
+    let team = "@thecypher/web-core";
+    let me = format!("@{ME}");
+    let has_codeowners = scenario != 2;
+    let teams_resolved = scenario != 3;
+
+    // (path, previous, status, +, -, owners)
+    type Row = (
+        &'static str,
+        Option<&'static str>,
+        &'static str,
+        i64,
+        i64,
+        Vec<String>,
+    );
+    let rows: Vec<Row> = vec![
+        (
+            "app/(site)/tags/[slug]/page.tsx",
+            None,
+            "added",
+            142,
+            0,
+            vec![team.into()],
+        ),
+        (
+            "app/(site)/tags/[slug]/loading.tsx",
+            None,
+            "added",
+            18,
+            0,
+            vec![team.into()],
+        ),
+        (
+            "components/ArticleRail.tsx",
+            Some("components/RelatedRail.tsx"),
+            "renamed",
+            22,
+            9,
+            vec![team.into()],
+        ),
+        ("lib/tags.ts", None, "modified", 31, 4, vec![me.clone()]),
+        ("lib/legacy/tagIndex.ts", None, "removed", 0, 87, vec![]),
+        (
+            "packages/cms-client/src/tags.ts",
+            None,
+            "modified",
+            12,
+            3,
+            vec!["@thecypher/cms".into()],
+        ),
+        (
+            "packages/design-system/src/Rail.tsx",
+            None,
+            "modified",
+            40,
+            11,
+            vec!["@thecypher/design".into()],
+        ),
+        ("docs/tags.md", None, "added", 55, 0, vec!["@maya-r".into()]),
+        (
+            "package.json",
+            None,
+            "modified",
+            1,
+            1,
+            vec!["@thecypher/infra".into()],
+        ),
+    ];
+
+    let files: Vec<PrChangedFile> = rows
+        .into_iter()
+        .map(|(path, prev, status, add, del, owners)| {
+            let owners = if has_codeowners { owners } else { Vec::new() };
+            let owned_by_me = has_codeowners
+                && match scenario {
+                    0 => owners.iter().any(|o| o == team || *o == me),
+                    3 => owners.contains(&me),
+                    _ => false,
+                };
+            PrChangedFile {
+                path: path.to_string(),
+                previous_path: prev.map(|p| p.to_string()),
+                status: status.to_string(),
+                additions: add,
+                deletions: del,
+                owners,
+                owned_by_me,
+                anchor: diff_anchor(path),
+            }
+        })
+        .collect();
+    let owned_count = files.iter().filter(|f| f.owned_by_me).count();
+    PrFilesResult {
+        owned_count,
+        total_count: files.len(),
+        files,
+        has_codeowners,
+        codeowners_path: has_codeowners.then(|| ".github/CODEOWNERS".to_string()),
+        teams_resolved,
+        truncated: false,
+        username: ME.to_string(),
     }
 }
 

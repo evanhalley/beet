@@ -141,3 +141,24 @@ describe("ActionableRow branch", () => {
     expect(firstLine()).toHaveStyle({ paddingRight: `${rowActionsReserve(2)}px` });
   });
 });
+
+describe("ActionableRow code-owner badge", () => {
+  const owned = { ownedCount: 3, totalCount: 12, hasCodeowners: true, teamsResolved: true };
+
+  test("shows 'owner' on review rows when I own changed files", () => {
+    const item = prItem("pr:acme/repo#42");
+    item.pr!.codeOwnership = owned;
+    render(<ActionableRow item={item} variant="review" />);
+    expect(screen.getByText("owner")).toBeInTheDocument();
+  });
+
+  test("hides it when nothing is owned or ownership is unknown", () => {
+    const none = prItem("pr:acme/repo#42");
+    none.pr!.codeOwnership = { ...owned, ownedCount: 0 };
+    const { unmount } = render(<ActionableRow item={none} variant="review" />);
+    expect(screen.queryByText("owner")).not.toBeInTheDocument();
+    unmount();
+    render(<ActionableRow item={prItem("pr:acme/repo#43")} variant="review" />);
+    expect(screen.queryByText("owner")).not.toBeInTheDocument();
+  });
+});
