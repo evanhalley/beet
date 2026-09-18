@@ -1,10 +1,31 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { BeetMark } from "@/components/BeetMark";
 import { useAppVersion } from "@/hooks/useAppVersion";
 import { openInBrowser } from "@/lib/openInBrowser";
 import { checkForUpdate, type UpdateCheckResult } from "@/lib/updateCheck";
+
+const REPO_URL = "https://github.com/evanhalley/beet";
+const LICENSE_URL = `${REPO_URL}/blob/main/LICENSE`;
+const SITE_URL = "https://beet.sh";
+
+// An in-app link that opens in the default browser rather than navigating
+// the webview.
+function BrowserLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      style={{ color: "var(--color-accent)" }}
+      onClick={(e) => {
+        e.preventDefault();
+        void openInBrowser(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
 
 type UpdateState =
   | { phase: "idle" }
@@ -50,6 +71,10 @@ export function AboutTab() {
         >
           A glanceable GitHub dashboard.
         </span>
+        <span style={{ fontSize: 12.5, color: "var(--color-text-faint)" }}>
+          Free and open source under the{" "}
+          <BrowserLink href={LICENSE_URL}>MIT License</BrowserLink>.
+        </span>
       </div>
 
       {version && (
@@ -93,16 +118,14 @@ export function AboutTab() {
         </div>
       )}
 
-      <a
-        href="https://beet.sh"
-        style={{ fontSize: 12.5, color: "var(--color-accent)" }}
-        onClick={(e) => {
-          e.preventDefault();
-          void openInBrowser("https://beet.sh");
-        }}
+      <div
+        className="flex items-center gap-2"
+        style={{ fontSize: 12.5, color: "var(--color-text-faint)" }}
       >
-        beet.sh
-      </a>
+        <BrowserLink href={SITE_URL}>beet.sh</BrowserLink>
+        <span aria-hidden>·</span>
+        <BrowserLink href={REPO_URL}>github.com/evanhalley/beet</BrowserLink>
+      </div>
     </div>
   );
 }
