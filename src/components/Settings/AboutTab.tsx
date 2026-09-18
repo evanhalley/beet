@@ -124,7 +124,7 @@ export function AboutTab() {
       >
         <BrowserLink href={SITE_URL}>beet.sh</BrowserLink>
         <span aria-hidden>·</span>
-        <BrowserLink href={REPO_URL}>Source on GitHub</BrowserLink>
+        <BrowserLink href={REPO_URL}>github.com/evanhalley/beet</BrowserLink>
       </div>
     </div>
   );

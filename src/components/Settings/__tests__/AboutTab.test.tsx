@@ -79,14 +79,14 @@ describe("AboutTab", () => {
     );
   });
 
-  test("the Source on GitHub link opens the repo in the browser", async () => {
+  test("the github.com/evanhalley/beet link opens the repo in the browser", async () => {
     const user = userEvent.setup();
     const shellMod = (await import("@tauri-apps/plugin-shell")) as unknown as {
       open: ReturnType<typeof vi.fn>;
     };
     render(<AboutTab />);
 
-    const source = screen.getByRole("link", { name: "Source on GitHub" });
+    const source = screen.getByRole("link", { name: "github.com/evanhalley/beet" });
     expect(source).toHaveAttribute("href", "https://github.com/evanhalley/beet");
     await user.click(source);
     expect(shellMod.open).toHaveBeenCalledWith("https://github.com/evanhalley/beet");
