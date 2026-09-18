@@ -31,9 +31,11 @@ jobs:
           exit 1
 
       - uses: actions/checkout@v4
-        # Need write access to push the version bump commit back to main.
+        # Push the version bump commit back to main over SSH with a write
+        # deploy key. main's ruleset requires PRs; deploy keys are on its
+        # bypass list, GITHUB_TOKEN is not.
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
           ref: main
 
       # ── Bump version from tauri.conf.json ─────────────────────────────
