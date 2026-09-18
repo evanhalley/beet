@@ -18,6 +18,7 @@ function buildHaystack(item: ActionableItem): string {
   const parts: string[] = [item.title, item.repoFullName];
   if (item.pr) {
     parts.push(String(item.pr.number), `#${item.pr.number}`, item.pr.author);
+    if (item.pr.headRef) parts.push(item.pr.headRef);
     for (const url of item.pr.taskUrls) {
       const id = taskIdFromUrl(url);
       if (id) parts.push(id);

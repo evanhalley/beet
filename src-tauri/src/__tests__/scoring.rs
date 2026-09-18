@@ -29,6 +29,8 @@ fn make_item(id: &str, now: DateTime<Utc>) -> ActionableItem {
             additions: 10,
             deletions: 10,
             created_at: now_iso,
+            head_ref: None,
+            head_fork_owner: None,
             lifecycle: PrLifecycle::Open,
             merge_queue: None,
             task_urls: vec![],

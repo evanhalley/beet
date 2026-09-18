@@ -9,7 +9,7 @@ use crate::error::BeetResult;
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::merge_queue::enqueue_pr;
 use crate::github::models::{
-    CheckRunsResult, CommentRow, PullDetail, ReviewRow, SearchResult, UserRef,
+    CheckRunsResult, CommentRow, GitRef, PullDetail, ReviewRow, SearchResult, UserRef,
 };
 use crate::github::teams::resolve_team_members;
 use crate::poller::types::{
@@ -482,6 +482,21 @@ async fn fetch_pr_triple(
     Ok((detail.body, comments.body, reviews.body, rate_limit))
 }
 
+/// Owner of the fork a PR's head branch lives in, or `None` when the branch is
+/// in the base repo `{owner}/{repo}`. Prefers `head.repo.full_name`; falls back
+/// to the `owner:branch` label when the fork was deleted (`repo` is null).
+pub(crate) fn head_fork_owner(head: &GitRef, owner: &str, repo: &str) -> Option<String> {
+    match &head.repo {
+        Some(r) if r.full_name.eq_ignore_ascii_case(&format!("{owner}/{repo}")) => None,
+        Some(r) => r.full_name.split('/').next().map(str::to_string),
+        None => {
+            let label_owner = head.label.as_deref()?.split(':').next()?;
+            (!label_owner.is_empty() && !label_owner.eq_ignore_ascii_case(owner))
+                .then(|| label_owner.to_string())
+        }
+    }
+}
+
 async fn assemble_review_item(
     client: &GithubClient,
     db: &Db,
@@ -557,6 +572,8 @@ async fn assemble_review_item(
             additions: pull.additions,
             deletions: pull.deletions,
             created_at: pull.created_at.clone(),
+            head_ref: pull.head.git_ref.clone(),
+            head_fork_owner: head_fork_owner(&pull.head, &owner, &repo),
             lifecycle,
             merge_queue: None,
             task_urls,
@@ -671,6 +688,8 @@ async fn assemble_my_pr_item(
             additions: pull.additions,
             deletions: pull.deletions,
             created_at: pull.created_at.clone(),
+            head_ref: pull.head.git_ref.clone(),
+            head_fork_owner: head_fork_owner(&pull.head, &owner, &repo),
             lifecycle,
             merge_queue,
             task_urls,

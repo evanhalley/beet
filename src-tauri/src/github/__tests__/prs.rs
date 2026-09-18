@@ -33,7 +33,12 @@ async fn fetch_review_requests_assembles_and_scores_end_to_end() {
             "state": "open",
             "user": { "login": "octocat" },
             "requested_reviewers": [{ "login": "me" }],
-            "head": { "sha": "deadbeef" },
+            "head": {
+                "sha": "deadbeef",
+                "ref": "feat/widget",
+                "label": "foo:feat/widget",
+                "repo": { "full_name": "foo/bar" }
+            },
             "additions": 10,
             "deletions": 5,
             "created_at": now,
@@ -72,6 +77,8 @@ async fn fetch_review_requests_assembles_and_scores_end_to_end() {
     assert!(pr.is_review_requested_from_me);
     assert_eq!(pr.score, 3);
     assert_eq!(pr.lifecycle, PrLifecycle::InReview);
+    assert_eq!(pr.head_ref.as_deref(), Some("feat/widget"));
+    assert_eq!(pr.head_fork_owner, None);
 }
 
 #[tokio::test]
@@ -149,6 +156,8 @@ async fn fetch_my_open_prs_detects_merge_queue_ejection() {
     };
     let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
     assert_eq!(outcome.items.len(), 1);
+    // Fixture's `head` has no `ref` — still parses, branch is simply absent.
+    assert_eq!(outcome.items[0].pr.as_ref().unwrap().head_ref, None);
     let mq = outcome.items[0]
         .pr
         .as_ref()
@@ -455,7 +464,12 @@ fn pull(state: &str, merged: bool) -> PullDetail {
         auto_merge: None,
         user: Some(UserRef { login: "a".into() }),
         requested_reviewers: None,
-        head: GitRef { sha: "sha".into() },
+        head: GitRef {
+            sha: "sha".into(),
+            git_ref: None,
+            label: None,
+            repo: None,
+        },
         draft: false,
         additions: 0,
         deletions: 0,
@@ -682,4 +696,46 @@ fn count_distinct_approvers_uses_latest_state_per_user() {
         ("carol", "COMMENTED"),
     ]);
     assert_eq!(count_distinct_approvers(&reviews), 2);
+}
+
+fn head(label: Option<&str>, repo: Option<&str>) -> GitRef {
+    GitRef {
+        sha: "sha".into(),
+        git_ref: Some("main".into()),
+        label: label.map(Into::into),
+        repo: repo.map(|full_name| crate::github::models::RepoRef {
+            full_name: full_name.into(),
+        }),
+    }
+}
+
+#[test]
+fn head_fork_owner_is_none_for_same_repo_branches() {
+    let h = head(Some("foo:main"), Some("Foo/Bar"));
+    assert_eq!(head_fork_owner(&h, "foo", "bar"), None);
+}
+
+#[test]
+fn head_fork_owner_names_the_fork_owner() {
+    let h = head(Some("alice:main"), Some("alice/bar"));
+    assert_eq!(head_fork_owner(&h, "foo", "bar").as_deref(), Some("alice"));
+}
+
+#[test]
+fn head_fork_owner_flags_same_owner_forks_with_a_different_repo_name() {
+    let h = head(Some("foo:main"), Some("foo/bar-fork"));
+    assert_eq!(head_fork_owner(&h, "foo", "bar").as_deref(), Some("foo"));
+}
+
+#[test]
+fn head_fork_owner_falls_back_to_label_when_the_fork_was_deleted() {
+    assert_eq!(
+        head_fork_owner(&head(Some("alice:patch-1"), None), "foo", "bar").as_deref(),
+        Some("alice")
+    );
+    assert_eq!(
+        head_fork_owner(&head(Some("foo:patch-1"), None), "foo", "bar"),
+        None
+    );
+    assert_eq!(head_fork_owner(&head(None, None), "foo", "bar"), None);
 }

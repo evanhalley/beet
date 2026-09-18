@@ -38,6 +38,8 @@ fn full_item() -> ActionableItem {
             additions: 1,
             deletions: 2,
             created_at: "2026-01-01T00:00:00.000Z".into(),
+            head_ref: None,
+            head_fork_owner: None,
             lifecycle: PrLifecycle::MergeQueue,
             merge_queue: Some(ActionableItemMergeQueue {
                 position: None,

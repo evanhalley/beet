@@ -25,6 +25,21 @@ pub struct SearchResult {
 #[derive(Debug, Clone, Deserialize)]
 pub struct GitRef {
     pub sha: String,
+    /// Branch name (`head.ref` on a pull). Optional so fixtures and partial
+    /// responses that only carry `sha` still deserialize.
+    #[serde(default, rename = "ref")]
+    pub git_ref: Option<String>,
+    /// `owner:branch` — survives a deleted fork, unlike `repo`.
+    #[serde(default)]
+    pub label: Option<String>,
+    /// Repo the branch lives in. `null` when a fork has been deleted.
+    #[serde(default)]
+    pub repo: Option<RepoRef>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RepoRef {
+    pub full_name: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]

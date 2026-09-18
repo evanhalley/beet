@@ -17,6 +17,7 @@ import {
   isReviewRequestVisible,
   selectShowAllReviews,
 } from "@/lib/store";
+import { prBranchTarget } from "@/lib/branch";
 import { openInBrowser } from "@/lib/openInBrowser";
 import type { ActionableItem } from "@/lib/types";
 import { BeetMark } from "./BeetMark";
@@ -27,6 +28,7 @@ import { ScoreBar } from "./ScoreBar";
 import { CheckDot, deriveCheckDotState } from "./CheckDot";
 import { Lifecycle } from "./Lifecycle";
 import { TaskChips } from "./TaskChips";
+import { BranchWithCopy } from "./CopyBranchButton";
 import dayjs from "@/lib/dayjs";
 
 interface SectionCollapse {
@@ -542,6 +544,7 @@ function TrayReviewRow({ item }: { item: ActionableItem }) {
           >
             #{pr.number}
           </span>
+          <BranchWithCopy target={prBranchTarget(pr)} />
           {pr.isAuthorOnMyTeam && (
             <Pill tone="accent" soft>
               team
@@ -609,6 +612,7 @@ function TrayInflightRow({ item }: { item: ActionableItem }) {
           >
             #{pr.number}
           </span>
+          <BranchWithCopy target={prBranchTarget(pr)} />
           <Lifecycle
             state={pr.lifecycle}
             mqPos={pr.mergeQueue?.position}
@@ -688,6 +692,7 @@ function TrayRunRow({ item }: { item: ActionableItem }) {
           >
             #{run.runNumber}
           </span>
+          <BranchWithCopy target={run.branch ? { branch: run.branch } : null} />
         </div>
         <div className="mono" style={{ color: "var(--color-text)" }}>
           {run.workflowName}

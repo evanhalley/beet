@@ -509,6 +509,8 @@ fn synthesize_resolved_pr_row(
             additions: 0,
             deletions: 0,
             created_at: resolved_at.to_string(),
+            head_ref: None,
+            head_fork_owner: None,
             lifecycle,
             merge_queue: None,
             task_urls: Vec::new(),

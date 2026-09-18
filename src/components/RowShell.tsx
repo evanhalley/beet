@@ -24,6 +24,23 @@ export interface RowShellProps {
   dimmed?: boolean;
 }
 
+const ACTION_SIZE = 22;
+const ACTION_GAP = 4;
+const ACTIONS_RIGHT = 12;
+const ROW_PAD_RIGHT = 16;
+const GRID_GAP = 10;
+
+/**
+ * Right padding a row's first line needs so `count` overlaid action buttons
+ * don't cover it. Assumes an empty aside column (worst case); a wider aside
+ * just leaves a little slack.
+ */
+export function rowActionsReserve(count: number): number {
+  if (count <= 0) return 0;
+  const overlay = ACTIONS_RIGHT + count * ACTION_SIZE + (count - 1) * ACTION_GAP;
+  return Math.max(0, overlay - ROW_PAD_RIGHT - GRID_GAP + ACTION_GAP);
+}
+
 export function RowShell({
   ariaLabel,
   unread,
@@ -49,7 +66,7 @@ export function RowShell({
           width: "100%",
           display: "grid",
           gridTemplateColumns: "auto 1fr auto",
-          gap: 10,
+          gap: GRID_GAP,
           alignItems: "center",
           padding: active
             ? "var(--row-pad-y, 10px) 16px var(--row-pad-y, 10px) 14px"
@@ -90,9 +107,9 @@ export function RowShell({
           style={{
             position: "absolute",
             top: 6,
-            right: 12,
+            right: ACTIONS_RIGHT,
             display: "flex",
-            gap: 4,
+            gap: ACTION_GAP,
           }}
         >
           {actions}

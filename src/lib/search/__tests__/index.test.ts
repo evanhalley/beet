@@ -59,6 +59,14 @@ describe("matchItems", () => {
     expect(matchItems("rate", items).map((i) => i.id)).toEqual(["b"]);
   });
 
+  test("matches on the PR head branch name", () => {
+    const items = [
+      makeItem({ id: "a", pr: { headRef: "feat/oidc-login" } }),
+      makeItem({ id: "b", pr: { headRef: "fix/typo" } }),
+    ];
+    expect(matchItems("oidc", items).map((i) => i.id)).toEqual(["a"]);
+  });
+
   test("substring matches on repoFullName", () => {
     const items = [
       makeItem({ id: "a", repoFullName: "acme/api" }),

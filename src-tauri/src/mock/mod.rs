@@ -107,6 +107,8 @@ fn default_pr(number: i64, author: &str) -> ActionableItemPr {
         additions: 40,
         deletions: 12,
         created_at: ago_days(2),
+        head_ref: Some(format!("{author}/mock-{number}")),
+        head_fork_owner: None,
         lifecycle: PrLifecycle::InReview,
         merge_queue: None,
         task_urls: Vec::new(),
@@ -194,6 +196,7 @@ pub fn mock_payload() -> MockLists {
     // big diff trims it by 1. Failing checks + mixed reviewers; unread so it
     // drives the tray badge.
     let mut web_tag_pages = default_pr(1284, "maya-r");
+    web_tag_pages.head_ref = Some("feat/tag-pages".to_string());
     web_tag_pages.is_review_requested_from_me = true;
     web_tag_pages.is_author_on_my_team = true;
     web_tag_pages.score = 8;
@@ -214,6 +217,7 @@ pub fn mock_payload() -> MockLists {
 
     // Requested reviewer (+3) and I've commented (+2).
     let mut web_hero_cls = default_pr(1290, "priya-s");
+    web_hero_cls.head_ref = Some("fix/hero-cls".to_string());
     web_hero_cls.is_review_requested_from_me = true;
     web_hero_cls.ive_commented = true;
     web_hero_cls.score = 5;
@@ -226,6 +230,7 @@ pub fn mock_payload() -> MockLists {
 
     // Team author (+6) + requested (+3); clean checks.
     let mut api_charts = default_pr(508, "marcus-l");
+    api_charts.head_ref = Some("feat/charts".to_string());
     api_charts.is_review_requested_from_me = true;
     api_charts.is_author_on_my_team = true;
     api_charts.score = 9;
@@ -240,6 +245,9 @@ pub fn mock_payload() -> MockLists {
 
     // Requested reviewer (+3); editorial CMS feature.
     let mut cms_schedule = default_pr(431, "deon-k");
+    // Opened from a fork on a `main` branch: the UI copies `gh pr checkout`.
+    cms_schedule.head_ref = Some("main".to_string());
+    cms_schedule.head_fork_owner = Some("deon-k".to_string());
     cms_schedule.is_review_requested_from_me = true;
     cms_schedule.score = 3;
     cms_schedule.reviewers = vec![reviewer(ME, "requested")].into();
@@ -247,6 +255,7 @@ pub fn mock_payload() -> MockLists {
 
     // Requested reviewer (+3); small design-system PR.
     let mut ds_rating = default_pr(96, "lena-w");
+    ds_rating.head_ref = Some("feat/rating".to_string());
     ds_rating.is_review_requested_from_me = true;
     ds_rating.score = 3;
     ds_rating.additions = 64;
@@ -260,6 +269,7 @@ pub fn mock_payload() -> MockLists {
 
     // Requested reviewer (+3); ingest pipeline change.
     let mut ingest_calendar = default_pr(212, "priya-s");
+    ingest_calendar.head_ref = Some("feat/calendar".to_string());
     ingest_calendar.is_review_requested_from_me = true;
     ingest_calendar.score = 3;
     ingest_calendar.reviewers = vec![reviewer(ME, "requested")].into();
@@ -267,6 +277,7 @@ pub fn mock_payload() -> MockLists {
 
     // Approved by me → strongly negative score: hidden unless Show-All.
     let mut ds_approved = default_pr(91, "marcus-l");
+    ds_approved.head_ref = Some("feat/approved".to_string());
     ds_approved.is_review_requested_from_me = true;
     ds_approved.ive_reviewed = true;
     ds_approved.ive_approved = true;
@@ -276,6 +287,7 @@ pub fn mock_payload() -> MockLists {
 
     // Draft → negative score: also hidden unless Show-All.
     let mut web_infinite_scroll = default_pr(1301, "deon-k");
+    web_infinite_scroll.head_ref = Some("feat/infinite-scroll".to_string());
     web_infinite_scroll.is_review_requested_from_me = true;
     web_infinite_scroll.is_draft = true;
     web_infinite_scroll.score = -2;
@@ -344,6 +356,7 @@ pub fn mock_payload() -> MockLists {
 
     // In the merge queue at position 2, CI still running. Unread.
     let mut web_ssr = default_pr(1276, ME);
+    web_ssr.head_ref = Some("feat/ssr".to_string());
     web_ssr.is_authored_by_me = true;
     web_ssr.lifecycle = PrLifecycle::MergeQueue;
     web_ssr.approval_count = 2;
@@ -371,6 +384,7 @@ pub fn mock_payload() -> MockLists {
 
     // Recently ejected from the merge queue (the high-priority surface). Unread.
     let mut web_newsletter = default_pr(1281, ME);
+    web_newsletter.head_ref = Some("feat/newsletter".to_string());
     web_newsletter.is_authored_by_me = true;
     web_newsletter.lifecycle = PrLifecycle::InReview;
     web_newsletter.merge_queue = Some(ActionableItemMergeQueue {
@@ -393,6 +407,7 @@ pub fn mock_payload() -> MockLists {
 
     // Open, healthy, one approval.
     let mut api_redis = default_pr(503, ME);
+    api_redis.head_ref = Some("feat/redis".to_string());
     api_redis.is_authored_by_me = true;
     api_redis.lifecycle = PrLifecycle::InReview;
     api_redis.approval_count = 1;
@@ -405,6 +420,7 @@ pub fn mock_payload() -> MockLists {
 
     // Open, review in progress.
     let mut cms_alt_text = default_pr(427, ME);
+    cms_alt_text.head_ref = Some("fix/alt-text".to_string());
     cms_alt_text.is_authored_by_me = true;
     cms_alt_text.lifecycle = PrLifecycle::InReview;
     cms_alt_text.reviewers = vec![reviewer("priya-s", "changes_requested")].into();
@@ -412,6 +428,7 @@ pub fn mock_payload() -> MockLists {
 
     // Open, checks running.
     let mut ds_dark_mode = default_pr(88, ME);
+    ds_dark_mode.head_ref = Some("feat/dark-mode".to_string());
     ds_dark_mode.is_authored_by_me = true;
     ds_dark_mode.lifecycle = PrLifecycle::InReview;
     ds_dark_mode.check_runs = vec![
@@ -422,6 +439,7 @@ pub fn mock_payload() -> MockLists {
 
     // Freshly opened, no reviews yet.
     let mut ingest_charts = default_pr(207, ME);
+    ingest_charts.head_ref = Some("feat/charts".to_string());
     ingest_charts.is_authored_by_me = true;
     ingest_charts.lifecycle = PrLifecycle::Open;
     ingest_charts.created_at = ago_min(40);
@@ -510,6 +528,7 @@ pub fn mock_payload() -> MockLists {
     // ---- Recently Resolved (merged/closed in the last 24h) ----------------
 
     let mut web_footer = default_pr(1270, ME);
+    web_footer.head_ref = Some("fix/footer".to_string());
     web_footer.is_authored_by_me = true;
     web_footer.lifecycle = PrLifecycle::Merged;
     let web_footer_item = pr_item(

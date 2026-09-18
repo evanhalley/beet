@@ -7,11 +7,21 @@ import { copyToClipboard } from "@/lib/copyToClipboard";
 import dayjs from "@/lib/dayjs";
 import type { ActionableItem } from "@/lib/types";
 import { CheckDot, deriveCheckDotState } from "./CheckDot";
-import { RowShell } from "./RowShell";
+import { CopyBranchButton } from "./CopyBranchButton";
+import { RowShell, rowActionsReserve } from "./RowShell";
 
 export interface RunRowProps {
   item: ActionableItem;
 }
+
+const metaText = {
+  color: "var(--color-text-faint)",
+  fontSize: 11,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+} as const;
 
 export function RunRow({ item }: RunRowProps) {
   const run = item.run;
@@ -64,7 +74,12 @@ export function RunRow({ item }: RunRowProps) {
       active={active}
       onSelect={() => setSelectedItemId(item.id)}
       aside={<CheckDot state={dot} />}
-      actions={copyButton}
+      actions={
+        <>
+          {run.branch && <CopyBranchButton branch={run.branch} />}
+          {copyButton}
+        </>
+      }
     >
       <div
         style={{
@@ -72,6 +87,9 @@ export function RunRow({ item }: RunRowProps) {
           alignItems: "center",
           gap: 6,
           marginBottom: 3,
+          minWidth: 0,
+          overflow: "hidden",
+          paddingRight: rowActionsReserve(run.branch ? 2 : 1),
         }}
       >
         <Cog
@@ -81,14 +99,16 @@ export function RunRow({ item }: RunRowProps) {
         />
         <span
           className="mono"
-          style={{ color: "var(--color-text-faint)", fontSize: 11 }}
+          style={{ ...metaText, flexShrink: 1 }}
         >
           {item.repoFullName}
         </span>
         {branchLabel && (
           <span
             className="mono"
-            style={{ color: "var(--color-text-faint)", fontSize: 11 }}
+            title={branchLabel}
+            // Shrinks before the repo name and event pill do.
+            style={{ ...metaText, flexShrink: 100 }}
           >
             {branchLabel}
           </span>
@@ -101,6 +121,8 @@ export function RunRow({ item }: RunRowProps) {
             background: "var(--color-panel-2)",
             color: "var(--color-text-faint)",
             textTransform: "lowercase",
+            flexShrink: 0,
+            whiteSpace: "nowrap",
           }}
         >
           {run.event}

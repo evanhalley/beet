@@ -14,7 +14,15 @@ export function TaskChips({ urls, max = 3 }: TaskChipsProps) {
   const shown = urls.slice(0, max);
   const extra = urls.length - shown.length;
   return (
-    <span style={{ display: "inline-flex", gap: 3, flexWrap: "nowrap" }}>
+    <span
+      style={{
+        display: "inline-flex",
+        gap: 3,
+        flexWrap: "nowrap",
+        flexShrink: 0,
+        whiteSpace: "nowrap",
+      }}
+    >
       {shown.map((url) => (
         <a
           key={url}
