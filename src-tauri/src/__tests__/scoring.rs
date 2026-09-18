@@ -1,4 +1,3 @@
-
 use super::*;
 use crate::poller::types::{ActionableItemPr, ActionableKind, PrLifecycle};
 use chrono::Duration;
@@ -31,6 +30,10 @@ fn make_item(id: &str, now: DateTime<Utc>) -> ActionableItem {
             created_at: now_iso,
             head_ref: None,
             head_fork_owner: None,
+            head_sha: None,
+            base_ref: None,
+            base_sha: None,
+            code_ownership: None,
             lifecycle: PrLifecycle::Open,
             merge_queue: None,
             task_urls: vec![],

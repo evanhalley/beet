@@ -10,10 +10,12 @@ use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::{
     CheckRunsResult, CommentRow, GitRef, PullDetail, ReviewRow, SearchResult, UserRef,
 };
+use crate::github::pr_files::{fetch_pr_files, PrRef};
+use crate::github::session_cache::SessionCache;
 use crate::github::teams::resolve_team_members;
 use crate::poller::types::{
     ActionableItem, ActionableItemMergeQueue, ActionableItemPr, ActionableKind, CheckRunSummary,
-    EjectedCheck, PrLifecycle, ReviewerEntry,
+    CodeOwnership, EjectedCheck, PrLifecycle, ReviewerEntry,
 };
 use crate::scoring::score_pull_requests;
 use crate::store::db::now_iso;
@@ -221,6 +223,7 @@ fn search_url(client: &GithubClient, q: &str) -> BeetResult<String> {
 pub async fn fetch_review_requests(
     client: &GithubClient,
     db: &Db,
+    cache: &SessionCache,
     opts: &FetchReviewRequestsOptions,
 ) -> BeetResult<FetchOutcome> {
     let q = format!("is:pr is:open review-requested:{}", opts.username);
@@ -249,7 +252,8 @@ pub async fn fetch_review_requests(
     let assembled: Vec<AssembledItem> = stream::iter(search.items.into_iter().enumerate())
         .map(|(idx, hit)| async move {
             let res =
-                assemble_review_item(client, db, hit, username, team_members, compiled_ref).await;
+                assemble_review_item(client, db, cache, hit, username, team_members, compiled_ref)
+                    .await;
             (idx, res)
         })
         .buffer_unordered(MAX_PR_CONCURRENCY)
@@ -384,6 +388,7 @@ pub(crate) fn head_fork_owner(head: &GitRef, owner: &str, repo: &str) -> Option<
 async fn assemble_review_item(
     client: &GithubClient,
     db: &Db,
+    cache: &SessionCache,
     hit: crate::github::models::SearchItem,
     username: &str,
     team_members: &HashSet<String>,
@@ -431,6 +436,18 @@ async fn assemble_review_item(
         Err(e) if e.is_critical() => return Err(e),
         Err(_) => None,
     };
+    // CODEOWNERS stake for the "owner" badge. Non-critical failures (e.g. a
+    // 404 on the files endpoint) just leave the badge off; the detail pane's
+    // Files block retries on its own when the PR is opened.
+    let code_ownership = match resolve_code_ownership(
+        client, db, cache, &owner, &repo, num, &pull, username,
+    )
+    .await
+    {
+        Ok(summary) => Some(summary),
+        Err(e) if e.is_critical() => return Err(e),
+        Err(_) => None,
+    };
 
     let item = ActionableItem {
         id: format!("pr:{owner}/{repo}#{num}"),
@@ -458,6 +475,10 @@ async fn assemble_review_item(
             created_at: pull.created_at.clone(),
             head_ref: pull.head.git_ref.clone(),
             head_fork_owner: head_fork_owner(&pull.head, &owner, &repo),
+            head_sha: Some(pull.head.sha.clone()),
+            base_ref: pull.base.as_ref().and_then(|b| b.git_ref.clone()),
+            base_sha: pull.base.as_ref().map(|b| b.sha.clone()),
+            code_ownership,
             lifecycle,
             merge_queue: None,
             task_urls,
@@ -469,6 +490,29 @@ async fn assemble_review_item(
         run: None,
     };
     Ok((Some(item), rate_limit))
+}
+
+#[allow(clippy::too_many_arguments)] // mirrors the assembler's own argument list
+async fn resolve_code_ownership(
+    client: &GithubClient,
+    db: &Db,
+    cache: &SessionCache,
+    owner: &str,
+    repo: &str,
+    num: i64,
+    pull: &PullDetail,
+    username: &str,
+) -> BeetResult<CodeOwnership> {
+    let pr = PrRef {
+        owner: owner.to_string(),
+        repo: repo.to_string(),
+        number: num,
+        head_sha: Some(pull.head.sha.clone()),
+        base_ref: pull.base.as_ref().and_then(|b| b.git_ref.clone()),
+        base_sha: pull.base.as_ref().map(|b| b.sha.clone()),
+    };
+    let result = fetch_pr_files(client, db, cache, pr, username).await?;
+    Ok(CodeOwnership::from(&result))
 }
 
 async fn assemble_my_pr_item(
@@ -574,6 +618,10 @@ async fn assemble_my_pr_item(
             created_at: pull.created_at.clone(),
             head_ref: pull.head.git_ref.clone(),
             head_fork_owner: head_fork_owner(&pull.head, &owner, &repo),
+            head_sha: Some(pull.head.sha.clone()),
+            base_ref: pull.base.as_ref().and_then(|b| b.git_ref.clone()),
+            base_sha: pull.base.as_ref().map(|b| b.sha.clone()),
+            code_ownership: None,
             lifecycle,
             merge_queue,
             task_urls,

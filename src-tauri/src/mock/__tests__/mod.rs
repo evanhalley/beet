@@ -1,4 +1,3 @@
-
 use super::*;
 
 #[test]
@@ -94,4 +93,38 @@ fn is_enabled_reads_the_env_var() {
 #[test]
 fn mock_jobs_are_non_empty() {
     assert!(!mock_run_jobs().is_empty());
+}
+
+#[test]
+fn review_requests_carry_ownership_matching_their_files_fixture() {
+    let lists = mock_payload();
+    for item in &lists.review_requests {
+        let pr = item.pr.as_ref().unwrap();
+        let files = mock_pr_files(pr.number);
+        assert_eq!(
+            pr.code_ownership.as_ref(),
+            Some(&CodeOwnership::from(&files)),
+            "pr #{}",
+            pr.number
+        );
+        assert_eq!(
+            files.owned_count,
+            files.files.iter().filter(|f| f.owned_by_me).count()
+        );
+        assert_eq!(files.total_count, files.files.len());
+        serde_json::to_string(&files).expect("files fixture serializes");
+    }
+}
+
+#[test]
+fn files_fixture_covers_every_scenario() {
+    let owned = mock_pr_files(4);
+    assert!(owned.has_codeowners && owned.teams_resolved && owned.owned_count > 0);
+    assert!(owned.owned_count < owned.total_count);
+    let none_owned = mock_pr_files(5);
+    assert!(none_owned.has_codeowners && none_owned.owned_count == 0);
+    let no_file = mock_pr_files(6);
+    assert!(!no_file.has_codeowners && no_file.owned_count == 0);
+    let unresolved = mock_pr_files(7);
+    assert!(!unresolved.teams_resolved && unresolved.owned_count == 1);
 }

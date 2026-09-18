@@ -324,3 +324,22 @@ describe("TrayPopover", () => {
     expect(invoke).toHaveBeenCalledWith("refresh_now");
   });
 });
+
+describe("TrayPopover code-owner badge", () => {
+  test("review rows show 'owner' when I own changed files", () => {
+    const owned = reviewItem(1);
+    owned.pr!.codeOwnership = { ownedCount: 1, totalCount: 4, hasCodeowners: true, teamsResolved: true };
+    const notOwned = reviewItem(2);
+    notOwned.pr!.codeOwnership = { ownedCount: 0, totalCount: 4, hasCodeowners: true, teamsResolved: true };
+    useAppStore.getState().setPollResult({
+      reviewRequests: [owned, notOwned],
+      inFlight: [],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    render(<TrayPopover />);
+    expect(screen.getAllByText("owner")).toHaveLength(1);
+  });
+});

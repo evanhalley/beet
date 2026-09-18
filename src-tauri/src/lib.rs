@@ -83,6 +83,7 @@ pub fn run() {
             store::notifications::record_notification_link,
             store::notifications::get_notification_link,
             github::runs::fetch_run_jobs_command,
+            github::pr_files::fetch_pr_files_command,
             mock::is_mock_mode,
             tray::set_badge,
             tray::open_main_window,
@@ -107,8 +108,12 @@ pub fn run() {
                 store::db::open(&db_path).map_err(|e| format!("failed to open beet.db: {e}"))?;
             let db = std::sync::Arc::new(std::sync::Mutex::new(conn));
 
-            let handle = poller::poll_loop::spawn(app.handle().clone(), db.clone());
+            // Session caches (user teams, parsed CODEOWNERS) are shared by
+            // the poll loop and the detail-pane files command.
+            let cache = std::sync::Arc::new(github::session_cache::SessionCache::default());
+            let handle = poller::poll_loop::spawn(app.handle().clone(), db.clone(), cache.clone());
             app.manage(db);
+            app.manage(cache);
             app.manage(handle);
 
             tray::setup(app)?;

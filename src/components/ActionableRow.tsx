@@ -16,6 +16,7 @@ import { Lifecycle } from "./Lifecycle";
 import { Pill } from "./Pill";
 import { PinGlyph } from "./PinGlyph";
 import { ReasonBadge } from "./ReasonBadge";
+import { isCodeOwner } from "@/lib/codeOwnership";
 import { RowContextMenu } from "./RowContextMenu";
 import { RowShell, rowActionsReserve } from "./RowShell";
 import { ScoreBar } from "./ScoreBar";
@@ -220,6 +221,7 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             <>
               {isSuppressed && <Pill tone="neutral">suppressed</Pill>}
               {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}
+              {isCodeOwner(pr) && <Pill tone="accent">owner</Pill>}
               {pr.isDraft && <Pill tone="neutral">draft</Pill>}
             </>
           ) : (

@@ -12,7 +12,10 @@ import { Lifecycle } from "@/components/Lifecycle";
 import { Pill, type PillTone } from "@/components/Pill";
 import { ScoreBar } from "@/components/ScoreBar";
 import { useRunJobs } from "@/hooks/useRunJobs";
+import { BlockHeader, EmptyHint } from "./DetailBlocks";
+import { FilesBlock } from "./FilesBlock";
 import { prBranchTarget } from "@/lib/branch";
+import { isCodeOwner } from "@/lib/codeOwnership";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import dayjs from "@/lib/dayjs";
 import { durationSeconds, formatDuration } from "@/lib/duration";
@@ -181,22 +184,6 @@ const MARKDOWN_COMPONENTS: Components = {
   ),
 };
 
-function BlockHeader({ title }: { title: string }) {
-  return (
-    <div
-      style={{
-        fontSize: 10,
-        fontWeight: 600,
-        textTransform: "uppercase",
-        letterSpacing: 0.06,
-        color: "var(--color-text-faint)",
-      }}
-    >
-      {title}
-    </div>
-  );
-}
-
 function BodyBlock({ body }: { body: string | null }) {
   const trimmed = body?.trim() ?? "";
   return (
@@ -243,21 +230,6 @@ function BodyBlock({ body }: { body: string | null }) {
 // Italic faint line used by every empty-state in the side panel — matches the
 // "No description." styling already used by BodyBlock so each block's empty
 // state feels consistent with the others.
-function EmptyHint({ children }: { children: string }) {
-  return (
-    <div
-      style={{
-        marginTop: 6,
-        fontSize: 11.5,
-        color: "var(--color-text-faint)",
-        fontStyle: "italic",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
 const REVIEWER_PILL: Record<string, { tone: PillTone; label: string }> = {
   // Literal mapping from the design (design/src/main-window.jsx:301-303).
   approved: { tone: "success", label: "approved" },
@@ -862,6 +834,11 @@ export function DetailPane({ item }: DetailPaneProps) {
             state={pr.lifecycle}
             mqPos={pr.mergeQueue?.position ?? null}
           />
+          {isCodeOwner(pr) && pr.codeOwnership && (
+            <Pill tone="accent">
+              {`Code owner · ${pr.codeOwnership.ownedCount} of ${pr.codeOwnership.totalCount} files`}
+            </Pill>
+          )}
           <ScoreBar score={pr.score} width={36} />
           <span style={{ flex: 1 }} />
           <button
@@ -891,6 +868,7 @@ export function DetailPane({ item }: DetailPaneProps) {
       <BodyBlock body={pr.body} />
       <ReviewersBlock reviewers={pr.reviewers} />
       <ChecksBlock runs={pr.checkRuns} associated={pr.associatedRuns} />
+      <FilesBlock key={item.id} item={item} />
       <PlaceholderBlock title="Activity" hint="lands in #8" />
     </div>
   );
