@@ -31,10 +31,11 @@ const MIGRATIONS: &[&str] = &[
         failing_checks_json TEXT NOT NULL,
         PRIMARY KEY (pr_id, observed_at)
     );",
-    // v4: create pr_requeue_attempts table. Records each auto-requeue attempt
-    // per (pr_id, head_sha) so the cap survives app restarts. The same table
-    // doubles as the per-PR opt-out store: a sentinel row with attempted_at =
-    // 'opt-out' carries opt_out = 1 and is excluded from cap counting.
+    // v4: create pr_requeue_attempts table, for the merge-queue auto-requeue
+    // worker. DEAD — v12 drops this table again and the worker is gone. The
+    // statement stays because migrations are index-addressed (MIGRATIONS[i] →
+    // user_version = i + 1), so deleting an entry would renumber every later
+    // one and re-run them against already-migrated databases.
     "CREATE TABLE IF NOT EXISTS pr_requeue_attempts (
         pr_id        TEXT NOT NULL,
         head_sha     TEXT NOT NULL,
@@ -115,6 +116,11 @@ const MIGRATIONS: &[&str] = &[
         snoozed_until TEXT NOT NULL,
         created_at    TEXT NOT NULL
     );",
+    // v12: drop pr_requeue_attempts. The merge-queue auto-requeue worker it
+    // backed is gone — Beet no longer mutates anything on GitHub. The v4
+    // CREATE above stays because migrations are index-addressed; this entry
+    // undoes it for fresh and existing databases alike.
+    "DROP TABLE IF EXISTS pr_requeue_attempts;",
 ];
 
 /// Open `beet.db` at `path` and bring its schema up to date.

@@ -10,7 +10,7 @@ use crate::error::{BeetError, BeetResult};
 use crate::store::etag_cache::{get_cached, set_cached};
 use crate::store::Db;
 use reqwest::header::{
-    HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, ETAG, IF_NONE_MATCH, USER_AGENT,
+    HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, ETAG, IF_NONE_MATCH, USER_AGENT,
 };
 use reqwest::StatusCode;
 use serde::de::DeserializeOwned;
@@ -244,74 +244,6 @@ impl GithubClient {
             etag,
             rate_limit,
         })
-    }
-
-    /// POST `{ query, variables }` to GitHub's GraphQL endpoint.
-    ///
-    /// Used by the auto-requeue worker (#13) — the only mutation Beet issues.
-    /// Reuses the same auth and error mapping as `beet_get`, so 401 / 429 /
-    /// 5xx propagate as the same `BeetError` variants the poll loop already
-    /// handles. A 200 response with a non-empty `errors[]` array is mapped to
-    /// `BeetError::Github { status: 200, body }` so the caller can surface the
-    /// underlying GraphQL message.
-    ///
-    /// No retry policy here yet — GraphQL mutations aren't idempotent at the
-    /// merge-queue level, and the auto-requeue cap already bounds retries.
-    pub async fn beet_post_graphql<TResp: DeserializeOwned>(
-        &self,
-        query: &str,
-        variables: serde_json::Value,
-    ) -> BeetResult<TResp> {
-        let url = format!("{}/graphql", self.base_url);
-        let body = serde_json::json!({ "query": query, "variables": variables });
-        let resp = self
-            .http
-            .post(&url)
-            .header(CONTENT_TYPE, "application/json")
-            .body(serde_json::to_vec(&body)?)
-            .send()
-            .await?;
-
-        let status = resp.status();
-        let headers = resp.headers().clone();
-        if status == StatusCode::UNAUTHORIZED {
-            return Err(BeetError::Unauthorized(status.as_u16()));
-        }
-        if status == StatusCode::TOO_MANY_REQUESTS
-            || (status == StatusCode::FORBIDDEN && is_rate_limited(&headers))
-        {
-            return Err(BeetError::RateLimited {
-                retry_after_secs: retry_after_secs(&headers),
-            });
-        }
-        if status.is_server_error() {
-            return Err(BeetError::Transient(status.as_u16()));
-        }
-        let text = resp.text().await?;
-        if !status.is_success() {
-            return Err(BeetError::Github {
-                status: status.as_u16(),
-                body: text,
-            });
-        }
-
-        // GraphQL's "200 + errors[]" pattern: surface the error body so the
-        // caller (and the user-facing toast) sees what GitHub actually said.
-        let value: serde_json::Value = serde_json::from_str(&text)?;
-        if let Some(errors) = value.get("errors").and_then(|v| v.as_array()) {
-            if !errors.is_empty() {
-                return Err(BeetError::Github {
-                    status: 200,
-                    body: text,
-                });
-            }
-        }
-        let data = value
-            .get("data")
-            .cloned()
-            .unwrap_or(serde_json::Value::Null);
-        let body: TResp = serde_json::from_value(data)?;
-        Ok(body)
     }
 }
 

@@ -1,13 +1,8 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import {
-  AUTO_REQUEUE_MAX_ATTEMPTS_MAX,
-  AUTO_REQUEUE_MAX_ATTEMPTS_MIN,
   SETTINGS_DEFAULTS,
   loadSettings,
   setAccent,
-  setAutoRequeueEnabled,
-  setAutoRequeueMaxAttempts,
-  setAutoRequeueRepos,
   setDensity,
   setFontScale,
   setPenalizedBots,
@@ -72,28 +67,6 @@ describe("settings storage", () => {
     expect(settings.fontScale).toBe(1.15);
     expect(settings.accent).toBe("ocean");
     expect(settings.density).toBe("compact");
-  });
-
-  test("round-trips the auto-requeue settings", async () => {
-    await setAutoRequeueEnabled(true);
-    await setAutoRequeueMaxAttempts(3);
-    await setAutoRequeueRepos(["acme/widgets", "acme/api"]);
-
-    const settings = await loadSettings();
-    expect(settings.autoRequeueEnabled).toBe(true);
-    expect(settings.autoRequeueMaxAttempts).toBe(3);
-    expect(settings.autoRequeueRepos).toEqual(["acme/widgets", "acme/api"]);
-  });
-
-  test("clamps autoRequeueMaxAttempts to [1, 5]", async () => {
-    await setAutoRequeueMaxAttempts(99);
-    expect((await loadSettings()).autoRequeueMaxAttempts).toBe(
-      AUTO_REQUEUE_MAX_ATTEMPTS_MAX,
-    );
-    await setAutoRequeueMaxAttempts(0);
-    expect((await loadSettings()).autoRequeueMaxAttempts).toBe(
-      AUTO_REQUEUE_MAX_ATTEMPTS_MIN,
-    );
   });
 
   test("falls back to 'system' when a corrupt theme value is stored", async () => {

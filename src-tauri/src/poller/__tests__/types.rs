@@ -51,7 +51,6 @@ fn full_item() -> ActionableItem {
                     details_url: None,
                 }]),
                 head_sha: Some("deadbeef".into()),
-                pr_node_id: Some("PR_kwDOA".into()),
             }),
             task_urls: vec![],
             score: 3,
@@ -134,7 +133,6 @@ fn actionable_item_matches_the_ts_contract() {
             "headSha",
             "lastEjectionAt",
             "position",
-            "prNodeId",
         ]
     );
     assert_eq!(

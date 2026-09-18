@@ -14,9 +14,6 @@ export const SETTINGS_KEYS = {
   fontScale: "fontScale",
   accent: "accent",
   density: "density",
-  autoRequeueEnabled: "autoRequeueEnabled",
-  autoRequeueMaxAttempts: "autoRequeueMaxAttempts",
-  autoRequeueRepos: "autoRequeueRepos",
   standaloneRunsAllowlist: "standaloneRunsAllowlist",
   notifyOnEjection: "notifyOnEjection",
   notifyOnFailingChecks: "notifyOnFailingChecks",
@@ -25,9 +22,6 @@ export const SETTINGS_KEYS = {
   notifyOnRunFinished: "notifyOnRunFinished",
   globalShortcutEnabled: "globalShortcutEnabled",
 } as const;
-
-export const AUTO_REQUEUE_MAX_ATTEMPTS_MIN = 1;
-export const AUTO_REQUEUE_MAX_ATTEMPTS_MAX = 5;
 
 export type ThemeMode = "light" | "dark" | "system";
 
@@ -74,11 +68,6 @@ export interface BeetSettings {
   fontScale: FontScale;
   accent: AccentColor;
   density: Density;
-  // Issue #13. Off by default; the user must opt in via Settings → Merge Queue.
-  autoRequeueEnabled: boolean;
-  autoRequeueMaxAttempts: number;
-  // Optional `owner/repo` allowlist. Empty = all repos.
-  autoRequeueRepos: string[];
   // Per-repo workflow allowlist for the Standalone Runs section (#6 noise
   // control). Key = `owner/repo`, value = workflow names. Missing repo or
   // empty list = show all (already deduped per workflow). Non-empty list =
@@ -104,9 +93,6 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   fontScale: 1,
   accent: "beet",
   density: "regular",
-  autoRequeueEnabled: false,
-  autoRequeueMaxAttempts: 2,
-  autoRequeueRepos: [],
   standaloneRunsAllowlist: {},
   notifyOnEjection: true,
   notifyOnFailingChecks: true,
@@ -115,14 +101,6 @@ export const SETTINGS_DEFAULTS: BeetSettings = {
   notifyOnRunFinished: true,
   globalShortcutEnabled: true,
 };
-
-function clampMaxAttempts(n: number): number {
-  if (!Number.isFinite(n)) return SETTINGS_DEFAULTS.autoRequeueMaxAttempts;
-  return Math.min(
-    AUTO_REQUEUE_MAX_ATTEMPTS_MAX,
-    Math.max(AUTO_REQUEUE_MAX_ATTEMPTS_MIN, Math.round(n)),
-  );
-}
 
 async function getStore() {
   return load(STORE_FILE, { autoSave: true, defaults: {} });
@@ -166,9 +144,6 @@ export async function loadSettings(): Promise<BeetSettings> {
     fontScaleRaw,
     accentRaw,
     densityRaw,
-    autoRequeueEnabled,
-    autoRequeueMaxAttemptsRaw,
-    autoRequeueRepos,
     standaloneRunsAllowlistRaw,
     notifyOnEjection,
     notifyOnFailingChecks,
@@ -195,18 +170,6 @@ export async function loadSettings(): Promise<BeetSettings> {
     getValue<unknown>(SETTINGS_KEYS.fontScale, SETTINGS_DEFAULTS.fontScale),
     getValue<unknown>(SETTINGS_KEYS.accent, SETTINGS_DEFAULTS.accent),
     getValue<unknown>(SETTINGS_KEYS.density, SETTINGS_DEFAULTS.density),
-    getValue<boolean>(
-      SETTINGS_KEYS.autoRequeueEnabled,
-      SETTINGS_DEFAULTS.autoRequeueEnabled,
-    ),
-    getValue<number>(
-      SETTINGS_KEYS.autoRequeueMaxAttempts,
-      SETTINGS_DEFAULTS.autoRequeueMaxAttempts,
-    ),
-    getValue<string[]>(
-      SETTINGS_KEYS.autoRequeueRepos,
-      SETTINGS_DEFAULTS.autoRequeueRepos,
-    ),
     getValue<unknown>(
       SETTINGS_KEYS.standaloneRunsAllowlist,
       SETTINGS_DEFAULTS.standaloneRunsAllowlist,
@@ -252,9 +215,6 @@ export async function loadSettings(): Promise<BeetSettings> {
     fontScale,
     accent,
     density,
-    autoRequeueEnabled,
-    autoRequeueMaxAttempts: clampMaxAttempts(autoRequeueMaxAttemptsRaw),
-    autoRequeueRepos,
     standaloneRunsAllowlist: sanitizeStandaloneRunsAllowlist(
       standaloneRunsAllowlistRaw,
     ),
@@ -322,24 +282,6 @@ export async function setAccent(value: AccentColor): Promise<void> {
 
 export async function setDensity(value: Density): Promise<void> {
   await setValue(SETTINGS_KEYS.density, value);
-}
-
-// Auto-requeue settings flow into the Rust poll loop's PollConfig, so each
-// setter pokes the loop after persisting (same pattern as teams/bots/etc.).
-export async function setAutoRequeueEnabled(value: boolean): Promise<void> {
-  await setValue(SETTINGS_KEYS.autoRequeueEnabled, value);
-  await notifyPollerConfigChanged();
-}
-
-export async function setAutoRequeueMaxAttempts(value: number): Promise<void> {
-  const clamped = clampMaxAttempts(value);
-  await setValue(SETTINGS_KEYS.autoRequeueMaxAttempts, clamped);
-  await notifyPollerConfigChanged();
-}
-
-export async function setAutoRequeueRepos(value: string[]): Promise<void> {
-  await setValue(SETTINGS_KEYS.autoRequeueRepos, value);
-  await notifyPollerConfigChanged();
 }
 
 export async function setStandaloneRunsAllowlist(

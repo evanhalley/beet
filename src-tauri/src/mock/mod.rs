@@ -366,7 +366,6 @@ pub fn mock_payload() -> MockLists {
         last_ejection_at: None,
         ejected_checks: None,
         head_sha: Some("a1b2c3d".into()),
-        pr_node_id: Some("PR_kwDOMockWeb1276".into()),
     });
     web_ssr.reviewers = vec![
         reviewer("maya-r", "approved"),
@@ -397,7 +396,6 @@ pub fn mock_payload() -> MockLists {
             details_url: Some("https://github.com/thecypher/web/actions/runs/77010".into()),
         }]),
         head_sha: Some("d4e5f60".into()),
-        pr_node_id: Some("PR_kwDOMockWeb1281".into()),
     });
     web_newsletter.check_runs = vec![
         check("build", "completed", Some("success")),

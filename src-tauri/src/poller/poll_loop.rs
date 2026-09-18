@@ -11,7 +11,7 @@ use crate::error::{BeetError, BeetResult};
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::AuthUser;
 use crate::github::prs::{
-    fetch_my_open_prs, fetch_review_requests, AutoRequeueError, FetchMyOpenPrsOptions,
+    fetch_my_open_prs, fetch_review_requests, FetchMyOpenPrsOptions,
     FetchReviewRequestsOptions,
 };
 use crate::github::runs::{
@@ -56,11 +56,6 @@ struct PollResultPayload {
     recently_resolved: Vec<ActionableItem>,
     rate_limit: Option<RateLimitInfo>,
     polled_at: String,
-    /// Per-cycle auto-requeue mutation failures (#13). Empty in the common
-    /// case; populated when `enqueuePullRequest` returned a non-critical error
-    /// for a specific PR. The frontend dedupes by `(prId, headSha)` so the
-    /// user sees one toast per failure, not one per poll cycle.
-    auto_requeue_errors: Vec<AutoRequeueError>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -336,9 +331,6 @@ async fn poll_once<R: Runtime>(
     let my_opts = FetchMyOpenPrsOptions {
         username: username.clone(),
         task_regex: config.task_regex.clone(),
-        auto_requeue_enabled: config.auto_requeue_enabled,
-        auto_requeue_max_attempts: config.auto_requeue_max_attempts,
-        auto_requeue_repos: config.auto_requeue_repos.clone(),
     };
 
     let (reviews, mine) = tokio::join!(
@@ -454,7 +446,6 @@ async fn poll_once<R: Runtime>(
         recently_resolved,
         rate_limit,
         polled_at: now_iso(),
-        auto_requeue_errors: mine.auto_requeue_errors,
     };
     let _ = app.emit(EVENT_POLL_RESULT, payload);
     Ok(rate_limited)
@@ -564,7 +555,6 @@ fn emit_mock<R: Runtime>(app: &AppHandle<R>) {
         recently_resolved: lists.recently_resolved,
         rate_limit: lists.rate_limit,
         polled_at: now_iso(),
-        auto_requeue_errors: Vec::new(),
     };
     let _ = app.emit(EVENT_POLL_RESULT, payload);
     emit_status(app, "ok", None, false, None);

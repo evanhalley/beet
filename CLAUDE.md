@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repo state
 
-The app is scaffolded and shipping releases (`v0.1.6` as of this writing) — this is no longer a pre-scaffold repo. Issues #1–#7, #9, plus most side-quest issues (search, sidebar filters, merge-queue auto-requeue, release workflow) are closed; #8 (mentions hybrid + Needs Action Now + fingerprints) and #10 (updater + autostart + final polish) are still open. The repo is public/open source under MIT.
+The app is scaffolded and shipping releases (`v0.1.6` as of this writing) — this is no longer a pre-scaffold repo. Issues #1–#7, #9, plus most side-quest issues (search, sidebar filters, release workflow) are closed; #8 (mentions hybrid + Needs Action Now + fingerprints) and #10 (updater + autostart + final polish) are still open. The repo is public/open source under MIT.
 
 **[SPECS.md](SPECS.md) is the source of truth** for what Beet is, what it does, and how it should be built. Read it before making implementation decisions. Section numbers below refer to SPECS.md.
 

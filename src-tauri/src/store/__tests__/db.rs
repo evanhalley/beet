@@ -9,12 +9,11 @@ fn migrate_creates_all_tables_and_sets_version() {
             r.get(0)
         })
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     for table in [
         "etag_cache",
         "pr_lifecycle_history",
         "pr_ejection_events",
-        "pr_requeue_attempts",
         "run_completion_events",
         "notifications_sent",
         "mute_rules",
@@ -32,6 +31,17 @@ fn migrate_creates_all_tables_and_sets_version() {
             .unwrap();
         assert_eq!(count, 1, "table {table} should exist");
     }
+
+    // v12 drops the auto-requeue worker's table; prove the drop actually ran
+    // rather than just that v4 stopped being asserted on.
+    let dropped: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='pr_requeue_attempts'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(dropped, 0, "pr_requeue_attempts should be dropped by v12");
 }
 
 #[test]
@@ -44,7 +54,7 @@ fn migrate_is_idempotent() {
             r.get(0)
         })
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
 }
 
 #[test]
@@ -67,7 +77,7 @@ fn migrate_upgrades_a_preexisting_pluginsql_db() {
             r.get(0)
         })
         .unwrap();
-    assert_eq!(version, 11);
+    assert_eq!(version, 12);
     // Pre-existing row survives.
     let rows: i64 = conn
         .query_row("SELECT count(*) FROM etag_cache", [], |r| r.get(0))

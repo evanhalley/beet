@@ -218,67 +218,6 @@ async fn maps_403_with_zero_remaining_to_rate_limited() {
 }
 
 #[tokio::test]
-async fn beet_post_graphql_returns_data_on_success() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "data": { "value": 7 }
-        })))
-        .mount(&server)
-        .await;
-
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let body: Payload = client
-        .beet_post_graphql("mutation { noop }", serde_json::json!({}))
-        .await
-        .unwrap();
-    assert_eq!(body, Payload { value: 7 });
-}
-
-#[tokio::test]
-async fn beet_post_graphql_treats_200_with_errors_as_github_error() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "data": null,
-            "errors": [{ "message": "Resource not accessible" }],
-        })))
-        .mount(&server)
-        .await;
-
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let err = client
-        .beet_post_graphql::<serde_json::Value>("mutation { noop }", serde_json::json!({}))
-        .await
-        .unwrap_err();
-    match err {
-        BeetError::Github { status: 200, body } => {
-            assert!(body.contains("Resource not accessible"));
-        }
-        other => panic!("expected Github(200), got {other:?}"),
-    }
-}
-
-#[tokio::test]
-async fn beet_post_graphql_maps_401_to_unauthorized() {
-    let server = MockServer::start().await;
-    Mock::given(method("POST"))
-        .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(401))
-        .mount(&server)
-        .await;
-
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let err = client
-        .beet_post_graphql::<serde_json::Value>("mutation { noop }", serde_json::json!({}))
-        .await
-        .unwrap_err();
-    assert!(matches!(err, BeetError::Unauthorized(401)));
-}
-
-#[tokio::test]
 async fn plain_403_is_not_misclassified_as_rate_limited() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))

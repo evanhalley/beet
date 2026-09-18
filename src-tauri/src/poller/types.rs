@@ -89,15 +89,10 @@ pub struct ActionableItemMergeQueue {
     pub last_ejection_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ejected_checks: Option<Vec<EjectedCheck>>,
-    /// Head SHA at the time the row was assembled. Sent to the frontend so the
-    /// DetailPane can look up the per-`(prId, headSha)` requeue history (#13).
+    /// Head SHA at the time the row was assembled. Sent to the frontend so
+    /// `useNotifications` can key the failing-checks dedupe off it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub head_sha: Option<String>,
-    /// PR's GraphQL node ID. Consumed by the auto-requeue worker to call the
-    /// `enqueuePullRequest` mutation; carried through to the frontend so it
-    /// stays close to the row it belongs to (#13).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub pr_node_id: Option<String>,
 }
 
 /// One workflow run attached to a PR's `associated_runs`. The DetailPane's
