@@ -125,7 +125,7 @@ export default function Page() {
   );
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       <MainWindowShell
         banner={banner}
         onOpenSettings={() => setSettingsOpen(true)}
