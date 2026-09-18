@@ -11,7 +11,6 @@ import { BranchWithCopy } from "@/components/CopyBranchButton";
 import { Lifecycle } from "@/components/Lifecycle";
 import { Pill, type PillTone } from "@/components/Pill";
 import { ScoreBar } from "@/components/ScoreBar";
-import { useRequeueHistory } from "@/hooks/useRequeueHistory";
 import { useRunJobs } from "@/hooks/useRunJobs";
 import { prBranchTarget } from "@/lib/branch";
 import { copyToClipboard } from "@/lib/copyToClipboard";
@@ -756,21 +755,11 @@ function PlaceholderBlock({ title, hint }: { title: string; hint: string }) {
 
 export function DetailPane({ item }: DetailPaneProps) {
   const pr = item?.pr ?? null;
-  const headSha = pr?.mergeQueue?.headSha ?? null;
   // Cold-start signal — the Rust poll loop hasn't produced its first result
   // yet. Read directly off the store so we don't have to thread it through
   // MainWindowShell just for the empty state.
   const pollState = useAppStore((s) => s.pollState);
   const isLoading = pollState === "idle";
-  // Only authored PRs are ever auto-requeued, so the toggle/badge are only
-  // meaningful in that case — for review-requests, the headSha will usually
-  // be absent anyway and the hook returns the empty state. Called above the
-  // early return so the hook order stays stable across renders.
-  const requeue = useRequeueHistory(
-    item && pr?.isAuthoredByMe ? item.id : null,
-    pr?.isAuthoredByMe ? headSha : null,
-  );
-
   if (!item) {
     return (
       <div
@@ -873,9 +862,6 @@ export function DetailPane({ item }: DetailPaneProps) {
             state={pr.lifecycle}
             mqPos={pr.mergeQueue?.position ?? null}
           />
-          {requeue.count > 0 && (
-            <Pill tone="neutral">Auto-requeued {requeue.count}×</Pill>
-          )}
           <ScoreBar score={pr.score} width={36} />
           <span style={{ flex: 1 }} />
           <button
@@ -900,26 +886,6 @@ export function DetailPane({ item }: DetailPaneProps) {
             Open on GitHub
           </button>
         </div>
-        {pr.isAuthoredByMe && headSha && (
-          <label
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 6,
-              marginTop: 10,
-              fontSize: 11.5,
-              color: "var(--color-text-muted)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={requeue.optOut}
-              onChange={(e) => void requeue.setOptOut(e.target.checked)}
-              aria-label="Don't auto-requeue this PR"
-            />
-            Don&apos;t auto-requeue this PR
-          </label>
-        )}
       </header>
 
       <BodyBlock body={pr.body} />

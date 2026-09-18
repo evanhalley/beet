@@ -9,13 +9,6 @@ fn clamp_interval_bounds() {
 }
 
 #[test]
-fn clamp_max_attempts_bounds() {
-    assert_eq!(clamp_max_attempts(0), AUTO_REQUEUE_MAX_ATTEMPTS_MIN);
-    assert_eq!(clamp_max_attempts(2), 2);
-    assert_eq!(clamp_max_attempts(99), AUTO_REQUEUE_MAX_ATTEMPTS_MAX);
-}
-
-#[test]
 fn string_array_parses_and_filters() {
     let v = serde_json::json!(["a", 2, "b", null]);
     assert_eq!(

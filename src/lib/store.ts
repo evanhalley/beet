@@ -7,12 +7,6 @@ import { EMPTY_LIST_FILTERS, type ListFilters } from "@/lib/filters";
 
 export type PollState = "idle" | "polling" | "ok" | "error";
 
-export interface AutoRequeueError {
-  prId: string;
-  headSha: string;
-  message: string;
-}
-
 // Payloads emitted by the Rust poll loop (src-tauri/src/poller/poll_loop.rs).
 export interface PollResultPayload {
   reviewRequests: ActionableItem[];
@@ -26,7 +20,6 @@ export interface PollResultPayload {
   recentlyResolved?: ActionableItem[];
   rateLimit: RateLimitInfo | null;
   polledAt: string;
-  autoRequeueErrors?: AutoRequeueError[];
 }
 
 export interface PollStatusPayload {
@@ -69,11 +62,6 @@ export interface AppStore {
   listFilters: ListFilters;
 
   uiError: string | null;
-  // Set of (prId|headSha) pairs the user has already been notified about for
-  // auto-requeue failures (#13). Persisting it across poll cycles keeps a
-  // failing PR from spamming the toast every interval — one banner per
-  // distinct `(prId, headSha)` is enough.
-  autoRequeueNotified: Set<string>;
 
   selectedItemId: string | null;
 
@@ -140,7 +128,6 @@ const initialState = {
   showAllReviewsOverride: null as boolean | null,
   listFilters: EMPTY_LIST_FILTERS,
   uiError: null as string | null,
-  autoRequeueNotified: new Set<string>(),
   selectedItemId: null as string | null,
   pendingNotificationItemId: null as string | null,
   settings: SETTINGS_DEFAULTS,
@@ -151,7 +138,7 @@ const initialState = {
   snoozes: {} as Record<string, string>,
 };
 
-export const useAppStore = create<AppStore>((set, get) => ({
+export const useAppStore = create<AppStore>((set) => ({
   ...initialState,
   setPollResult: (payload) => {
     const standaloneRuns = payload.standaloneRuns ?? [];
@@ -167,23 +154,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
       if (!byId.has(item.id)) byId.set(item.id, item);
     }
 
-    // Dedupe auto-requeue error toasts: a failing (prId, headSha) should
-    // only surface once. The set persists across cycles; a new push (new
-    // headSha) resets the key naturally.
-    const incoming = payload.autoRequeueErrors ?? [];
-    let uiError = get().uiError;
-    let notified = get().autoRequeueNotified;
-    if (incoming.length > 0) {
-      notified = new Set(notified);
-      for (const err of incoming) {
-        const key = `${err.prId}|${err.headSha}`;
-        if (!notified.has(key)) {
-          notified.add(key);
-          uiError = `Auto-requeue failed for ${err.prId}: ${err.message}`;
-        }
-      }
-    }
-
     set({
       reviewRequests: payload.reviewRequests,
       inFlight: payload.inFlight,
@@ -192,8 +162,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
       byId,
       rateLimit: payload.rateLimit,
       lastPolledAt: payload.polledAt,
-      autoRequeueNotified: notified,
-      uiError,
     });
   },
   setPollStatus: (payload) =>
@@ -225,7 +193,6 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({
       ...initialState,
       byId: new Map(),
-      autoRequeueNotified: new Set(),
     }),
 }));
 

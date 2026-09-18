@@ -14,10 +14,6 @@ const POLLING_INTERVAL_MIN: u64 = 15;
 const POLLING_INTERVAL_MAX: u64 = 600;
 const POLLING_INTERVAL_DEFAULT: u64 = 60;
 
-const AUTO_REQUEUE_MAX_ATTEMPTS_MIN: u32 = 1;
-const AUTO_REQUEUE_MAX_ATTEMPTS_MAX: u32 = 5;
-const AUTO_REQUEUE_MAX_ATTEMPTS_DEFAULT: u32 = 2;
-
 /// The slice of Beet settings the poll loop needs. `showAllApproved` is *not*
 /// here: it only affects which already-scored items are shown, which the
 /// frontend now decides — Rust always returns the full scored list.
@@ -28,14 +24,6 @@ pub struct PollConfig {
     pub task_regex: String,
     /// Already clamped to `[15, 600]`.
     pub polling_interval_sec: u64,
-    /// Master switch for the merge-queue auto-requeue worker (#13). Off by
-    /// default — the user must opt in via Settings → Merge Queue.
-    pub auto_requeue_enabled: bool,
-    /// Maximum auto-requeue attempts per `(pr_id, head_sha)`. Already clamped
-    /// to `[1, 5]`. Default 2 — a flake usually clears in one retry.
-    pub auto_requeue_max_attempts: u32,
-    /// Optional allowlist of `owner/repo` strings. Empty = all repos.
-    pub auto_requeue_repos: Vec<String>,
     /// Per-repo allowlist of workflow names for the Standalone Runs section
     /// (#6 noise control). Key = `owner/repo`, value = workflow display names.
     /// Empty map / missing repo = show all (still deduped per workflow);
@@ -51,9 +39,6 @@ impl Default for PollConfig {
             penalized_bots: Vec::new(),
             task_regex: DEFAULT_TASK_REGEX.to_string(),
             polling_interval_sec: POLLING_INTERVAL_DEFAULT,
-            auto_requeue_enabled: false,
-            auto_requeue_max_attempts: AUTO_REQUEUE_MAX_ATTEMPTS_DEFAULT,
-            auto_requeue_repos: Vec::new(),
             standalone_runs_allowlist: HashMap::new(),
         }
     }
@@ -81,19 +66,6 @@ impl PollConfig {
                     .and_then(|v| v.as_u64())
                     .unwrap_or(POLLING_INTERVAL_DEFAULT),
             ),
-            auto_requeue_enabled: store
-                .get("autoRequeueEnabled")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(defaults.auto_requeue_enabled),
-            auto_requeue_max_attempts: clamp_max_attempts(
-                store
-                    .get("autoRequeueMaxAttempts")
-                    .and_then(|v| v.as_u64())
-                    .map(|n| n as u32)
-                    .unwrap_or(AUTO_REQUEUE_MAX_ATTEMPTS_DEFAULT),
-            ),
-            auto_requeue_repos: string_array(store.get("autoRequeueRepos"))
-                .unwrap_or(defaults.auto_requeue_repos),
             standalone_runs_allowlist: string_array_map(store.get("standaloneRunsAllowlist"))
                 .unwrap_or(defaults.standalone_runs_allowlist),
         }
@@ -102,10 +74,6 @@ impl PollConfig {
 
 fn clamp_interval(secs: u64) -> u64 {
     secs.clamp(POLLING_INTERVAL_MIN, POLLING_INTERVAL_MAX)
-}
-
-fn clamp_max_attempts(n: u32) -> u32 {
-    n.clamp(AUTO_REQUEUE_MAX_ATTEMPTS_MIN, AUTO_REQUEUE_MAX_ATTEMPTS_MAX)
 }
 
 fn string_array(value: Option<Value>) -> Option<Vec<String>> {

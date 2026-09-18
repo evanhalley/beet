@@ -7,7 +7,6 @@ import { AboutTab } from "./AboutTab";
 import { AccountTab } from "./AccountTab";
 import { AppearanceTab } from "./AppearanceTab";
 import { GeneralTab } from "./GeneralTab";
-import { MergeQueueTab } from "./MergeQueueTab";
 import { MutePinTab } from "./MutePinTab";
 import { NotificationsTab } from "./NotificationsTab";
 import { RunsTab } from "./RunsTab";
@@ -23,7 +22,6 @@ interface NavItem {
     | "scoring"
     | "polling"
     | "appearance"
-    | "merge-queue"
     | "mute-pin"
     | "runs"
     | "about";
@@ -40,7 +38,6 @@ const ITEMS: readonly NavItem[] = [
   { id: "polling", label: "Polling", icon: "refresh" },
   { id: "runs", label: "Runs", icon: "runs" },
   { id: "mute-pin", label: "Mute & Pin", icon: "mute" },
-  { id: "merge-queue", label: "Merge Queue", icon: "merge" },
   { id: "about", label: "About", icon: "info" },
 ] as const;
 
@@ -143,7 +140,6 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
           {tab === "appearance" && <AppearanceTab />}
           {tab === "runs" && <RunsTab />}
           {tab === "mute-pin" && <MutePinTab />}
-          {tab === "merge-queue" && <MergeQueueTab />}
           {tab === "about" && <AboutTab />}
         </div>
       </div>

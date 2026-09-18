@@ -7,7 +7,6 @@
 
 use crate::error::BeetResult;
 use crate::github::client::{GithubClient, RateLimitInfo};
-use crate::github::merge_queue::enqueue_pr;
 use crate::github::models::{
     CheckRunsResult, CommentRow, GitRef, PullDetail, ReviewRow, SearchResult, UserRef,
 };
@@ -22,11 +21,9 @@ use crate::store::lifecycle::{
     detect_ejection, get_latest_ejection_event, get_latest_lifecycle_row, record_ejection_event,
     record_lifecycle, PrSnapshot,
 };
-use crate::store::requeue::{count_attempts, is_opted_out, record_attempt};
 use crate::store::Db;
 use crate::tasks::{compile_task_regex, extract_task_urls};
 use futures::stream::{self, StreamExt};
-use serde::Serialize;
 // Two different regex engines: `regex` for our own URL parsers (linear,
 // fast), `fancy_regex` for the user-supplied taskRegex (supports JS-era
 // patterns with lookaround / backreferences). Aliased here so the call
@@ -43,25 +40,11 @@ const EJECTION_CHECK_CONCLUSIONS: &[&str] =
     &["failure", "cancelled", "timed_out", "action_required"];
 
 /// Items plus the freshest core-API rate-limit reading observed while building
-/// them. The auto-requeue worker (#13) also stashes any per-item mutation
-/// errors here so the poll loop can attach them to the next `PollResultPayload`
-/// (the `auto_requeue_errors` field) — the UI surfaces those as toast banners.
+/// them.
 #[derive(Debug, Default)]
 pub struct FetchOutcome {
     pub items: Vec<ActionableItem>,
     pub rate_limit: Option<RateLimitInfo>,
-    pub auto_requeue_errors: Vec<AutoRequeueError>,
-}
-
-/// One auto-requeue mutation failure. Emitted to the frontend once per
-/// `(pr_id, head_sha)` so the user sees a single banner per failure, not one
-/// per poll cycle.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AutoRequeueError {
-    pub pr_id: String,
-    pub head_sha: String,
-    pub message: String,
 }
 
 /// One entry from the per-PR `buffer_unordered` stream. The leading `usize`
@@ -226,12 +209,6 @@ pub struct FetchReviewRequestsOptions {
 pub struct FetchMyOpenPrsOptions {
     pub username: String,
     pub task_regex: String,
-    /// Auto-requeue worker config (#13). Read from PollConfig at the top of
-    /// each poll cycle.
-    pub auto_requeue_enabled: bool,
-    pub auto_requeue_max_attempts: u32,
-    /// Empty = all repos eligible; non-empty = only these `owner/repo` repos.
-    pub auto_requeue_repos: Vec<String>,
 }
 
 /// Build the `/search/issues` URL for query string `q`.
@@ -285,11 +262,7 @@ pub async fn fetch_review_requests(
     // decides visibility from the (session-overridable) "show all" toggle, so
     // the full scored list must cross the boundary.
     let items = score_pull_requests(items, true, &opts.penalized_bots);
-    Ok(FetchOutcome {
-        items,
-        rate_limit,
-        auto_requeue_errors: Vec::new(),
-    })
+    Ok(FetchOutcome { items, rate_limit })
 }
 
 pub async fn fetch_my_open_prs(
@@ -327,96 +300,7 @@ pub async fn fetch_my_open_prs(
     // Stable sort: equal updated_at keeps search order (set by collect_assembled).
     items.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
 
-    // Auto-requeue worker (#13). Runs after item assembly so it sees the same
-    // `(pr_id, head_sha, pr_node_id, lifecycle, ejected_checks)` the row will
-    // show — no extra GitHub roundtrip beyond the enqueue mutation itself.
-    let auto_requeue_errors = maybe_auto_requeue(client, db, opts, &items).await?;
-
-    Ok(FetchOutcome {
-        items,
-        rate_limit,
-        auto_requeue_errors,
-    })
-}
-
-/// Inspect each item for "currently ejected from the merge queue" state and
-/// fire the `enqueuePullRequest` mutation when the worker is enabled, the cap
-/// hasn't been hit, and the PR isn't opted out. Critical errors (rate-limit,
-/// auth) abort the cycle; per-PR mutation failures are recorded against the
-/// cap and returned to the caller for one-shot UI display.
-async fn maybe_auto_requeue(
-    client: &GithubClient,
-    db: &Db,
-    opts: &FetchMyOpenPrsOptions,
-    items: &[ActionableItem],
-) -> BeetResult<Vec<AutoRequeueError>> {
-    if !opts.auto_requeue_enabled {
-        return Ok(Vec::new());
-    }
-
-    let allowlist_active = !opts.auto_requeue_repos.is_empty();
-    let mut errors = Vec::new();
-
-    for item in items {
-        let Some(pr) = item.pr.as_ref() else {
-            continue;
-        };
-        // Only PRs that are *currently ejected*: an ejection event exists at
-        // the current head SHA, but the PR has dropped back out of the queue.
-        // `build_merge_queue` only attaches `ejected_checks` in that case.
-        let Some(mq) = pr.merge_queue.as_ref() else {
-            continue;
-        };
-        let Some(checks) = mq.ejected_checks.as_ref() else {
-            continue;
-        };
-        if checks.is_empty() || pr.lifecycle == PrLifecycle::MergeQueue {
-            continue;
-        }
-        if allowlist_active && !opts.auto_requeue_repos.contains(&item.repo_full_name) {
-            continue;
-        }
-        let Some(head_sha) = mq.head_sha.as_deref() else {
-            continue;
-        };
-        let Some(node_id) = mq.pr_node_id.as_deref() else {
-            continue;
-        };
-
-        // Cap + opt-out checks are cheap DB reads — do them before the network
-        // call so an over-cap PR doesn't burn a GitHub request.
-        let (count, opted_out) = {
-            let Ok(conn) = db.lock() else { continue };
-            let count = count_attempts(&conn, &item.id, head_sha).unwrap_or(0);
-            let opted_out = is_opted_out(&conn, &item.id, head_sha).unwrap_or(false);
-            (count, opted_out)
-        };
-        if opted_out || count >= opts.auto_requeue_max_attempts as i64 {
-            continue;
-        }
-
-        match enqueue_pr(client, node_id).await {
-            Ok(()) => {
-                if let Ok(conn) = db.lock() {
-                    let _ = record_attempt(&conn, &item.id, head_sha, true);
-                }
-            }
-            Err(e) if e.is_critical() => return Err(e),
-            Err(e) => {
-                let message = e.to_string();
-                if let Ok(conn) = db.lock() {
-                    let _ = record_attempt(&conn, &item.id, head_sha, false);
-                }
-                errors.push(AutoRequeueError {
-                    pr_id: item.id.clone(),
-                    head_sha: head_sha.to_string(),
-                    message,
-                });
-            }
-        }
-    }
-
-    Ok(errors)
+    Ok(FetchOutcome { items, rate_limit })
 }
 
 /// Drain the `buffer_unordered` output into items + the last seen rate limit.
@@ -731,7 +615,6 @@ fn build_merge_queue(
             last_ejection_at: Some(now),
             ejected_checks: Some(failing_checks),
             head_sha: Some(pull.head.sha.clone()),
-            pr_node_id: pull.node_id.clone(),
         }));
     }
 
@@ -750,7 +633,6 @@ fn build_merge_queue(
                     last_ejection_at: Some(prior.observed_at),
                     ejected_checks: Some(prior.failing_checks),
                     head_sha: Some(pull.head.sha.clone()),
-                    pr_node_id: pull.node_id.clone(),
                 }));
             }
         }
@@ -771,7 +653,6 @@ fn build_merge_queue(
         last_ejection_at: None,
         ejected_checks: None,
         head_sha: Some(pull.head.sha.clone()),
-        pr_node_id: pull.node_id.clone(),
     }))
 }
 

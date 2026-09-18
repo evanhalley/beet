@@ -150,9 +150,6 @@ async fn fetch_my_open_prs_detects_merge_queue_ejection() {
     let opts = FetchMyOpenPrsOptions {
         username: "me".to_string(),
         task_regex: String::new(),
-        auto_requeue_enabled: false,
-        auto_requeue_max_attempts: 2,
-        auto_requeue_repos: vec![],
     };
     let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
     assert_eq!(outcome.items.len(), 1);
@@ -170,236 +167,6 @@ async fn fetch_my_open_prs_detects_merge_queue_ejection() {
     // Only the failing check is kept.
     assert_eq!(checks.len(), 1);
     assert_eq!(checks[0].name, "ci/build");
-}
-
-/// Helper for the auto-requeue worker tests. Seeds the same mocks the
-/// detect-ejection test uses, plus a `pulls.get` body that includes
-/// `node_id` (needed for the GraphQL mutation) and a `head_sha` of the
-/// caller's choice.
-async fn seed_my_open_prs_with_ejection(server: &MockServer, head_sha: &str, node_id: &str) {
-    Mock::given(method("GET"))
-        .and(path("/search/issues"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "items": [{
-                "number": 7,
-                "html_url": "https://github.com/foo/bar/pull/7",
-                "url": "https://api.github.com/repos/foo/bar/issues/7",
-            }]
-        })))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/repos/foo/bar/pulls/7"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "title": "My PR",
-            "body": null,
-            "html_url": "https://github.com/foo/bar/pull/7",
-            "node_id": node_id,
-            "state": "open",
-            "user": { "login": "me" },
-            "head": { "sha": head_sha },
-            "additions": 1,
-            "deletions": 1,
-            "created_at": "2026-01-01T00:00:00.000Z",
-            "updated_at": "2026-01-02T00:00:00.000Z",
-        })))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/repos/foo/bar/issues/7/comments"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path("/repos/foo/bar/pulls/7/reviews"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
-        .mount(server)
-        .await;
-    Mock::given(method("GET"))
-        .and(path(format!(
-            "/repos/foo/bar/commits/{head_sha}/check-runs"
-        )))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "check_runs": [
-                { "name": "ci/build", "conclusion": "failure" },
-            ]
-        })))
-        .mount(server)
-        .await;
-}
-
-#[tokio::test]
-async fn auto_requeue_fires_when_enabled_and_within_cap() {
-    let server = MockServer::start().await;
-    seed_my_open_prs_with_ejection(&server, "sha-r1", "PR_kwDOA").await;
-    // Worker should POST one GraphQL mutation with the node_id.
-    Mock::given(method("POST"))
-        .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "data": { "enqueuePullRequest": { "mergeQueueEntry": { "position": 4 } } }
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let db: Db = Mutex::new(open_in_memory().unwrap());
-    {
-        let conn = db.lock().unwrap();
-        record_lifecycle(
-            &conn,
-            "pr:foo/bar#7",
-            PrLifecycle::MergeQueue,
-            &PrSnapshot::default(),
-        )
-        .unwrap();
-    }
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let opts = FetchMyOpenPrsOptions {
-        username: "me".to_string(),
-        task_regex: String::new(),
-        auto_requeue_enabled: true,
-        auto_requeue_max_attempts: 2,
-        auto_requeue_repos: vec![],
-    };
-    let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
-    assert!(outcome.auto_requeue_errors.is_empty());
-    let conn = db.lock().unwrap();
-    assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r1").unwrap(), 1);
-}
-
-#[tokio::test]
-async fn auto_requeue_skips_when_disabled() {
-    let server = MockServer::start().await;
-    seed_my_open_prs_with_ejection(&server, "sha-r2", "PR_kwDOB").await;
-    // No /graphql mock — if the worker fires, the call would 404 and the
-    // worker would push an entry to auto_requeue_errors.
-
-    let db: Db = Mutex::new(open_in_memory().unwrap());
-    {
-        let conn = db.lock().unwrap();
-        record_lifecycle(
-            &conn,
-            "pr:foo/bar#7",
-            PrLifecycle::MergeQueue,
-            &PrSnapshot::default(),
-        )
-        .unwrap();
-    }
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let opts = FetchMyOpenPrsOptions {
-        username: "me".to_string(),
-        task_regex: String::new(),
-        auto_requeue_enabled: false,
-        auto_requeue_max_attempts: 2,
-        auto_requeue_repos: vec![],
-    };
-    let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
-    assert!(outcome.auto_requeue_errors.is_empty());
-    let conn = db.lock().unwrap();
-    assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r2").unwrap(), 0);
-}
-
-#[tokio::test]
-async fn auto_requeue_respects_cap_across_cycles() {
-    let server = MockServer::start().await;
-    seed_my_open_prs_with_ejection(&server, "sha-r3", "PR_kwDOC").await;
-    // Worker should only call once even though we run the cycle twice —
-    // the second cycle hits the cap (max_attempts = 1).
-    Mock::given(method("POST"))
-        .and(path("/graphql"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-            "data": { "enqueuePullRequest": { "mergeQueueEntry": { "position": 1 } } }
-        })))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let db: Db = Mutex::new(open_in_memory().unwrap());
-    {
-        let conn = db.lock().unwrap();
-        record_lifecycle(
-            &conn,
-            "pr:foo/bar#7",
-            PrLifecycle::MergeQueue,
-            &PrSnapshot::default(),
-        )
-        .unwrap();
-    }
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let opts = FetchMyOpenPrsOptions {
-        username: "me".to_string(),
-        task_regex: String::new(),
-        auto_requeue_enabled: true,
-        auto_requeue_max_attempts: 1,
-        auto_requeue_repos: vec![],
-    };
-    // Cycle 1 — fires the mutation.
-    fetch_my_open_prs(&client, &db, &opts).await.unwrap();
-    // Cycle 2 — already at the cap.
-    fetch_my_open_prs(&client, &db, &opts).await.unwrap();
-    let conn = db.lock().unwrap();
-    assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r3").unwrap(), 1);
-}
-
-#[tokio::test]
-async fn auto_requeue_respects_opt_out() {
-    use crate::store::requeue::set_opt_out;
-    let server = MockServer::start().await;
-    seed_my_open_prs_with_ejection(&server, "sha-r4", "PR_kwDOD").await;
-
-    let db: Db = Mutex::new(open_in_memory().unwrap());
-    {
-        let conn = db.lock().unwrap();
-        record_lifecycle(
-            &conn,
-            "pr:foo/bar#7",
-            PrLifecycle::MergeQueue,
-            &PrSnapshot::default(),
-        )
-        .unwrap();
-        set_opt_out(&conn, "pr:foo/bar#7", "sha-r4", true).unwrap();
-    }
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let opts = FetchMyOpenPrsOptions {
-        username: "me".to_string(),
-        task_regex: String::new(),
-        auto_requeue_enabled: true,
-        auto_requeue_max_attempts: 2,
-        auto_requeue_repos: vec![],
-    };
-    fetch_my_open_prs(&client, &db, &opts).await.unwrap();
-    let conn = db.lock().unwrap();
-    assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r4").unwrap(), 0);
-}
-
-#[tokio::test]
-async fn auto_requeue_respects_repo_allowlist() {
-    let server = MockServer::start().await;
-    seed_my_open_prs_with_ejection(&server, "sha-r5", "PR_kwDOE").await;
-
-    let db: Db = Mutex::new(open_in_memory().unwrap());
-    {
-        let conn = db.lock().unwrap();
-        record_lifecycle(
-            &conn,
-            "pr:foo/bar#7",
-            PrLifecycle::MergeQueue,
-            &PrSnapshot::default(),
-        )
-        .unwrap();
-    }
-    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
-    let opts = FetchMyOpenPrsOptions {
-        username: "me".to_string(),
-        task_regex: String::new(),
-        auto_requeue_enabled: true,
-        auto_requeue_max_attempts: 2,
-        // Allowlist active but doesn't include foo/bar → skip.
-        auto_requeue_repos: vec!["other/repo".to_string()],
-    };
-    fetch_my_open_prs(&client, &db, &opts).await.unwrap();
-    let conn = db.lock().unwrap();
-    assert_eq!(count_attempts(&conn, "pr:foo/bar#7", "sha-r5").unwrap(), 0);
 }
 
 #[tokio::test]
@@ -458,7 +225,6 @@ fn pull(state: &str, merged: bool) -> PullDetail {
         title: "t".into(),
         body: None,
         html_url: "u".into(),
-        node_id: None,
         state: state.into(),
         merged,
         auto_merge: None,
@@ -655,9 +421,6 @@ async fn assemble_my_pr_item_attaches_full_check_runs() {
     let opts = FetchMyOpenPrsOptions {
         username: "me".to_string(),
         task_regex: String::new(),
-        auto_requeue_enabled: false,
-        auto_requeue_max_attempts: 2,
-        auto_requeue_repos: vec![],
     };
     let outcome = fetch_my_open_prs(&client, &db, &opts).await.unwrap();
     let pr = outcome.items[0].pr.as_ref().unwrap();

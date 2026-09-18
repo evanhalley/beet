@@ -34,7 +34,7 @@ Write the four rendered lists to SQLite at the end of each successful cycle (Rus
 
 ### Frontend — apply on mount + relax loading gate
 
-- [ ] **`src/lib/storage/snapshot.ts`** (new) — `getCachedSnapshot(): Promise<PollResultPayload | null>` wrapping `invoke("get_cached_snapshot")`, fail-safe to `null`. The returned shape is directly consumable by `setPollResult` (`rateLimit` null, no `autoRequeueErrors` — both optional/nullable).
+- [ ] **`src/lib/storage/snapshot.ts`** (new) — `getCachedSnapshot(): Promise<PollResultPayload | null>` wrapping `invoke("get_cached_snapshot")`, fail-safe to `null`. The returned shape is directly consumable by `setPollResult` (`rateLimit` null — optional/nullable).
 - [ ] **`src/lib/store.ts`** — add `lastResultStale: boolean` (initial `false`); let `setPollResult` mark a result stale (second arg or optional `payload.stale`). Stale apply sets `lastResultStale = true`; a live apply resets it to `false`. Nothing else in `setPollResult` changes — it already sets `lastPolledAt`.
 - [ ] **`src/hooks/usePollEvents.ts`** — on mount (both windows; the tray renders data too), before poking: fetch the cached snapshot and apply it **only if** `useAppStore.getState().lastPolledAt === null` (guard against clobbering a live result that already arrived). Keep the existing `refresh_now` poke (main window only).
 - [ ] **Loading gate** — change `isLoading` from `pollState === "idle"` to `pollState === "idle" && lastPolledAt === null` in `useActionableItems.ts` and `DetailPane.tsx`. Backward-compatible: tests setting `pollState: "ok"` still short-circuit; a true fresh boot still shows Loading; a cached snapshot clears Loading while `pollState` is still idle. `PollingDot` (`pollState === "polling"`) covers the live-refresh indication.
