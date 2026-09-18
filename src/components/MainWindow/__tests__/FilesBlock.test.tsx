@@ -194,6 +194,16 @@ describe("FilesBlock", () => {
     expect(screen.getByText("docs/y.md →")).toBeInTheDocument();
   });
 
+  test("status glyphs explain themselves on hover", async () => {
+    const user = userEvent.setup();
+    await renderWith(result());
+    expect(screen.getAllByTitle("Modified")).toHaveLength(2);
+    await user.click(screen.getByRole("button", { name: "All files (5)" }));
+    expect(screen.getByTitle("Renamed")).toHaveTextContent("R");
+    expect(screen.getByTitle("Deleted")).toHaveTextContent("D");
+    expect(screen.getByTitle("Added")).toHaveTextContent("A");
+  });
+
   test("renders loading and error states", async () => {
     invokeMock.mockImplementationOnce(() => new Promise(() => {}));
     render(<FilesBlock item={item} />);

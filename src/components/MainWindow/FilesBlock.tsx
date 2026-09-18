@@ -224,12 +224,17 @@ function ViewToggle({
   );
 }
 
-const STATUS_GLYPH: Record<string, { letter: string; tone: PillTone }> = {
-  added: { letter: "A", tone: "success" },
-  removed: { letter: "D", tone: "danger" },
-  renamed: { letter: "R", tone: "info" },
-  copied: { letter: "C", tone: "info" },
+// One-letter change status per row (the `git status` shorthand), with the
+// full word behind a hover tooltip.
+const STATUS_GLYPH: Record<string, { letter: string; label: string; tone: PillTone }> = {
+  added: { letter: "A", label: "Added", tone: "success" },
+  modified: { letter: "M", label: "Modified", tone: "neutral" },
+  removed: { letter: "D", label: "Deleted", tone: "danger" },
+  renamed: { letter: "R", label: "Renamed", tone: "info" },
+  copied: { letter: "C", label: "Copied", tone: "info" },
+  changed: { letter: "M", label: "Changed", tone: "neutral" },
 };
+const UNKNOWN_GLYPH = { letter: "M", label: "Modified", tone: "neutral" as PillTone };
 
 function splitPath(path: string): { dir: string; base: string } {
   const i = path.lastIndexOf("/");
@@ -245,7 +250,7 @@ function FileRow({
   prUrl: string;
   username: string;
 }) {
-  const glyph = STATUS_GLYPH[file.status] ?? { letter: "M", tone: "neutral" as PillTone };
+  const glyph = STATUS_GLYPH[file.status] ?? UNKNOWN_GLYPH;
   const { dir, base } = splitPath(file.path);
   const href = diffUrl(prUrl, file.anchor, file.ownedByMe ? username : undefined);
   return (
@@ -267,7 +272,7 @@ function FileRow({
         minWidth: 0,
       }}
     >
-      <Pill tone={glyph.tone} mono style={{ padding: "0 5px", fontSize: 10 }}>
+      <Pill tone={glyph.tone} mono title={glyph.label} style={{ padding: "0 5px", fontSize: 10 }}>
         {glyph.letter}
       </Pill>
       <span

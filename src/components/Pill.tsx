@@ -41,6 +41,8 @@ export interface PillProps {
   soft?: boolean;
   mono?: boolean;
   style?: CSSProperties;
+  /** Native hover tooltip. */
+  title?: string;
 }
 
 export function Pill({
@@ -49,11 +51,13 @@ export function Pill({
   soft = true,
   mono = false,
   style,
+  title,
 }: PillProps) {
   const { fg, bg, border } = MAP[tone];
   return (
     <span
       className={mono ? "mono" : ""}
+      title={title}
       style={{
         display: "inline-flex",
         alignItems: "center",
