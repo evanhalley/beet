@@ -49,7 +49,7 @@ export function SettingsPanel({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-label="Settings"
-      className="flex min-h-screen w-full flex-col overflow-hidden"
+      className="flex h-full w-full flex-col overflow-hidden"
       style={{ background: "var(--color-bg)", color: "var(--color-text)" }}
     >
       <header
