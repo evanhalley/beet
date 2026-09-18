@@ -18,12 +18,12 @@ jobs:
   release:
     runs-on: macos-latest
     permissions:
-      contents: write   # required to create releases, push tags, and commit version bump
+      contents: write   # required to create releases and push tags
 
     steps:
       # ── Guard: only release from main ────────────────────────────────
-      # workflow_dispatch can be triggered from any ref. The bump commit
-      # and tag must come from main, so fail fast on anything else.
+      # workflow_dispatch can be triggered from any ref. The release tag
+      # must point at main, so fail fast on anything else.
       - name: Ensure dispatched from main
         if: github.ref != 'refs/heads/main'
         run: |
@@ -31,16 +31,27 @@ jobs:
           exit 1
 
       - uses: actions/checkout@v4
-        # Need write access to push the version bump commit back to main.
+        # Full history + tags so the latest release tag can be found.
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           ref: main
+          fetch-depth: 0
+          fetch-tags: true
 
-      # ── Bump version from tauri.conf.json ─────────────────────────────
+      # ── Bump version from the latest release tag ──────────────────────
+      # main is protected by a "changes must be made through a pull
+      # request" ruleset, so the version bump is never committed back.
+      # The latest vX.Y.Z tag is the source of truth; tauri.conf.json is
+      # only patched inside this build. Falls back to tauri.conf.json when
+      # no release tag exists yet.
       - name: Compute next version
         id: version
         run: |
-          CURRENT=$(jq -r '.version' src-tauri/tauri.conf.json)
+          LATEST_TAG=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
+          if [ -n "$LATEST_TAG" ]; then
+            CURRENT="${LATEST_TAG#v}"
+          else
+            CURRENT=$(jq -r '.version' src-tauri/tauri.conf.json)
+          fi
           IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
           case "${{ inputs.bump }}" in
             major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
@@ -48,6 +59,10 @@ jobs:
             patch) PATCH=$((PATCH + 1)) ;;
           esac
           VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+            echo "::error::Tag v${VERSION} already exists"
+            exit 1
+          fi
           echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "TAG=v${VERSION}"    >> "$GITHUB_OUTPUT"
           echo "Bumping ${CURRENT} → ${VERSION} (${{ inputs.bump }})"
@@ -84,24 +99,6 @@ jobs:
         run: npm run tauri build
         # TODO(#10): add updater bundle signature step here using the
         # private key from CI secrets once tauri-plugin-updater is wired up.
-
-      # ── Commit the version bump back to main ──────────────────────────
-      # Re-check that main hasn't advanced during the build; if it has,
-      # bail out so the tag never points at code we didn't build.
-      - name: Commit version bump
-        run: |
-          git fetch origin main
-          LOCAL=$(git rev-parse HEAD)
-          REMOTE=$(git rev-parse origin/main)
-          if [ "$LOCAL" != "$REMOTE" ]; then
-            echo "::error::main advanced from $LOCAL to $REMOTE during the build — re-run the release."
-            exit 1
-          fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src-tauri/tauri.conf.json
-          git commit -m "chore(release): ${{ steps.version.outputs.TAG }}"
-          git push origin HEAD:main
 
       # ── Tag + Release ─────────────────────────────────────────────────
       - name: Create GitHub Release
