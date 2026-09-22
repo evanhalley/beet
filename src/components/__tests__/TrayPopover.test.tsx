@@ -153,6 +153,23 @@ describe("TrayPopover", () => {
     expect(screen.getAllByText("PR title 7")).toHaveLength(2);
   });
 
+  test("muted repos drop out of Needs Action and the header count", () => {
+    const mentioned = reviewItem(7);
+    mentioned.pr!.activity = { mentionsMe: 1, replyToMyReview: 0 };
+    useAppStore.getState().setPollResult({
+      reviewRequests: [mentioned],
+      inFlight: [],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    useAppStore.getState().setMutes([{ scope: "repo", value: "org/repo" }]);
+    render(<TrayPopover />);
+    expect(screen.getByText("No items needing action.")).toBeInTheDocument();
+    expect(screen.queryByText("PR title 7")).toBeNull();
+  });
+
   test("renders review request rows with correct count", () => {
     useAppStore.getState().setPollResult({
       reviewRequests: [reviewItem(1), reviewItem(2)],

@@ -18,6 +18,13 @@ use std::sync::{Arc, OnceLock};
 /// Upper bound on concurrent reply-to-review lookups.
 const MAX_REPLY_CONCURRENCY: usize = 4;
 
+/// Page size for the comment endpoints (GitHub's max).
+const COMMENTS_PER_PAGE: usize = 100;
+
+/// Cap on pages walked per comment endpoint for the Activity block — 1000
+/// comments is well past anything worth rendering in the detail pane.
+const MAX_COMMENT_PAGES: usize = 10;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NotificationEvent {
     /// `reason = mention | team_mention` on a PR thread.
@@ -26,8 +33,8 @@ pub enum NotificationEvent {
     ReplyToMyReview { pr_id: String },
 }
 
-/// A `reason = comment` PR thread that might be a reply to my review. Needs a
-/// review-comments lookup to confirm (`resolve_reply_candidates`).
+/// A `reason = comment | author` PR thread that might be a reply to my review.
+/// Needs a review-comments lookup to confirm (`resolve_reply_candidates`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommentCandidate {
     pub pr_id: String,
@@ -42,13 +49,15 @@ pub struct RoutedNotifications {
     pub comment_candidates: Vec<CommentCandidate>,
 }
 
-/// Unread inbox threads. `all=false` returns unread threads only, so a
-/// mention stops counting once the user reads it on GitHub.
+/// Unread inbox threads, most recently updated first. `all=false` returns
+/// unread threads only, so a mention stops counting once the user reads it on
+/// GitHub. One page of 100 (GitHub's max) — paging deeper into a backlog of
+/// stale unread threads isn't worth a request per poll.
 pub async fn fetch_notifications(
     client: &GithubClient,
     db: &Db,
 ) -> BeetResult<Vec<NotificationThread>> {
-    let url = client.url("/notifications?all=false&participating=false&per_page=50");
+    let url = client.url("/notifications?all=false&participating=false&per_page=100");
     let res = client
         .beet_get::<Vec<NotificationThread>>(db, "notifications:inbox", &url)
         .await?;
@@ -70,7 +79,9 @@ fn pr_id(owner: &str, repo: &str, number: i64) -> String {
     format!("pr:{owner}/{repo}#{number}")
 }
 
-/// Route unread threads by `reason`. `review_requested` is dropped — the
+/// Route unread threads by `reason`. `comment` (a thread I'm subscribed to)
+/// and `author` (activity on my own PR — GitHub uses it instead of `comment`
+/// there) become reply candidates. `review_requested` is dropped — the
 /// review-requests search already covers it — as is anything not on a PR.
 pub fn route_notifications(threads: &[NotificationThread]) -> RoutedNotifications {
     let mut out = RoutedNotifications::default();
@@ -86,7 +97,7 @@ pub fn route_notifications(threads: &[NotificationThread]) -> RoutedNotification
         let id = pr_id(&owner, &repo, number);
         match thread.reason.as_str() {
             "mention" | "team_mention" => out.events.push(NotificationEvent::Mention { pr_id: id }),
-            "comment" => out.comment_candidates.push(CommentCandidate {
+            "comment" | "author" => out.comment_candidates.push(CommentCandidate {
                 pr_id: id,
                 owner,
                 repo,
@@ -98,14 +109,25 @@ pub fn route_notifications(threads: &[NotificationThread]) -> RoutedNotification
     out
 }
 
-/// Reply-to-review heuristic: I authored at least one review comment on the
-/// PR, and the latest one is by someone else. `comments` must be sorted
-/// newest-first (the `sort=updated&direction=desc` query).
+/// Reply-to-review heuristic: some review thread I commented in has a newest
+/// comment by someone else. Threads are grouped by `in_reply_to_id` (GitHub
+/// points every reply at the thread's root comment), and "newest" is by
+/// `created_at`, so editing an old comment of mine doesn't mask a reply.
+/// Replies on threads I never joined don't count.
 pub fn is_reply_to_my_review(comments: &[FullCommentRow], username: &str) -> bool {
-    let Some(latest) = comments.first() else {
-        return false;
-    };
-    !is_mine(latest, username) && comments.iter().any(|c| is_mine(c, username))
+    // thread root id → (I participated, newest comment)
+    let mut threads: HashMap<i64, (bool, &FullCommentRow)> = HashMap::new();
+    for c in comments {
+        let root = c.in_reply_to_id.unwrap_or(c.id);
+        let entry = threads.entry(root).or_insert((false, c));
+        entry.0 |= is_mine(c, username);
+        if (c.created_at.as_str(), c.id) > (entry.1.created_at.as_str(), entry.1.id) {
+            entry.1 = c;
+        }
+    }
+    threads
+        .values()
+        .any(|(participated, newest)| *participated && !is_mine(newest, username))
 }
 
 fn is_mine(comment: &FullCommentRow, username: &str) -> bool {
@@ -221,6 +243,32 @@ pub fn merge_comments(issue: Vec<FullCommentRow>, review: Vec<FullCommentRow>) -
     out
 }
 
+/// Walk one comment endpoint page by page (each page ETag-cached) until a
+/// short page or `MAX_COMMENT_PAGES`. Both endpoints list oldest-first, so a
+/// single page would drop the newest comments on a busy PR.
+async fn fetch_comment_pages(
+    client: &GithubClient,
+    db: &Db,
+    path: &str,
+    cache_prefix: &str,
+) -> BeetResult<Vec<FullCommentRow>> {
+    let mut rows = Vec::new();
+    for page in 1..=MAX_COMMENT_PAGES {
+        let url = client.url(&format!("{path}?per_page={COMMENTS_PER_PAGE}&page={page}"));
+        let key = format!("{cache_prefix}:page{page}");
+        let body = client
+            .beet_get::<Vec<FullCommentRow>>(db, &key, &url)
+            .await?
+            .body;
+        let n = body.len();
+        rows.extend(body);
+        if n < COMMENTS_PER_PAGE {
+            break;
+        }
+    }
+    Ok(rows)
+}
+
 pub async fn fetch_pr_comments(
     client: &GithubClient,
     db: &Db,
@@ -229,19 +277,15 @@ pub async fn fetch_pr_comments(
     number: i64,
 ) -> BeetResult<Vec<PrComment>> {
     let id = pr_id(owner, repo, number);
-    let issue_url = client.url(&format!(
-        "/repos/{owner}/{repo}/issues/{number}/comments?per_page=100"
-    ));
-    let review_url = client.url(&format!(
-        "/repos/{owner}/{repo}/pulls/{number}/comments?per_page=100"
-    ));
+    let issue_path = format!("/repos/{owner}/{repo}/issues/{number}/comments");
+    let review_path = format!("/repos/{owner}/{repo}/pulls/{number}/comments");
     let issue_key = format!("pr-issue-comments:{id}");
     let review_key = format!("pr-review-comments:{id}");
     let (issue, review) = tokio::join!(
-        client.beet_get::<Vec<FullCommentRow>>(db, &issue_key, &issue_url),
-        client.beet_get::<Vec<FullCommentRow>>(db, &review_key, &review_url),
+        fetch_comment_pages(client, db, &issue_path, &issue_key),
+        fetch_comment_pages(client, db, &review_path, &review_key),
     );
-    Ok(merge_comments(issue?.body, review?.body))
+    Ok(merge_comments(issue?, review?))
 }
 
 /// Tauri command behind the detail pane's Activity block — the per-PR

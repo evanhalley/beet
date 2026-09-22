@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  applyMutes,
   applySnoozes,
   useAppStore,
   isReviewRequestVisible,
@@ -112,14 +113,21 @@ export function TrayPopover() {
   const reviewRequests = useAppStore((s) => s.reviewRequests);
   const rawInFlight = useAppStore((s) => s.inFlight);
   const rawStandaloneRuns = useAppStore((s) => s.standaloneRuns);
-  const recentlyResolved = useAppStore((s) => s.recentlyResolved);
+  const rawRecentlyResolved = useAppStore((s) => s.recentlyResolved);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
   const snoozes = useAppStore((s) => s.snoozes);
+  const mutes = useAppStore((s) => s.mutes);
 
-  const inFlight = applySnoozes(rawInFlight, snoozes);
-  const standaloneRuns = applySnoozes(rawStandaloneRuns, snoozes);
+  // Mutes + snoozes apply here exactly as in useTrayBadge, so the popover's
+  // sections and header count match the menu-bar badge.
+  const inFlight = applySnoozes(applyMutes(rawInFlight, mutes), snoozes);
+  const standaloneRuns = applySnoozes(
+    applyMutes(rawStandaloneRuns, mutes),
+    snoozes,
+  );
+  const recentlyResolved = applyMutes(rawRecentlyResolved, mutes);
 
   const [collapsed, setCollapsed] = useState<SectionCollapse>(loadCollapse);
 
@@ -130,7 +138,7 @@ export function TrayPopover() {
       return next;
     });
 
-  const visibleReviews = [...reviewRequests]
+  const visibleReviews = [...applyMutes(reviewRequests, mutes)]
     .sort((a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0))
     .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds, snoozes));
 

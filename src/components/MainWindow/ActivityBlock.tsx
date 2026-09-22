@@ -17,24 +17,46 @@ export interface ActivityThread {
   replies: PrComment[];
 }
 
-// Group review replies under their thread root, oldest first. A reply whose
-// root isn't in the list (deleted, or past the page limit) stands alone.
+// Group review replies under their thread root, oldest first. Only review
+// (inline) comments thread — conversation comments are flat, and the two
+// kinds are numbered independently, so lookups never mix them. A reply to a
+// reply is walked up to its root; a reply whose root isn't in the list
+// (deleted, or past the page cap) stands alone rather than being dropped.
 export function groupActivity(comments: PrComment[]): ActivityThread[] {
   const sorted = [...comments].sort(
     (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id,
   );
-  const ids = new Set(sorted.map((c) => c.id));
+  const reviewById = new Map<number, PrComment>();
+  for (const c of sorted) if (c.kind === "review") reviewById.set(c.id, c);
+
+  const rootOf = (c: PrComment): PrComment => {
+    let cur = c;
+    const seen = new Set<number>();
+    while (cur.inReplyToId !== undefined && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      const parent = reviewById.get(cur.inReplyToId);
+      if (!parent) break;
+      cur = parent;
+    }
+    return cur;
+  };
+
   const threads = new Map<number, ActivityThread>();
   const out: ActivityThread[] = [];
   for (const c of sorted) {
-    const rootId = c.inReplyToId;
-    if (rootId !== undefined && ids.has(rootId)) {
-      threads.get(rootId)?.replies.push(c);
+    if (c.kind === "review") {
+      const root = rootOf(c);
+      const thread = threads.get(root.id);
+      if (root.id !== c.id && thread) {
+        thread.replies.push(c);
+        continue;
+      }
+      const next = { root: c, replies: [] };
+      threads.set(c.id, next);
+      out.push(next);
       continue;
     }
-    const thread = { root: c, replies: [] };
-    threads.set(c.id, thread);
-    out.push(thread);
+    out.push({ root: c, replies: [] });
   }
   return out;
 }
@@ -214,14 +236,14 @@ export function ActivityBlock({ item }: { item: ActionableItem }) {
         >
           {threads.flatMap(({ root, replies }) => [
             <ActivityEntry
-              key={root.id}
+              key={`${root.kind}-${root.id}`}
               comment={root}
               username={data?.username ?? ""}
               isReply={false}
             />,
             ...replies.map((reply) => (
               <ActivityEntry
-                key={reply.id}
+                key={`${reply.kind}-${reply.id}`}
                 comment={reply}
                 username={data?.username ?? ""}
                 isReply

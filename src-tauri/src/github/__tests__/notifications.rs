@@ -21,6 +21,7 @@ fn thread(reason: &str, kind: &str, url: Option<&str>) -> NotificationThread {
 }
 
 const PR_URL: &str = "https://api.github.com/repos/acme/api/pulls/42";
+const MY_PR_URL: &str = "https://api.github.com/repos/acme/api/pulls/7";
 
 fn comment(id: i64, login: &str) -> FullCommentRow {
     FullCommentRow {
@@ -107,7 +108,8 @@ fn routes_each_reason() {
         thread("comment", "Issue", Some(issue_url)),
         thread("mention", "Issue", Some(issue_url)),
         thread("review_requested", "PullRequest", Some(PR_URL)),
-        thread("author", "PullRequest", Some(PR_URL)),
+        thread("author", "PullRequest", Some(MY_PR_URL)),
+        thread("state_change", "PullRequest", Some(PR_URL)),
         thread("mention", "PullRequest", None),
     ];
     let routed = route_notifications(&threads);
@@ -115,37 +117,69 @@ fn routes_each_reason() {
         pr_id: "pr:acme/api#42".into(),
     };
     assert_eq!(routed.events, vec![mention.clone(), mention]);
+    // `comment` on someone else's PR and `author` on my own PR both need
+    // the review-comments lookup.
     assert_eq!(
         routed.comment_candidates,
-        vec![CommentCandidate {
-            pr_id: "pr:acme/api#42".into(),
-            owner: "acme".into(),
-            repo: "api".into(),
-            number: 42,
-        }]
+        vec![
+            CommentCandidate {
+                pr_id: "pr:acme/api#42".into(),
+                owner: "acme".into(),
+                repo: "api".into(),
+                number: 42,
+            },
+            CommentCandidate {
+                pr_id: "pr:acme/api#7".into(),
+                owner: "acme".into(),
+                repo: "api".into(),
+                number: 7,
+            },
+        ]
     );
+}
+
+fn reply(id: i64, login: &str, root: i64) -> FullCommentRow {
+    FullCommentRow {
+        in_reply_to_id: Some(root),
+        ..comment(id, login)
+    }
 }
 
 #[test]
 fn reply_to_my_review_heuristic() {
-    // Newest first.
+    // Someone replied on a thread I started.
     assert!(is_reply_to_my_review(
-        &[comment(3, "rina"), comment(2, "evan"), comment(1, "kai")],
+        &[comment(1, "evan"), reply(2, "rina", 1)],
         "evan"
     ));
-    // Login match is case-insensitive.
+    // Someone replied after I replied on their thread; login match is
+    // case-insensitive.
     assert!(is_reply_to_my_review(
-        &[comment(2, "rina"), comment(1, "Evan")],
+        &[comment(1, "kai"), reply(2, "Evan", 1), reply(3, "kai", 1)],
         "evan"
     ));
-    // I'm the latest commenter — nothing new for me.
+    // I'm the newest in the thread — nothing new for me.
     assert!(!is_reply_to_my_review(
-        &[comment(3, "evan"), comment(2, "rina")],
+        &[comment(1, "rina"), reply(2, "evan", 1)],
         "evan"
     ));
-    // I never commented on a review thread.
+    // A reply on a thread I never joined doesn't count, even though I
+    // commented elsewhere on the PR.
     assert!(!is_reply_to_my_review(
-        &[comment(2, "rina"), comment(1, "kai")],
+        &[comment(1, "evan"), comment(2, "kai"), reply(3, "rina", 2)],
+        "evan"
+    ));
+    // Order-independent: "newest" is by created_at, so the API's
+    // updated-desc order (e.g. after I edit my old comment) doesn't matter.
+    assert!(is_reply_to_my_review(
+        &[comment(1, "evan"), reply(2, "rina", 1)]
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>(),
+        "evan"
+    ));
+    assert!(!is_reply_to_my_review(
+        &[comment(1, "rina"), comment(2, "kai")],
         "evan"
     ));
     assert!(!is_reply_to_my_review(&[], "evan"));
@@ -203,7 +237,7 @@ async fn fetch_notifications_requests_unread_threads() {
         .and(path("/notifications"))
         .and(query_param("all", "false"))
         .and(query_param("participating", "false"))
-        .and(query_param("per_page", "50"))
+        .and(query_param("per_page", "100"))
         .respond_with(
             ResponseTemplate::new(200).set_body_json(serde_json::json!([{
                 "id": "100",
@@ -266,6 +300,56 @@ async fn resolve_reply_candidates_only_checks_tracked_prs() {
             pr_id: "pr:acme/api#42".into(),
         }]
     );
+}
+
+fn comment_rows(n: usize, start: usize) -> serde_json::Value {
+    serde_json::Value::Array(
+        (start..start + n)
+            .map(|i| {
+                serde_json::json!({
+                    "id": i,
+                    "user": { "login": "kai" },
+                    "body": format!("c{i}"),
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "html_url": format!("h{i}"),
+                })
+            })
+            .collect(),
+    )
+}
+
+#[tokio::test]
+async fn fetch_pr_comments_pages_until_a_short_page() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/repos/acme/api/issues/42/comments"))
+        .and(query_param("per_page", "100"))
+        .and(query_param("page", "1"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(comment_rows(100, 1)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/acme/api/issues/42/comments"))
+        .and(query_param("page", "2"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(comment_rows(5, 101)))
+        .expect(1)
+        .mount(&server)
+        .await;
+    Mock::given(method("GET"))
+        .and(path("/repos/acme/api/pulls/42/comments"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([])))
+        .expect(1)
+        .mount(&server)
+        .await;
+    let db = db();
+    let client = GithubClient::with_base_url("tok", &server.uri()).unwrap();
+    let comments = fetch_pr_comments(&client, &db, "acme", "api", 42)
+        .await
+        .unwrap();
+    // The newest comments (page 2) are included.
+    assert_eq!(comments.len(), 105);
+    assert!(comments.iter().any(|c| c.id == 105));
 }
 
 #[tokio::test]

@@ -97,8 +97,31 @@ describe("groupActivity", () => {
     expect(threads[1].replies.map((r) => r.id)).toEqual([3]);
   });
 
+  test("a reply to a reply joins the root's thread", () => {
+    const threads = groupActivity([
+      comment(1, "evan", "root", { kind: "review" }),
+      comment(2, "rina", "reply", { kind: "review", inReplyToId: 1 }),
+      comment(3, "kai", "reply to reply", { kind: "review", inReplyToId: 2 }),
+    ]);
+    expect(threads).toHaveLength(1);
+    expect(threads[0].replies.map((r) => r.id)).toEqual([2, 3]);
+  });
+
+  test("review replies never attach to a conversation comment with the same id", () => {
+    const threads = groupActivity([
+      comment(1, "kai", "conversation"),
+      comment(2, "rina", "review reply", { kind: "review", inReplyToId: 1 }),
+    ]);
+    expect(threads.map((t) => [t.root.id, t.replies.length])).toEqual([
+      [1, 0],
+      [2, 0],
+    ]);
+  });
+
   test("a reply whose root is missing stands alone", () => {
-    const threads = groupActivity([comment(5, "kai", "orphan", { inReplyToId: 99 })]);
+    const threads = groupActivity([
+      comment(5, "kai", "orphan", { kind: "review", inReplyToId: 99 }),
+    ]);
     expect(threads).toHaveLength(1);
     expect(threads[0].root.id).toBe(5);
   });
