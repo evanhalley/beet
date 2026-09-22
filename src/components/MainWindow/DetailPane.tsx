@@ -9,11 +9,14 @@ import { Avatar } from "@/components/Avatar";
 import { CheckDot, deriveCheckDotState } from "@/components/CheckDot";
 import { BranchWithCopy } from "@/components/CopyBranchButton";
 import { Lifecycle } from "@/components/Lifecycle";
+import { ReasonBadge } from "@/components/ReasonBadge";
+import { primaryReason } from "@/lib/needsAction";
 import { Pill, type PillTone } from "@/components/Pill";
 import { ScoreBar } from "@/components/ScoreBar";
 import { useRunJobs } from "@/hooks/useRunJobs";
 import { BlockHeader, EmptyHint } from "./DetailBlocks";
 import { FilesBlock } from "./FilesBlock";
+import { ActivityBlock } from "./ActivityBlock";
 import { prBranchTarget } from "@/lib/branch";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { copyToClipboard } from "@/lib/copyToClipboard";
@@ -698,33 +701,6 @@ export interface DetailPaneProps {
   item: ActionableItem | null;
 }
 
-function PlaceholderBlock({ title, hint }: { title: string; hint: string }) {
-  return (
-    <section
-      aria-label={title}
-      style={{
-        padding: "10px 16px",
-        borderTop: "1px solid var(--color-border)",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: 0.06,
-          color: "var(--color-text-faint)",
-        }}
-      >
-        {title}
-      </div>
-      <div style={{ marginTop: 4, fontSize: 11.5, color: "var(--color-text-faint)" }}>
-        {hint}
-      </div>
-    </section>
-  );
-}
-
 export function DetailPane({ item }: DetailPaneProps) {
   const pr = item?.pr ?? null;
   // Cold-start signal — the Rust poll loop hasn't produced its first result
@@ -784,6 +760,8 @@ export function DetailPane({ item }: DetailPaneProps) {
     );
   }
 
+  const reason = primaryReason(item);
+
   return (
     <div
       aria-label="Detail"
@@ -830,6 +808,7 @@ export function DetailPane({ item }: DetailPaneProps) {
             flexWrap: "wrap",
           }}
         >
+          {reason && <ReasonBadge reason={reason} />}
           <Lifecycle
             state={pr.lifecycle}
             mqPos={pr.mergeQueue?.position ?? null}
@@ -869,7 +848,7 @@ export function DetailPane({ item }: DetailPaneProps) {
       <ReviewersBlock reviewers={pr.reviewers} />
       <ChecksBlock runs={pr.checkRuns} associated={pr.associatedRuns} />
       <FilesBlock key={item.id} item={item} />
-      <PlaceholderBlock title="Activity" hint="lands in #8" />
+      <ActivityBlock item={item} />
     </div>
   );
 }

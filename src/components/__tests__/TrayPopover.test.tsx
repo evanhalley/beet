@@ -132,6 +132,27 @@ describe("TrayPopover", () => {
     expect(screen.getByText("Recently Resolved")).toBeInTheDocument();
   });
 
+  test("Needs Action lists mentioned PRs with their reason badge", () => {
+    const mentioned = reviewItem(7);
+    mentioned.pr!.activity = { mentionsMe: 1, replyToMyReview: 0 };
+    useAppStore.getState().setPollResult({
+      reviewRequests: [mentioned, reviewItem(8)],
+      inFlight: [inflightItem(9)],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    render(<TrayPopover />);
+    const needsHeader = screen.getByText("Needs Action").closest("button")!;
+    expect(needsHeader.textContent).toContain("1");
+    expect(screen.getByText("@mention")).toBeInTheDocument();
+    expect(screen.queryByText("No items needing action.")).toBeNull();
+    // The mentioned PR also stays in Review Requests, but only counts once
+    // toward the header badge (2 unread review requests).
+    expect(screen.getAllByText("PR title 7")).toHaveLength(2);
+  });
+
   test("renders review request rows with correct count", () => {
     useAppStore.getState().setPollResult({
       reviewRequests: [reviewItem(1), reviewItem(2)],

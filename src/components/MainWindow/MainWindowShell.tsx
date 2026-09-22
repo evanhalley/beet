@@ -11,7 +11,7 @@ import { selectShowAllReviews, useAppStore } from "@/lib/store";
 import { useActionableItems } from "@/hooks/useActionableItems";
 import { useSelectedItem } from "@/hooks/useSelectedItem";
 import type { ActionableItem } from "@/lib/types";
-import { Sidebar } from "./Sidebar";
+import { Sidebar, type SidebarSection } from "./Sidebar";
 import { ListPane } from "./ListPane";
 import { DetailPane } from "./DetailPane";
 import { TitleBar } from "./TitleBar";
@@ -91,21 +91,27 @@ export function MainWindowShell({
     (s) => s.setPendingNotificationItemId,
   );
   const selected = useSelectedItem();
-  const { reviewRequests, inFlight, standaloneRuns, recentlyResolved } =
-    useActionableItems();
+  const {
+    needsAction,
+    reviewRequests,
+    inFlight,
+    standaloneRuns,
+    recentlyResolved,
+  } = useActionableItems();
   const pollState = useAppStore((s) => s.pollState);
   const showAll = useAppStore(selectShowAllReviews);
   const [activeSection, setActiveSection] =
-    useState<"reviews" | "inflight" | "runs" | "recent">("reviews");
+    useState<SidebarSection>("reviews");
 
   // When no item is currently resolved (either nothing selected, or the
-  // stored id is a ghost), auto-pick the top-scored Review Request and
-  // mirror it into the store so the row highlights. Skip while a notification
+  // stored id is a ghost), auto-pick the top Needs Action item — else the
+  // top-scored Review Request — and mirror it into the store so the row
+  // highlights. Skip while a notification
   // click is pending so it doesn't clobber that target before the data loads.
   useEffect(() => {
     if (selected) return;
     if (pendingNotificationItemId) return;
-    const autoPick = pickAutoSelect(reviewRequests, showAll);
+    const autoPick = needsAction[0] ?? pickAutoSelect(reviewRequests, showAll);
     const targetId = autoPick?.id ?? null;
     if (targetId !== selectedItemId) {
       setSelectedItemId(targetId);
@@ -113,6 +119,7 @@ export function MainWindowShell({
   }, [
     selected,
     pendingNotificationItemId,
+    needsAction,
     reviewRequests,
     showAll,
     selectedItemId,
@@ -266,14 +273,6 @@ export function MainWindowShell({
             collapsed={sidebarCollapsed}
             onToggleCollapsed={toggleSidebar}
             onSectionClick={(section) => {
-              if (
-                section !== "reviews" &&
-                section !== "inflight" &&
-                section !== "runs" &&
-                section !== "recent"
-              ) {
-                return;
-              }
               setActiveSection(section);
               scrollSectionIntoView(section);
             }}

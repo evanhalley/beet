@@ -93,6 +93,16 @@ describe("MainWindowShell", () => {
     ).toBeInTheDocument();
   });
 
+  test("auto-selects the top Needs Action item ahead of review requests", () => {
+    const mentioned = makeItem("m", 3, "Mentioned me");
+    mentioned.pr!.activity = { mentionsMe: 1, replyToMyReview: 0 };
+    seedReviews([makeItem("b", 9, "High scorer"), mentioned]);
+    renderShell();
+    expect(
+      screen.getByRole("button", { name: "Open Mentioned me on GitHub" }),
+    ).toBeInTheDocument();
+  });
+
   test("renders 'Select an item.' when there are no items", () => {
     // After a completed poll cycle returned nothing — distinct from cold
     // start, which renders a Loading indicator instead.

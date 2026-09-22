@@ -1,6 +1,7 @@
 "use client";
 
 import { InFlightSection } from "@/components/InFlightSection";
+import { NeedsActionSection } from "@/components/NeedsActionSection";
 import { RecentlyResolvedSection } from "@/components/RecentlyResolvedSection";
 import { ReviewRequestsSection } from "@/components/ReviewRequestsSection";
 import { StandaloneRunsSection } from "@/components/StandaloneRunsSection";
@@ -15,6 +16,7 @@ export function ListPane() {
         background: "var(--color-bg)",
       }}
     >
+      <NeedsActionSection />
       <ReviewRequestsSection />
       <InFlightSection />
       <StandaloneRunsSection />

@@ -10,6 +10,9 @@
 use crate::error::{BeetError, BeetResult};
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::AuthUser;
+use crate::github::notifications::{
+    apply_activity, fetch_notifications, resolve_reply_candidates, route_notifications,
+};
 use crate::github::prs::{
     fetch_my_open_prs, fetch_review_requests, FetchMyOpenPrsOptions, FetchReviewRequestsOptions,
 };
@@ -349,13 +352,18 @@ async fn poll_once<R: Runtime>(
         task_regex: config.task_regex.clone(),
     };
 
-    let (reviews, mine) = tokio::join!(
+    let (reviews, mine, inbox) = tokio::join!(
         fetch_review_requests(&client, db, cache, &review_opts),
         fetch_my_open_prs(&client, db, &my_opts),
+        fetch_notifications(&client, db),
     );
     let reviews = reviews?;
     let mut mine = mine?;
     let mut reviews_items = reviews.items;
+    // The inbox is best-effort: fine-grained PATs can't read notifications
+    // and classic PATs may lack the scope. A failure leaves `activity` empty
+    // instead of failing the cycle.
+    let inbox = inbox.unwrap_or_default();
 
     // Run pass (#6). Scope the repo scan to repos already represented in the
     // current PR set — push-event runs in those repos surface as Standalone,
@@ -408,6 +416,26 @@ async fn poll_once<R: Runtime>(
         let collapsed = collapse_runs(outcome.runs, &tracked_prs, &username);
         (collapsed, rl)
     };
+
+    // Mentions hybrid (#25): route unread inbox threads into `pr.activity`.
+    // Reply-to-review candidates are only confirmed for tracked PRs.
+    let routed = route_notifications(&inbox);
+    let mut inbox_events = routed.events;
+    if !routed.comment_candidates.is_empty() {
+        let tracked_ids: HashSet<String> = tracked_prs.keys().cloned().collect();
+        inbox_events.extend(
+            resolve_reply_candidates(
+                &client,
+                db,
+                routed.comment_candidates,
+                &tracked_ids,
+                &username,
+            )
+            .await,
+        );
+    }
+    apply_activity(&mut reviews_items, &inbox_events);
+    apply_activity(&mut mine.items, &inbox_events);
 
     // Attach associated_runs to PRs in both sections.
     for item in reviews_items.iter_mut().chain(mine.items.iter_mut()) {
@@ -529,6 +557,7 @@ fn synthesize_resolved_pr_row(
             reviewers: None,
             check_runs: None,
             associated_runs: None,
+            activity: None,
         }),
         run: None,
     })

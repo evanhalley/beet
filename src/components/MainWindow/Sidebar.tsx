@@ -435,7 +435,8 @@ export function Sidebar({
   onToggleCollapsed,
   onSectionClick,
 }: SidebarProps) {
-  const { reviewRequests, inFlight, standaloneRuns } = useActionableItems();
+  const { needsAction, reviewRequests, inFlight, standaloneRuns } =
+    useActionableItems();
   const showAll = useAppStore(selectShowAllReviews);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
   const snoozes = useAppStore((s) => s.snoozes);
@@ -495,19 +496,18 @@ export function Sidebar({
     >
       {/*
         Triage nav scrolls the list to the matching section via onSectionClick;
-        the active item gets aria-current="page". "Needs Action" stays disabled
-        until its data source lands (#8) so it doesn't read as clickable to
-        users or assistive tech.
+        the active item gets aria-current="page".
       */}
       <SidebarGroup title="Triage" collapsed={collapsed} action={toggleButton}>
         <SidebarItem
           icon={<CircleAlert size={12} />}
           label="Needs Action"
           title="Urgent items needing you now: merge-queue ejections, failing checks on your PRs, and unread mentions or replies to your reviews"
+          badge={needsAction.length}
           active={activeSection === "needs"}
           current={activeSection === "needs"}
           collapsed={collapsed}
-          disabled
+          onClick={() => onSectionClick?.("needs")}
         />
         <SidebarItem
           icon={<Eye size={12} />}

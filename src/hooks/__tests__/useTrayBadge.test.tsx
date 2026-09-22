@@ -111,6 +111,44 @@ describe("useTrayBadge", () => {
     });
   });
 
+  test("counts Needs Action items, and a PR in both lists only once", async () => {
+    const { invoke } = (await import(
+      "@tauri-apps/api/core"
+    )) as unknown as { invoke: ReturnType<typeof vi.fn> };
+    invoke.mockClear();
+
+    const mentioned = makeReviewItem(1, true);
+    mentioned.pr!.activity = { mentionsMe: 1, replyToMyReview: 0 };
+    const mineFailing = makeReviewItem(2, true);
+    mineFailing.pr!.isAuthoredByMe = true;
+    mineFailing.pr!.isReviewRequestedFromMe = false;
+    mineFailing.pr!.checkRuns = [
+      { name: "ci", status: "completed", conclusion: "failure" },
+    ];
+    const mineHealthy = makeReviewItem(3, true);
+    mineHealthy.pr!.isAuthoredByMe = true;
+    mineHealthy.pr!.checkRuns = [];
+
+    useAppStore.getState().setPollResult({
+      reviewRequests: [mentioned],
+      inFlight: [mineFailing, mineHealthy],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    render(<Harness />);
+    vi.advanceTimersByTime(200);
+
+    // mentioned (review + needs, counted once) + mineFailing (needs only);
+    // healthy in-flight PRs don't count.
+    expect(invoke).toHaveBeenCalledWith("set_badge", {
+      count: 2,
+      paused: false,
+    });
+  });
+
   test("includes paused flag", async () => {
     const { invoke } = (await import(
       "@tauri-apps/api/core"

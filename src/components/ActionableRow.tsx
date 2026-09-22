@@ -17,12 +17,15 @@ import { Pill } from "./Pill";
 import { PinGlyph } from "./PinGlyph";
 import { ReasonBadge } from "./ReasonBadge";
 import { isCodeOwner } from "@/lib/codeOwnership";
+import { primaryReason } from "@/lib/needsAction";
 import { RowContextMenu } from "./RowContextMenu";
 import { RowShell, rowActionsReserve } from "./RowShell";
 import { ScoreBar } from "./ScoreBar";
 import { TaskChips } from "./TaskChips";
 
-export type ActionableRowVariant = "review" | "inflight";
+// "needs" is the Needs Action Now row: same anatomy, with the reason badge in
+// place of the review / lifecycle pills (design/src/main-window.jsx ListItem).
+export type ActionableRowVariant = "review" | "inflight" | "needs";
 
 export interface ActionableRowProps {
   item: ActionableItem;
@@ -47,8 +50,11 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
 
   const isPinned = pins.includes(item.repoFullName);
   // Suppression is a Review-Requests-only affordance (§ suppress). In-flight
-  // rows are your own PRs and aren't part of the "needs my review" list.
-  const canSuppress = variant === "review";
+  // rows are your own PRs and aren't part of the "needs my review" list; a
+  // Needs Action row can be suppressed only when it's someone else's PR.
+  const canSuppress =
+    variant === "review" || (variant === "needs" && !pr.isAuthoredByMe);
+  const reason = variant === "needs" ? primaryReason(item) : null;
   const isSuppressed = suppressedIds.includes(item.id);
   const isSnoozed = isItemSnoozed(item.id, snoozes);
   const wasEjected = (pr.mergeQueue?.ejectedChecks?.length ?? 0) > 0;
@@ -217,7 +223,9 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             #{pr.number}
           </span>
           {isSnoozed && <Pill tone="neutral">snoozed</Pill>}
-          {variant === "review" ? (
+          {variant === "needs" ? (
+            reason && <ReasonBadge reason={reason} />
+          ) : variant === "review" ? (
             <>
               {isSuppressed && <Pill tone="neutral">suppressed</Pill>}
               {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}

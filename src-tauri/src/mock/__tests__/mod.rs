@@ -81,6 +81,34 @@ fn fixture_exercises_key_surfaces() {
         .unwrap_or(false)));
     // At least one unread item to drive the tray badge.
     assert!(lists.review_requests.iter().any(|i| i.unread));
+    // Needs Action inbox signals: a mention and a review-thread reply.
+    let activity = || {
+        lists
+            .review_requests
+            .iter()
+            .chain(lists.in_flight.iter())
+            .filter_map(|i| i.pr.as_ref()?.activity.as_ref())
+    };
+    assert!(activity().any(|a| a.mentions_me > 0));
+    assert!(activity().any(|a| a.reply_to_my_review > 0));
+}
+
+#[test]
+fn mock_comments_cover_a_mention_and_a_review_reply() {
+    let result = mock_pr_comments(1);
+    let me = format!("@{}", result.username);
+    assert!(result.comments.iter().any(|c| c.body.contains(&me)));
+    let reply = result
+        .comments
+        .iter()
+        .find(|c| c.in_reply_to_id.is_some())
+        .expect("a review reply");
+    let root = result
+        .comments
+        .iter()
+        .find(|c| Some(c.id) == reply.in_reply_to_id)
+        .expect("the reply's root comment");
+    assert_eq!(root.author, result.username);
 }
 
 #[test]
