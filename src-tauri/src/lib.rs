@@ -84,6 +84,7 @@ pub fn run() {
             store::notifications::get_notification_link,
             github::runs::fetch_run_jobs_command,
             github::pr_files::fetch_pr_files_command,
+            github::notifications::fetch_pr_comments_command,
             mock::is_mock_mode,
             tray::set_badge,
             tray::open_main_window,

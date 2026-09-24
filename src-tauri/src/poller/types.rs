@@ -150,6 +150,16 @@ pub struct CodeOwnership {
     pub teams_resolved: bool,
 }
 
+/// Per-PR counts of unread inbox events directed at me. Counts come from
+/// GitHub's unread notification threads, so they clear when the thread is
+/// read on GitHub.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrActivity {
+    pub mentions_me: i64,
+    pub reply_to_my_review: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionableItemPr {
@@ -206,6 +216,11 @@ pub struct ActionableItemPr {
     /// runs matched — the PR row still renders.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub associated_runs: Option<Vec<AssociatedRun>>,
+    /// Unread @mentions / review-thread replies routed from the notifications
+    /// inbox (#25). Absent when the inbox had nothing for this PR (or the
+    /// notifications fetch failed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub activity: Option<PrActivity>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -41,6 +41,7 @@ fn make_item(id: &str, now: DateTime<Utc>) -> ActionableItem {
             reviewers: None,
             check_runs: None,
             associated_runs: None,
+            activity: None,
         }),
         run: None,
     }

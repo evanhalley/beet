@@ -27,11 +27,13 @@
 //! Authors are teammates; `evan` is "me".
 
 use crate::github::client::RateLimitInfo;
+use crate::github::notifications::{PrComment, PrCommentsResult};
 use crate::github::pr_files::{diff_anchor, PrChangedFile, PrFilesResult};
 use crate::github::runs::WorkflowJobSummary;
 use crate::poller::types::{
     ActionableItem, ActionableItemMergeQueue, ActionableItemPr, ActionableItemRun, ActionableKind,
-    AssociatedRun, CheckRunSummary, CodeOwnership, EjectedCheck, PrLifecycle, ReviewerEntry,
+    AssociatedRun, CheckRunSummary, CodeOwnership, EjectedCheck, PrActivity, PrLifecycle,
+    ReviewerEntry,
 };
 use chrono::SecondsFormat;
 
@@ -121,6 +123,7 @@ fn default_pr(number: i64, author: &str) -> ActionableItemPr {
         reviewers: None,
         check_runs: None,
         associated_runs: None,
+        activity: None,
     }
 }
 
@@ -247,6 +250,11 @@ pub fn mock_payload() -> MockLists {
         check("contract", "completed", Some("success")),
     ]
     .into();
+    // marcus-l @-mentioned me in the PR conversation → Needs Action.
+    api_charts.activity = Some(PrActivity {
+        mentions_me: 1,
+        reply_to_my_review: 0,
+    });
 
     // Requested reviewer (+3); editorial CMS feature.
     let mut cms_schedule = default_pr(431, "deon-k");
@@ -428,6 +436,11 @@ pub fn mock_payload() -> MockLists {
     cms_alt_text.lifecycle = PrLifecycle::InReview;
     cms_alt_text.reviewers = vec![reviewer("priya-s", "changes_requested")].into();
     cms_alt_text.check_runs = vec![check("build", "completed", Some("success"))].into();
+    // priya-s replied on a review thread I started → Needs Action.
+    cms_alt_text.activity = Some(PrActivity {
+        mentions_me: 0,
+        reply_to_my_review: 1,
+    });
 
     // Open, checks running.
     let mut ds_dark_mode = default_pr(88, ME);
@@ -689,6 +702,74 @@ pub fn mock_pr_files(number: i64) -> PrFilesResult {
         teams_resolved,
         truncated: false,
         username: ME.to_string(),
+    }
+}
+
+fn mock_comment(
+    id: i64,
+    kind: &'static str,
+    author: &str,
+    body: &str,
+    minutes_ago: i64,
+    in_reply_to_id: Option<i64>,
+    path: Option<&str>,
+) -> PrComment {
+    PrComment {
+        id,
+        kind,
+        author: author.into(),
+        body: body.into(),
+        created_at: ago_min(minutes_ago),
+        html_url: format!("https://github.com/thecypher/web/pull/1#discussion_r{id}"),
+        in_reply_to_id,
+        path: path.map(Into::into),
+    }
+}
+
+/// Canned conversation for the DetailPane's Activity block in mock mode: a
+/// conversation comment that @-mentions me, and a review thread I started
+/// with a reply from someone else. Same thread for every PR.
+pub fn mock_pr_comments(_number: i64) -> PrCommentsResult {
+    PrCommentsResult {
+        comments: vec![
+            mock_comment(
+                9001,
+                "issue",
+                "marcus-l",
+                "Pushed the pagination fix. @evan can you take another look at the cache headers?",
+                95,
+                None,
+                None,
+            ),
+            mock_comment(
+                9002,
+                "review",
+                ME,
+                "Should this fall back to the stale entry when the upstream times out?",
+                70,
+                None,
+                Some("src/charts/handler.ts"),
+            ),
+            mock_comment(
+                9003,
+                "review",
+                "priya-s",
+                "Good call — added a stale-while-revalidate path, see the latest commit.",
+                25,
+                Some(9002),
+                Some("src/charts/handler.ts"),
+            ),
+            mock_comment(
+                9004,
+                "issue",
+                "lena-w",
+                "LGTM from the design-system side.",
+                12,
+                None,
+                None,
+            ),
+        ],
+        username: ME.into(),
     }
 }
 

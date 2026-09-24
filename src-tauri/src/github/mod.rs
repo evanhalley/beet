@@ -1,6 +1,7 @@
 pub mod client;
 pub mod codeowners;
 pub mod models;
+pub mod notifications;
 pub mod pr_files;
 pub mod prs;
 pub mod runs;

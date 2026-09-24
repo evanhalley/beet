@@ -68,6 +68,7 @@ fn full_item() -> ActionableItem {
                 details_url: None,
             }]),
             associated_runs: None,
+            activity: None,
         }),
         run: None,
     }
@@ -255,4 +256,25 @@ fn run_item_round_trips() {
     let json = serde_json::to_string(&item).unwrap();
     let back: ActionableItem = serde_json::from_str(&json).unwrap();
     assert_eq!(item, back);
+}
+
+/// `activity` is omitted when absent and camelCased when present, matching
+/// `PrActivity` in `src/lib/types.ts`.
+#[test]
+fn pr_activity_matches_the_ts_contract() {
+    let json = serde_json::to_value(full_item()).unwrap();
+    assert!(json["pr"].as_object().unwrap().get("activity").is_none());
+
+    let mut item = full_item();
+    if let Some(pr) = item.pr.as_mut() {
+        pr.activity = Some(PrActivity {
+            mentions_me: 2,
+            reply_to_my_review: 1,
+        });
+    }
+    let json = serde_json::to_value(&item).unwrap();
+    let activity = &json["pr"]["activity"];
+    assert_eq!(keys(activity), vec!["mentionsMe", "replyToMyReview"]);
+    assert_eq!(activity["mentionsMe"], 2);
+    assert_eq!(activity["replyToMyReview"], 1);
 }

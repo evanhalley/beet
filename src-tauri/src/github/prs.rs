@@ -486,6 +486,7 @@ async fn assemble_review_item(
             reviewers: Some(reviewers),
             check_runs,
             associated_runs: None,
+            activity: None,
         }),
         run: None,
     };
@@ -629,6 +630,7 @@ async fn assemble_my_pr_item(
             reviewers: Some(reviewers),
             check_runs,
             associated_runs: None,
+            activity: None,
         }),
         run: None,
     };

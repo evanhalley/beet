@@ -19,21 +19,21 @@ export function SkeletonRow({ delayMs = 0 }: { delayMs?: number }) {
         borderTop: "1px solid var(--color-border)",
       }}
     >
-      <Bar w={6} h={6} radius={3} delayMs={delayMs} />
+      <SkeletonBar w={6} h={6} radius={3} delayMs={delayMs} />
       <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
         <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-          <Bar w={120} h={9} delayMs={delayMs} />
-          <Bar w={36} h={9} delayMs={delayMs + 40} />
+          <SkeletonBar w={120} h={9} delayMs={delayMs} />
+          <SkeletonBar w={36} h={9} delayMs={delayMs + 40} />
         </div>
-        <Bar w="70%" h={11} delayMs={delayMs + 80} />
-        <Bar w={140} h={9} delayMs={delayMs + 120} />
+        <SkeletonBar w="70%" h={11} delayMs={delayMs + 80} />
+        <SkeletonBar w={140} h={9} delayMs={delayMs + 120} />
       </div>
-      <Bar w={32} h={9} delayMs={delayMs + 160} />
+      <SkeletonBar w={32} h={9} delayMs={delayMs + 160} />
     </div>
   );
 }
 
-function Bar({
+export function SkeletonBar({
   w,
   h,
   radius = 3,

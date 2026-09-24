@@ -75,6 +75,39 @@ pub struct CommentRow {
     pub user: Option<UserRef>,
 }
 
+/// One thread from `GET /notifications`. `subject.url` is the API URL of the
+/// PR / issue the thread is about (`null` for some subject types).
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotificationThread {
+    pub reason: String,
+    pub subject: NotificationSubject,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NotificationSubject {
+    #[serde(rename = "type")]
+    pub kind: String,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// A comment from `issues/{n}/comments` or `pulls/{n}/comments`. The review
+/// (pull) flavor also carries `in_reply_to_id` and `path`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct FullCommentRow {
+    pub id: i64,
+    #[serde(default)]
+    pub user: Option<UserRef>,
+    #[serde(default)]
+    pub body: Option<String>,
+    pub created_at: String,
+    pub html_url: String,
+    #[serde(default)]
+    pub in_reply_to_id: Option<i64>,
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ReviewRow {
     #[serde(default)]

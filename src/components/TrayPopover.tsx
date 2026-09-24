@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  applyMutes,
   applySnoozes,
   useAppStore,
   isReviewRequestVisible,
@@ -29,6 +30,12 @@ import { ScoreBar } from "./ScoreBar";
 import { CheckDot, deriveCheckDotState } from "./CheckDot";
 import { Lifecycle } from "./Lifecycle";
 import { TaskChips } from "./TaskChips";
+import { ReasonBadge } from "./ReasonBadge";
+import {
+  countBadgeItems,
+  primaryReason,
+  selectNeedsAction,
+} from "@/lib/needsAction";
 import { BranchWithCopy } from "./CopyBranchButton";
 import dayjs from "@/lib/dayjs";
 
@@ -106,14 +113,21 @@ export function TrayPopover() {
   const reviewRequests = useAppStore((s) => s.reviewRequests);
   const rawInFlight = useAppStore((s) => s.inFlight);
   const rawStandaloneRuns = useAppStore((s) => s.standaloneRuns);
-  const recentlyResolved = useAppStore((s) => s.recentlyResolved);
+  const rawRecentlyResolved = useAppStore((s) => s.recentlyResolved);
   const paused = useAppStore((s) => s.paused);
   const showAll = useAppStore(selectShowAllReviews);
   const suppressedIds = useAppStore((s) => s.suppressedIds);
   const snoozes = useAppStore((s) => s.snoozes);
+  const mutes = useAppStore((s) => s.mutes);
 
-  const inFlight = applySnoozes(rawInFlight, snoozes);
-  const standaloneRuns = applySnoozes(rawStandaloneRuns, snoozes);
+  // Mutes + snoozes apply here exactly as in useTrayBadge, so the popover's
+  // sections and header count match the menu-bar badge.
+  const inFlight = applySnoozes(applyMutes(rawInFlight, mutes), snoozes);
+  const standaloneRuns = applySnoozes(
+    applyMutes(rawStandaloneRuns, mutes),
+    snoozes,
+  );
+  const recentlyResolved = applyMutes(rawRecentlyResolved, mutes);
 
   const [collapsed, setCollapsed] = useState<SectionCollapse>(loadCollapse);
 
@@ -124,12 +138,13 @@ export function TrayPopover() {
       return next;
     });
 
-  const visibleReviews = [...reviewRequests]
+  const visibleReviews = [...applyMutes(reviewRequests, mutes)]
     .sort((a, b) => (b.pr?.score ?? 0) - (a.pr?.score ?? 0))
     .filter((it) => isReviewRequestVisible(it, showAll, suppressedIds, snoozes));
 
-  const totalUnread =
-    visibleReviews.filter((r) => r.unread).length;
+  const needsAction = selectNeedsAction(inFlight, visibleReviews);
+
+  const totalUnread = countBadgeItems(needsAction, visibleReviews);
 
   const beetStatus = paused ? "paused" as const : totalUnread > 0 ? "alert" as const : "ok" as const;
 
@@ -245,23 +260,28 @@ export function TrayPopover() {
         className="tray-scroll"
         style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden" }}
       >
-        {/* Needs Action — placeholder until #8 */}
         <TraySection
           icon="🔴"
           title="Needs Action"
-          count={0}
+          count={needsAction.length}
           collapsed={collapsed.needs}
           onToggle={() => toggle("needs")}
         >
-          <p
-            style={{
-              padding: "6px 12px 10px",
-              fontSize: 11.5,
-              color: "var(--color-text-faint)",
-            }}
-          >
-            No items needing action.
-          </p>
+          {needsAction.length === 0 ? (
+            <p
+              style={{
+                padding: "6px 12px 10px",
+                fontSize: 11.5,
+                color: "var(--color-text-faint)",
+              }}
+            >
+              No items needing action.
+            </p>
+          ) : (
+            needsAction.map((item) => (
+              <TrayNeedsRow key={item.id} item={item} />
+            ))
+          )}
         </TraySection>
 
         <TraySection
@@ -512,6 +532,59 @@ function TrayRowWrapper({
 }
 
 // ─────────── Row types ───────────
+
+// Needs Action row (design/src/tray.jsx NeedsRow): unread dot, repo/#, the
+// reason badge, and the title.
+function TrayNeedsRow({ item }: { item: ActionableItem }) {
+  const pr = item.pr;
+  if (!pr) return null;
+  const reason = primaryReason(item);
+
+  return (
+    <TrayRowWrapper item={item}>
+      <UnreadDot unread={item.unread} />
+      <div style={{ minWidth: 0 }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            marginBottom: 2,
+          }}
+        >
+          <span
+            className="mono"
+            style={{ color: "var(--color-text-faint)", fontSize: 11 }}
+          >
+            {item.repoFullName}
+          </span>
+          <span
+            className="mono"
+            style={{ color: "var(--color-text-faint)", fontSize: 11 }}
+          >
+            #{pr.number}
+          </span>
+          {reason && <ReasonBadge reason={reason} />}
+          {pr.taskUrls.length > 0 && (
+            <TaskChips urls={pr.taskUrls} max={2} />
+          )}
+        </div>
+        <div
+          style={{
+            fontWeight: 500,
+            color: "var(--color-text)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {item.title}
+        </div>
+      </div>
+      <span />
+    </TrayRowWrapper>
+  );
+}
 
 function TrayReviewRow({ item }: { item: ActionableItem }) {
   const pr = item.pr;

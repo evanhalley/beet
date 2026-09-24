@@ -119,6 +119,33 @@ export interface PrFilesResult {
   username: string;
 }
 
+// Unread inbox events directed at me on a PR (#25), routed from GitHub's
+// notifications inbox. Counts clear once the thread is read on GitHub.
+export interface PrActivity {
+  mentionsMe: number;
+  replyToMyReview: number;
+}
+
+// One comment in the DetailPane's Activity block, from the
+// `fetch_pr_comments_command` Tauri command. `kind: "review"` is an inline
+// diff comment; replies point at their thread root via `inReplyToId`.
+export interface PrComment {
+  id: number;
+  kind: "issue" | "review";
+  author: string;
+  body: string;
+  createdAt: string;
+  htmlUrl: string;
+  inReplyToId?: number;
+  path?: string;
+}
+
+export interface PrCommentsResult {
+  comments: PrComment[];
+  // Authenticated login, for highlighting `@me`.
+  username: string;
+}
+
 export interface ActionableItemPr {
   number: number;
   author: string;
@@ -151,6 +178,7 @@ export interface ActionableItemPr {
   reviewers?: ReviewerEntry[];
   checkRuns?: CheckRunSummary[];
   associatedRuns?: AssociatedRun[];
+  activity?: PrActivity;
 }
 
 export interface ActionableItem {

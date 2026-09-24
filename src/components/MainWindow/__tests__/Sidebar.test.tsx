@@ -18,10 +18,12 @@ vi.mock("@/lib/storage/mutePin", () => ({
 function setActionable(
   reviewRequests: ActionableItem[],
   inFlight: ActionableItem[] = [],
+  needsAction: ActionableItem[] = [],
 ) {
   const byId = new Map<string, ActionableItem>();
   for (const it of [...reviewRequests, ...inFlight]) byId.set(it.id, it);
   vi.mocked(useActionableItems).mockReturnValue({
+    needsAction,
     reviewRequests,
     inFlight,
     standaloneRuns: [],
@@ -120,6 +122,18 @@ describe("Sidebar", () => {
     render(<Sidebar onSectionClick={onSectionClick} />);
     await user.click(screen.getByRole("button", { name: /In Flight/ }));
     expect(onSectionClick).toHaveBeenCalledWith("inflight");
+  });
+
+  test("Needs Action shows its count and scrolls to its section", async () => {
+    const user = (await import("@testing-library/user-event")).default.setup();
+    const onSectionClick = vi.fn();
+    setActionable([prItem("a")], [], [prItem("a"), prItem("b")]);
+    render(<Sidebar onSectionClick={onSectionClick} />);
+    const needs = screen.getByRole("button", { name: /Needs Action/ });
+    expect(needs).not.toBeDisabled();
+    expect(needs.textContent).toContain("2");
+    await user.click(needs);
+    expect(onSectionClick).toHaveBeenCalledWith("needs");
   });
 
   test("Pinned / Muted placeholder rows are disabled", () => {
