@@ -178,7 +178,11 @@
       <li>
         <h3>Download the app</h3>
         <p>
-          Grab the latest <code>.dmg</code> and move Beet to your Applications folder. Because the build is currently unsigned, right-click the icon and choose <b>Open</b> the first time you launch it.
+          Grab the latest <code>.dmg</code> and move Beet to your Applications folder. The build isn't signed or notarized yet, so macOS quarantines it. Clear that flag in Terminal before your first launch:
+        </p>
+        <pre class="cmd"><code>xattr -dr com.apple.quarantine /Applications/Beet.app</code></pre>
+        <p class="step-note">
+          Without this, macOS says Beet &ldquo;is damaged&rdquo; or &ldquo;can&rsquo;t be verified.&rdquo; It isn&rsquo;t damaged; that&rsquo;s just Gatekeeper&rsquo;s wording for an unverified download. The command only affects <code>Beet.app</code>. Prefer not to use Terminal? Try to open Beet once, then click <b>Open Anyway</b> under System Settings &rarr; Privacy &amp; Security. Repeat after installing each new version.
         </p>
       </li>
       <li>

@@ -4,6 +4,24 @@ A glanceable, always-running developer dashboard for GitHub. macOS menu-bar app 
 
 Landing page: **[beet.sh](https://beet.sh)** (source in [docs/](docs/), published by GitHub Pages from `main`).
 
+## Install
+
+1. Download the latest `Beet_<version>_aarch64.dmg` from [GitHub Releases](https://github.com/evanhalley/beet/releases/latest) (Apple Silicon only for now).
+2. Open the DMG and drag **Beet** into **Applications**.
+3. Clear the quarantine attribute before the first launch:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Beet.app
+   ```
+
+4. Launch Beet from Applications or Spotlight. It lives in the menu bar.
+
+**Why step 3?** Beet isn't signed with an Apple Developer ID or notarized yet. macOS tags anything downloaded through a browser with the `com.apple.quarantine` extended attribute, and Gatekeeper refuses to open quarantined apps it can't verify. You'll see *"Beet is damaged and can't be opened"* or *"Apple could not verify Beet is free of malware"*. The app isn't actually damaged; that's just Gatekeeper's wording for an unverified download. Since macOS 15 Sequoia, the old right-click → **Open** bypass no longer works. Your two options are the `xattr` command above, or trying to open the app once and then going to **System Settings → Privacy & Security** and clicking **Open Anyway**.
+
+`xattr -dr` only removes the quarantine flag from `Beet.app` (`-d` deletes the attribute, `-r` recurses into the bundle). It doesn't turn Gatekeeper off system-wide. To check it worked, run `xattr -l /Applications/Beet.app`: `com.apple.quarantine` should no longer be listed.
+
+You'll need to repeat step 3 after installing each new version from a DMG.
+
 ## Commands
 
 ### npm (frontend + Tauri orchestration)

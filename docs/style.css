@@ -547,6 +547,22 @@ code {
 
 .steps b { color: var(--text); }
 
+.cmd {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(255,61,139,.08);
+  border: 1px solid rgba(255,61,139,.28);
+  overflow-x: auto;
+}
+
+.cmd code {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 13.5px;
+}
+
 .step-note {
   margin-top: 10px !important;
   padding-left: 12px;
