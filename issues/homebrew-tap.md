@@ -81,7 +81,7 @@ This is the real fix. It removes the `xattr` step from the docs and the `postfli
 
 - Create a **Developer ID Application** certificate and an App Store Connect API key.
 - Tauri's bundler signs and notarizes during `tauri build` when these secrets are set in `release.yml`: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, and either (`APPLE_API_KEY`, `APPLE_API_ISSUER`, API key `.p8`) or (`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`).
-- Afterwards, remove `postflight_steps` from the cask and the quarantine section from the README and landing page.
+- Afterwards, remove `postflight_steps` from the cask and the quarantine section from the README and landing page (#58).
 - Optional: build `--target universal-apple-darwin` and drop `depends_on arch: :arm64` so Intel Macs are supported.
 - Later: submit to `homebrew/cask` once Beet clears the notability bar. The tap can stay up for people who already use it.
 
