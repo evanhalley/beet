@@ -4,6 +4,20 @@ A glanceable, always-running developer dashboard for GitHub. macOS menu-bar app 
 
 Landing page: **[beet.sh](https://beet.sh)** (source in [docs/](docs/), published by GitHub Pages from `main`).
 
+## Install
+
+1. Download the latest `.dmg` from [GitHub Releases](https://github.com/evanhalley/beet/releases/latest) (Apple Silicon).
+2. Open the `.dmg` and drag **Beet** into **Applications**.
+3. Clear the macOS quarantine attribute, then launch Beet:
+
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/Beet.app
+   ```
+
+Beet isn't signed or notarized with an Apple Developer ID yet. macOS tags everything downloaded through a browser with the `com.apple.quarantine` attribute, and Gatekeeper refuses to open unsigned apps that carry it. Usually you'll see *"Beet is damaged and can't be opened. You should move it to the Trash."* The app isn't actually damaged. The command above removes the attribute from the app bundle (`-r` covers everything inside it), and after that macOS opens Beet like any other app. Run it after every update you download from the Releases page, since each new download gets quarantined again.
+
+If macOS says instead that Beet *"cannot be verified"*, you can also go to **System Settings → Privacy & Security**, scroll to the message about Beet, and click **Open Anyway**. On macOS 15 Sequoia and later, right-click → **Open** no longer skips this check.
+
 ## Commands
 
 ### npm (frontend + Tauri orchestration)

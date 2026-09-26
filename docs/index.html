@@ -52,7 +52,7 @@
   </div>
 
   <p class="fineprint">
-    Apple Silicon &middot; unsigned build &mdash; right-click and choose <b>Open</b> on first run.
+    Apple Silicon &middot; unsigned build &mdash; <a href="#install">clear the quarantine flag</a> before first run.
   </p>
 </header>
 
@@ -175,10 +175,14 @@
     <h2 class="section-title">Get set up in two minutes</h2>
 
     <ol class="steps">
-      <li>
+      <li id="install">
         <h3>Download the app</h3>
         <p>
-          Grab the latest <code>.dmg</code> and move Beet to your Applications folder. Because the build is currently unsigned, right-click the icon and choose <b>Open</b> the first time you launch it.
+          Grab the latest <code>.dmg</code> and drag Beet into your Applications folder. The build isn't signed yet, so macOS quarantines it and may say it's <b>&ldquo;damaged and can't be opened.&rdquo;</b> It isn't damaged. Clear the quarantine flag in Terminal before the first launch:
+        </p>
+        <pre class="cmd"><code>xattr -dr com.apple.quarantine /Applications/Beet.app</code></pre>
+        <p class="step-note">
+          Do this again after each update you download. If macOS says Beet &ldquo;cannot be verified,&rdquo; you can use <b>System Settings &rarr; Privacy &amp; Security &rarr; Open Anyway</b> instead. On macOS 15 and later, right-click &rarr; Open no longer works for this.
         </p>
       </li>
       <li>
