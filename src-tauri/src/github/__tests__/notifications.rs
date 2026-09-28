@@ -68,6 +68,7 @@ fn pr_item(id: &str) -> ActionableItem {
             base_ref: None,
             base_sha: None,
             code_ownership: None,
+            ai_assist: None,
             lifecycle: PrLifecycle::InReview,
             merge_queue: None,
             task_urls: vec![],

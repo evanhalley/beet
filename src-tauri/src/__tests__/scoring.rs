@@ -1,5 +1,5 @@
 use super::*;
-use crate::poller::types::{ActionableItemPr, ActionableKind, PrLifecycle};
+use crate::poller::types::{ActionableItemPr, ActionableKind, AiAssist, AiSource, PrLifecycle};
 use chrono::Duration;
 
 fn make_item(id: &str, now: DateTime<Utc>) -> ActionableItem {
@@ -34,6 +34,7 @@ fn make_item(id: &str, now: DateTime<Utc>) -> ActionableItem {
             base_ref: None,
             base_sha: None,
             code_ownership: None,
+            ai_assist: None,
             lifecycle: PrLifecycle::Open,
             merge_queue: None,
             task_urls: vec![],
@@ -141,4 +142,21 @@ fn stale_rule_overwrites_to_zero() {
     let result = score_pull_requests_at(vec![item], true, &[], now);
     assert_eq!(result.len(), 1);
     assert_eq!(result[0].pr.as_ref().unwrap().score, 0);
+}
+
+#[test]
+fn ai_assisted_prs_score_like_any_other() {
+    // Display-only until scoring weights become configurable (#45).
+    let now = Utc::now();
+    let mut item = make_item("pr:foo/bar#1", now);
+    {
+        let pr = item.pr.as_mut().unwrap();
+        pr.is_review_requested_from_me = true;
+        pr.ai_assist = Some(AiAssist {
+            tools: vec!["Claude".to_string()],
+            sources: vec![AiSource::CommitMessage],
+        });
+    }
+    let result = score_pull_requests_at(vec![item], true, &[], now);
+    assert_eq!(result[0].pr.as_ref().unwrap().score, 3);
 }

@@ -43,6 +43,7 @@ fn full_item() -> ActionableItem {
             base_ref: None,
             base_sha: None,
             code_ownership: None,
+            ai_assist: None,
             lifecycle: PrLifecycle::MergeQueue,
             merge_queue: Some(ActionableItemMergeQueue {
                 position: None,

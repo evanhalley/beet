@@ -92,6 +92,16 @@ export interface CodeOwnership {
   teamsResolved: boolean;
 }
 
+// Where an AI-assisted signal was found (see src-tauri/src/github/ai_assist.rs).
+export type AiSource = "pr_author" | "commit_author" | "commit_message" | "pr_body";
+
+// AI tools a PR declares via commit trailers, bot authors or its body. Absence
+// proves nothing: trailers are opt-in and squash merges drop them.
+export interface AiAssist {
+  tools: string[];
+  sources: AiSource[];
+}
+
 // One changed file in a PR, from the `fetch_pr_files_command` Tauri command.
 export interface PrChangedFile {
   path: string;
@@ -171,6 +181,8 @@ export interface ActionableItemPr {
   baseSha?: string;
   /** CODEOWNERS stake, resolved during polling for review requests only. */
   codeOwnership?: CodeOwnership;
+  /** AI tools declared in commits / body, resolved during polling. */
+  aiAssist?: AiAssist;
   lifecycle: PrLifecycle;
   mergeQueue?: ActionableItemMergeQueue;
   taskUrls: string[];

@@ -32,8 +32,8 @@ use crate::github::pr_files::{diff_anchor, PrChangedFile, PrFilesResult};
 use crate::github::runs::WorkflowJobSummary;
 use crate::poller::types::{
     ActionableItem, ActionableItemMergeQueue, ActionableItemPr, ActionableItemRun, ActionableKind,
-    AssociatedRun, CheckRunSummary, CodeOwnership, EjectedCheck, PrActivity, PrLifecycle,
-    ReviewerEntry,
+    AiAssist, AiSource, AssociatedRun, CheckRunSummary, CodeOwnership, EjectedCheck, PrActivity,
+    PrLifecycle, ReviewerEntry,
 };
 use chrono::SecondsFormat;
 
@@ -90,6 +90,13 @@ fn check(name: &str, status: &str, conclusion: Option<&str>) -> CheckRunSummary 
     }
 }
 
+fn ai_assist(tools: &[&str], sources: &[AiSource]) -> Option<AiAssist> {
+    Some(AiAssist {
+        tools: tools.iter().map(|t| t.to_string()).collect(),
+        sources: sources.to_vec(),
+    })
+}
+
 /// A PR `ActionableItemPr` with neutral defaults. Callers tweak the handful of
 /// fields that make each fixture row distinct.
 fn default_pr(number: i64, author: &str) -> ActionableItemPr {
@@ -116,6 +123,7 @@ fn default_pr(number: i64, author: &str) -> ActionableItemPr {
         base_ref: None,
         base_sha: None,
         code_ownership: None,
+        ai_assist: None,
         lifecycle: PrLifecycle::InReview,
         merge_queue: None,
         task_urls: Vec::new(),
@@ -274,6 +282,8 @@ pub fn mock_payload() -> MockLists {
     ds_rating.additions = 64;
     ds_rating.deletions = 4;
     ds_rating.reviewers = vec![reviewer(ME, "requested")].into();
+    // Commits carry `Co-Authored-By: Claude` trailers → "AI" badge.
+    ds_rating.ai_assist = ai_assist(&["Claude"], &[AiSource::CommitMessage]);
     ds_rating.check_runs = vec![
         check("build", "completed", Some("success")),
         check("visual-regression", "completed", Some("success")),
@@ -286,6 +296,11 @@ pub fn mock_payload() -> MockLists {
     ingest_calendar.is_review_requested_from_me = true;
     ingest_calendar.score = 3;
     ingest_calendar.reviewers = vec![reviewer(ME, "requested")].into();
+    // Pairing with Copilot's coding agent → "AI" badge from two tools.
+    ingest_calendar.ai_assist = ai_assist(
+        &["Claude", "Copilot"],
+        &[AiSource::CommitAuthor, AiSource::CommitMessage],
+    );
     ingest_calendar.check_runs = vec![check("test", "in_progress", None)].into();
 
     // Approved by me → strongly negative score: hidden unless Show-All.
@@ -398,6 +413,7 @@ pub fn mock_payload() -> MockLists {
     let mut web_newsletter = default_pr(1281, ME);
     web_newsletter.head_ref = Some("feat/newsletter".to_string());
     web_newsletter.is_authored_by_me = true;
+    web_newsletter.ai_assist = ai_assist(&["Claude"], &[AiSource::CommitMessage, AiSource::PrBody]);
     web_newsletter.lifecycle = PrLifecycle::InReview;
     web_newsletter.merge_queue = Some(ActionableItemMergeQueue {
         position: None,

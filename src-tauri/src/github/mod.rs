@@ -1,3 +1,4 @@
+pub mod ai_assist;
 pub mod client;
 pub mod codeowners;
 pub mod models;

@@ -16,6 +16,7 @@ import { Lifecycle } from "./Lifecycle";
 import { Pill } from "./Pill";
 import { PinGlyph } from "./PinGlyph";
 import { ReasonBadge } from "./ReasonBadge";
+import { describeAiAssist } from "@/lib/aiAssist";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { primaryReason } from "@/lib/needsAction";
 import { RowContextMenu } from "./RowContextMenu";
@@ -240,6 +241,11 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
               />
               {wasEjected && <ReasonBadge reason="ejected" />}
             </>
+          )}
+          {pr.aiAssist && (
+            <Pill tone="info" title={`AI-assisted: ${describeAiAssist(pr.aiAssist)}`}>
+              AI
+            </Pill>
           )}
           {pr.approvalCount > 0 && (
             <Pill tone="success">

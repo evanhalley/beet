@@ -69,6 +69,34 @@ pub struct PullDetail {
     pub updated_at: String,
 }
 
+/// One row of `GET /repos/{o}/{r}/pulls/{n}/commits`. `author` / `committer`
+/// are the linked GitHub accounts (null for unlinked emails); `commit.author`
+/// is the raw git identity.
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitRow {
+    pub commit: CommitInner,
+    #[serde(default)]
+    pub author: Option<UserRef>,
+    #[serde(default)]
+    pub committer: Option<UserRef>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CommitInner {
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub author: Option<GitActor>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct GitActor {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub email: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct CommentRow {
     #[serde(default)]
