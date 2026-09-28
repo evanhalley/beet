@@ -15,16 +15,18 @@ use crate::store::Db;
 /// PRs past 100 commits are rare, and one declaring commit is enough.
 const COMMITS_PER_PAGE: usize = 100;
 
-/// One AI tool's fingerprints. Every pattern is lowercase and matched as a
-/// substring of the lowercased field.
+/// One AI tool's fingerprints. Every pattern is lowercase and compared against
+/// the lowercased field.
 struct Tool {
     name: &'static str,
     /// GitHub logins of the tool's agent account (PR author, commit author,
     /// committer). Compared exactly, not as a substring.
     logins: &'static [&'static str],
-    /// Emails the tool writes into commit identities and trailers.
+    /// Emails the tool writes into commit identities and trailers. Matched
+    /// exactly, or with GitHub's `<id>+` noreply prefix (see `email_matches`).
     emails: &'static [&'static str],
-    /// Footers the tool appends to commit messages and PR bodies.
+    /// Footers the tool appends to commit messages and PR bodies. Matched as
+    /// substrings.
     markers: &'static [&'static str],
     /// Suffixes the tool appends to the git author name.
     author_name_suffixes: &'static [&'static str],
@@ -88,13 +90,38 @@ fn contains_any(haystack: &str, needles: &[&str]) -> bool {
     needles.iter().any(|n| haystack.contains(n))
 }
 
+/// Whether lowercased `email` is one of `tool`'s emails, either verbatim or as
+/// a GitHub noreply address with its numeric `<id>+` prefix
+/// (`123+copilot@users.noreply.github.com`). Anchored so a human whose login
+/// merely ends in a tool's name (`123+acmecopilot@…`) doesn't match.
+fn email_matches(tool: &Tool, email: &str) -> bool {
+    let email = email.trim();
+    tool.emails.iter().any(|pattern| {
+        email == *pattern
+            || email.strip_suffix(pattern).is_some_and(|prefix| {
+                prefix
+                    .strip_suffix('+')
+                    .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+            })
+    })
+}
+
+/// The email in a `Name <email>` trailer value, or the whole value when it
+/// has no angle brackets.
+fn trailer_email(value: &str) -> &str {
+    match (value.rfind('<'), value.rfind('>')) {
+        (Some(start), Some(end)) if start < end => &value[start + 1..end],
+        _ => value.trim(),
+    }
+}
+
 /// Whether a lowercased commit message declares `tool`: a co-author trailer
 /// naming one of its emails, or one of its footers anywhere in the message.
 fn message_matches(tool: &Tool, message: &str) -> bool {
     let trailer = message.lines().any(|line| {
         line.trim_start()
             .strip_prefix(CO_AUTHOR_PREFIX)
-            .is_some_and(|value| contains_any(value, tool.emails))
+            .is_some_and(|value| email_matches(tool, trailer_email(value)))
     });
     trailer || contains_any(message, tool.markers)
 }
@@ -118,7 +145,7 @@ fn commit_author_matches(tool: &Tool, commit: &CommitRow) -> bool {
         .as_deref()
         .unwrap_or_default()
         .to_ascii_lowercase();
-    contains_any(&email, tool.emails)
+    email_matches(tool, &email)
         || tool
             .author_name_suffixes
             .iter()

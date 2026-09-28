@@ -70,6 +70,43 @@ fn trailer_names_alone_do_not_match() {
 }
 
 #[test]
+fn lookalike_noreply_emails_do_not_match() {
+    // Humans whose logins end in a tool's name must not trip the detector,
+    // whether as a co-author or as the commit author.
+    let commits = [
+        human("x\n\nCo-authored-by: Acme <12345+acmecopilot@users.noreply.github.com>"),
+        commit(
+            "y",
+            "Acme",
+            "12345+acmecopilot@users.noreply.github.com",
+            None,
+        ),
+        commit("z", "Eve", "evil-noreply@anthropic.com", None),
+        human("w\n\nCo-authored-by: X <abc+copilot@users.noreply.github.com>"),
+    ];
+    assert_eq!(detect(&pull("ada", None), &commits), None);
+}
+
+#[test]
+fn noreply_id_prefix_and_bare_email_both_match() {
+    let by_author = [commit(
+        "x",
+        "Copilot",
+        "198982749+Copilot@users.noreply.github.com",
+        None,
+    )];
+    let got = detect(&pull("ada", None), &by_author).unwrap();
+    assert_eq!(got.tools, vec!["Copilot"]);
+    assert_eq!(got.sources, vec![AiSource::CommitAuthor]);
+
+    let bare = [human("x\n\nCo-authored-by: noreply@anthropic.com")];
+    assert_eq!(
+        detect(&pull("ada", None), &bare).unwrap().tools,
+        vec!["Claude"]
+    );
+}
+
+#[test]
 fn email_outside_a_trailer_line_does_not_match() {
     let commits = [human("docs: mention noreply@anthropic.com in README")];
     assert_eq!(detect(&pull("ada", None), &commits), None);
