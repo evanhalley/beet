@@ -18,6 +18,7 @@ import { BlockHeader, EmptyHint } from "./DetailBlocks";
 import { FilesBlock } from "./FilesBlock";
 import { ActivityBlock } from "./ActivityBlock";
 import { prBranchTarget } from "@/lib/branch";
+import { describeAiAssist } from "@/lib/aiAssist";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { copyToClipboard } from "@/lib/copyToClipboard";
 import dayjs from "@/lib/dayjs";
@@ -817,6 +818,9 @@ export function DetailPane({ item }: DetailPaneProps) {
             <Pill tone="accent">
               {`Code owner · ${pr.codeOwnership.ownedCount} of ${pr.codeOwnership.totalCount} files`}
             </Pill>
+          )}
+          {pr.aiAssist && (
+            <Pill tone="info">{`AI-assisted · ${describeAiAssist(pr.aiAssist)}`}</Pill>
           )}
           <ScoreBar score={pr.score} width={36} />
           <span style={{ flex: 1 }} />

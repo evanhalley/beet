@@ -91,6 +91,14 @@ fn fixture_exercises_key_surfaces() {
     };
     assert!(activity().any(|a| a.mentions_me > 0));
     assert!(activity().any(|a| a.reply_to_my_review > 0));
+    // The AI-assisted badge, on both a review request and an in-flight PR.
+    let ai = |items: &[ActionableItem]| {
+        items
+            .iter()
+            .any(|i| i.pr.as_ref().is_some_and(|p| p.ai_assist.is_some()))
+    };
+    assert!(ai(&lists.review_requests));
+    assert!(ai(&lists.in_flight));
 }
 
 #[test]

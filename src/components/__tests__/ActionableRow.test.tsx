@@ -162,3 +162,28 @@ describe("ActionableRow code-owner badge", () => {
     expect(screen.queryByText("owner")).not.toBeInTheDocument();
   });
 });
+
+describe("ActionableRow AI badge", () => {
+  const aiAssist = {
+    tools: ["Claude", "Copilot"],
+    sources: ["commit_message" as const, "pr_body" as const],
+  };
+
+  test.each(["review", "inflight"] as const)(
+    "shows 'AI' with a tool/source tooltip on %s rows",
+    (variant) => {
+      const item = prItem("pr:acme/repo#42");
+      item.pr!.aiAssist = aiAssist;
+      render(<ActionableRow item={item} variant={variant} />);
+      expect(screen.getByText("AI")).toHaveAttribute(
+        "title",
+        "AI-assisted: Claude, Copilot · commit trailers, PR description",
+      );
+    },
+  );
+
+  test("hides it when no AI tool is declared", () => {
+    render(<ActionableRow item={prItem("pr:acme/repo#42")} variant="review" />);
+    expect(screen.queryByText("AI")).not.toBeInTheDocument();
+  });
+});

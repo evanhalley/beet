@@ -137,6 +137,31 @@ pub struct ActionableItemRun {
     pub completed_at: Option<String>,
 }
 
+/// Where an AI-assisted signal was found. Ordered by how strong a signal it
+/// is; `AiAssist.sources` keeps this order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AiSource {
+    /// The PR was opened by a known AI agent account.
+    PrAuthor,
+    /// A commit was authored or committed by a known AI agent account.
+    CommitAuthor,
+    /// A commit message carries a `Co-authored-by:` trailer or tool footer.
+    CommitMessage,
+    /// The PR description carries a tool footer.
+    PrBody,
+}
+
+/// AI tools declared on a PR via commit trailers, bot authors or the PR body.
+/// Absence proves nothing — trailers are opt-in and squash merges drop them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiAssist {
+    /// Display names (e.g. "Claude", "Copilot"), deduped, in detection-table order.
+    pub tools: Vec<String>,
+    pub sources: Vec<AiSource>,
+}
+
 /// Summary of the user's CODEOWNERS stake in a PR, computed during polling
 /// so the list rows can show an "owner" badge without a per-row fetch. The
 /// detail pane's Files block fetches the full per-file breakdown on demand.
@@ -197,6 +222,10 @@ pub struct ActionableItemPr {
     /// Present for review requests once ownership resolved this cycle.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_ownership: Option<CodeOwnership>,
+    /// AI tools declared in the PR's commits / body. Absent when none matched
+    /// (or the commits fetch failed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ai_assist: Option<AiAssist>,
     pub lifecycle: PrLifecycle,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub merge_queue: Option<ActionableItemMergeQueue>,

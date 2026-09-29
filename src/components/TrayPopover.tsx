@@ -25,6 +25,7 @@ import { BeetMark } from "./BeetMark";
 import { PollingDot } from "./PollingDot";
 import { Avatar } from "./Avatar";
 import { Pill } from "./Pill";
+import { describeAiAssist } from "@/lib/aiAssist";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { ScoreBar } from "./ScoreBar";
 import { CheckDot, deriveCheckDotState } from "./CheckDot";
@@ -627,6 +628,15 @@ function TrayReviewRow({ item }: { item: ActionableItem }) {
           {isCodeOwner(pr) && (
             <Pill tone="accent" soft>
               owner
+            </Pill>
+          )}
+          {pr.aiAssist && (
+            <Pill
+              tone="info"
+              soft
+              title={`AI-assisted: ${describeAiAssist(pr.aiAssist)}`}
+            >
+              AI
             </Pill>
           )}
           {pr.isDraft && (

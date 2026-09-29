@@ -6,6 +6,7 @@
 //! reviewer on 100 PRs cannot fire 300 concurrent requests (§7 / prs.ts TODO).
 
 use crate::error::BeetResult;
+use crate::github::ai_assist::resolve_ai_assist;
 use crate::github::client::{GithubClient, RateLimitInfo};
 use crate::github::models::{
     CheckRunsResult, CommentRow, GitRef, PullDetail, ReviewRow, SearchResult, UserRef,
@@ -448,6 +449,7 @@ async fn assemble_review_item(
         Err(e) if e.is_critical() => return Err(e),
         Err(_) => None,
     };
+    let ai_assist = resolve_ai_assist(client, db, &owner, &repo, num, &pull).await?;
 
     let item = ActionableItem {
         id: format!("pr:{owner}/{repo}#{num}"),
@@ -479,6 +481,7 @@ async fn assemble_review_item(
             base_ref: pull.base.as_ref().and_then(|b| b.git_ref.clone()),
             base_sha: pull.base.as_ref().map(|b| b.sha.clone()),
             code_ownership,
+            ai_assist,
             lifecycle,
             merge_queue: None,
             task_urls,
@@ -592,6 +595,7 @@ async fn assemble_my_pr_item(
     let approval_count = count_distinct_approvers(&reviews);
     let task_urls = extract_task_urls(pull.body.as_deref(), compiled_regex);
     let reviewers = build_reviewers(&reviews, pull.requested_reviewers.as_deref());
+    let ai_assist = resolve_ai_assist(client, db, &owner, &repo, num, &pull).await?;
 
     let item = ActionableItem {
         id: pr_id,
@@ -623,6 +627,7 @@ async fn assemble_my_pr_item(
             base_ref: pull.base.as_ref().and_then(|b| b.git_ref.clone()),
             base_sha: pull.base.as_ref().map(|b| b.sha.clone()),
             code_ownership: None,
+            ai_assist,
             lifecycle,
             merge_queue,
             task_urls,

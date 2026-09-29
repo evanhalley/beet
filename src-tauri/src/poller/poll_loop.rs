@@ -550,6 +550,7 @@ fn synthesize_resolved_pr_row(
             base_ref: None,
             base_sha: None,
             code_ownership: None,
+            ai_assist: None,
             lifecycle,
             merge_queue: None,
             task_urls: Vec::new(),
