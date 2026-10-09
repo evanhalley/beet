@@ -224,6 +224,7 @@ Base score: 0
 −1  additions > 250
 −1  deletions > 250
 −1  not updated in > 10 days
++0  any check failing  // placeholder weight until scoring is configurable
 =0   created > 60 days AND not updated in > 60 days   // stale, drop
 −5  draft
 −10  author in penalizedBots list

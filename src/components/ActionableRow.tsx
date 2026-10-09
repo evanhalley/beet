@@ -17,6 +17,7 @@ import { Pill } from "./Pill";
 import { PinGlyph } from "./PinGlyph";
 import { ReasonBadge } from "./ReasonBadge";
 import { describeAiAssist } from "@/lib/aiAssist";
+import { itemHasFailingChecks } from "@/lib/filters";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { primaryReason } from "@/lib/needsAction";
 import { RowContextMenu } from "./RowContextMenu";
@@ -254,6 +255,9 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             </Pill>
           )}
           {pr.taskUrls.length > 0 && <TaskChips urls={pr.taskUrls} />}
+          {variant === "review" && itemHasFailingChecks(item) && (
+            <ReasonBadge reason="checks_failing" />
+          )}
         </div>
         <div
           style={{

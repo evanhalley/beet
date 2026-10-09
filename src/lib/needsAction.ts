@@ -3,7 +3,8 @@ import type { ActionableItem } from "@/lib/types";
 
 // Needs Action Now (SPECS §5, #25): the urgent slice of the live sections.
 // Ejections and failing checks only count on my own PRs — failing CI on a PR
-// I'm reviewing stays in Review Requests with its red check dot. Mentions and
+// I'm reviewing stays in Review Requests with its "Checks failing" pill (#63),
+// but doesn't jump into this section or the tray badge. Mentions and
 // replies to my reviews count on either section.
 export type NeedsActionReason = "ejected" | "checks_failing" | "mention" | "reply";
 

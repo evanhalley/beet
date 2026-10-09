@@ -20,6 +20,7 @@ const WEIGHTS: Array<{ rule: string; delta: string }> = [
   { rule: "additions > 250", delta: "−1" },
   { rule: "deletions > 250", delta: "−1" },
   { rule: "not updated in > 10 days", delta: "−1" },
+  { rule: "Checks failing", delta: "+0" },
   { rule: "created > 60d AND not updated in > 60d (stale)", delta: "= 0" },
   { rule: "Draft", delta: "−5" },
   { rule: "Author in penalized bots list", delta: "= −10" },

@@ -1,4 +1,12 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -228,5 +236,113 @@ describe("MainWindowShell", () => {
     expect(screen.queryByRole("dialog", { name: "Search" })).toBeNull();
 
     document.body.removeChild(stray);
+  });
+});
+
+describe("MainWindowShell detail-pane resizing", () => {
+  // jsdom has no layout: report a fixed grid box for every element, mutable
+  // per test to simulate window resizes.
+  let gridWidth = 1400;
+  const GRID_RIGHT = 1600;
+
+  // jsdom has no PointerEvent, so fireEvent.pointer* would drop clientX and
+  // button. Stand one in for this block only.
+  const hadPointerEvent = "PointerEvent" in window;
+  beforeAll(() => {
+    if (hadPointerEvent) return;
+    class PointerEventShim extends MouseEvent {
+      pointerId: number;
+      constructor(type: string, init: PointerEventInit = {}) {
+        super(type, init);
+        this.pointerId = init.pointerId ?? 0;
+      }
+    }
+    Object.defineProperty(window, "PointerEvent", {
+      value: PointerEventShim,
+      configurable: true,
+      writable: true,
+    });
+  });
+  afterAll(() => {
+    if (!hadPointerEvent) delete (window as { PointerEvent?: unknown }).PointerEvent;
+  });
+
+  beforeEach(() => {
+    gridWidth = 1400;
+    window.localStorage.clear();
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      () =>
+        ({
+          width: gridWidth,
+          right: GRID_RIGHT,
+          left: GRID_RIGHT - gridWidth,
+          top: 0,
+          bottom: 800,
+          height: 800,
+          x: GRID_RIGHT - gridWidth,
+          y: 0,
+          toJSON: () => ({}),
+        }) as DOMRect,
+    );
+    return () => vi.restoreAllMocks();
+  });
+
+  const splitter = () => screen.getByRole("separator", { name: "Resize detail pane" });
+  const width = () => Number(splitter().getAttribute("aria-valuenow"));
+
+  test("dragging can widen the detail pane past the old 720px cap", () => {
+    renderShell();
+    fireEvent.pointerDown(splitter(), { button: 0, pointerId: 1 });
+    fireEvent.pointerMove(splitter(), { clientX: GRID_RIGHT - 1000, pointerId: 1 });
+    fireEvent.pointerUp(splitter(), { pointerId: 1 });
+    expect(width()).toBe(1000);
+    expect(window.localStorage.getItem("beet.detailWidth")).toBe("1000");
+  });
+
+  test("the list pane keeps its minimum width", () => {
+    renderShell();
+    fireEvent.pointerDown(splitter(), { button: 0, pointerId: 1 });
+    fireEvent.pointerMove(splitter(), { clientX: 0, pointerId: 1 });
+    fireEvent.pointerUp(splitter(), { pointerId: 1 });
+    // 1400 grid − 320 list floor − 1 splitter
+    expect(width()).toBe(1079);
+    expect(splitter()).toHaveAttribute("aria-valuemax", "1079");
+  });
+
+  test("moving the pointer without pressing does nothing", () => {
+    renderShell();
+    fireEvent.pointerMove(splitter(), { clientX: 100, pointerId: 1 });
+    expect(width()).toBe(380);
+  });
+
+  test("shrinking the window narrows the pane; growing it restores the preference", () => {
+    window.localStorage.setItem("beet.detailWidth", "1000");
+    renderShell();
+    expect(width()).toBe(1000);
+
+    gridWidth = 900;
+    fireEvent(window, new Event("resize"));
+    expect(width()).toBe(579);
+
+    gridWidth = 1400;
+    fireEvent(window, new Event("resize"));
+    expect(width()).toBe(1000);
+  });
+
+  test("keyboard: arrows nudge, Home/End jump, double-click resets", () => {
+    renderShell();
+    const sep = splitter();
+    fireEvent.keyDown(sep, { key: "ArrowLeft" });
+    expect(width()).toBe(396);
+    fireEvent.keyDown(sep, { key: "ArrowLeft", shiftKey: true });
+    expect(width()).toBe(460);
+    fireEvent.keyDown(sep, { key: "ArrowRight" });
+    expect(width()).toBe(444);
+    fireEvent.keyDown(sep, { key: "End" });
+    expect(width()).toBe(1079);
+    fireEvent.keyDown(sep, { key: "Home" });
+    expect(width()).toBe(280);
+    fireEvent.doubleClick(sep);
+    expect(width()).toBe(380);
   });
 });
