@@ -17,6 +17,7 @@ import { Pill } from "./Pill";
 import { PinGlyph } from "./PinGlyph";
 import { ReasonBadge } from "./ReasonBadge";
 import { describeAiAssist } from "@/lib/aiAssist";
+import { itemHasFailingChecks } from "@/lib/filters";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { primaryReason } from "@/lib/needsAction";
 import { RowContextMenu } from "./RowContextMenu";
@@ -228,6 +229,9 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             reason && <ReasonBadge reason={reason} />
           ) : variant === "review" ? (
             <>
+              {itemHasFailingChecks(item) && (
+                <ReasonBadge reason="checks_failing" />
+              )}
               {isSuppressed && <Pill tone="neutral">suppressed</Pill>}
               {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}
               {isCodeOwner(pr) && <Pill tone="accent">owner</Pill>}

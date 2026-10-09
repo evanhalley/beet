@@ -187,3 +187,43 @@ describe("ActionableRow AI badge", () => {
     expect(screen.queryByText("AI")).not.toBeInTheDocument();
   });
 });
+
+describe("ActionableRow checks-failing badge", () => {
+  const run = (conclusion?: string) => ({
+    name: "ci",
+    status: conclusion ? "completed" : "in_progress",
+    conclusion,
+  });
+
+  test("shows 'Checks failing' on review rows with a failing check", () => {
+    const item = prItem("pr:acme/repo#42");
+    item.pr!.checkRuns = [run("success"), run("failure")];
+    render(<ActionableRow item={item} variant="review" />);
+    expect(screen.getByText("Checks failing")).toBeInTheDocument();
+  });
+
+  test("counts a failing associated workflow run", () => {
+    const item = prItem("pr:acme/repo#42");
+    item.pr!.associatedRuns = [
+      {
+        workflowName: "deploy",
+        status: "completed",
+        conclusion: "failure",
+        runUrl: "https://github.com/acme/repo/actions/runs/1",
+        completedAt: null,
+      },
+    ];
+    render(<ActionableRow item={item} variant="review" />);
+    expect(screen.getByText("Checks failing")).toBeInTheDocument();
+  });
+
+  test("hides it when checks are green, pending, or unknown", () => {
+    const item = prItem("pr:acme/repo#42");
+    item.pr!.checkRuns = [run("success"), run()];
+    const { unmount } = render(<ActionableRow item={item} variant="review" />);
+    expect(screen.queryByText("Checks failing")).not.toBeInTheDocument();
+    unmount();
+    render(<ActionableRow item={prItem("pr:acme/repo#43")} variant="review" />);
+    expect(screen.queryByText("Checks failing")).not.toBeInTheDocument();
+  });
+});

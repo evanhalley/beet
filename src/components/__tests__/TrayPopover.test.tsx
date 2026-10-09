@@ -381,3 +381,28 @@ describe("TrayPopover code-owner badge", () => {
     expect(screen.getAllByText("owner")).toHaveLength(1);
   });
 });
+
+describe("TrayPopover checks-failing badge", () => {
+  test("review rows show 'Checks failing' even when the first check passed", () => {
+    const failing = reviewItem(1);
+    failing.pr!.checkRuns = [
+      { name: "lint", status: "completed", conclusion: "success" },
+      { name: "test", status: "completed", conclusion: "failure" },
+    ];
+    const green = reviewItem(2);
+    green.pr!.checkRuns = [{ name: "lint", status: "completed", conclusion: "success" }];
+    useAppStore.getState().setPollResult({
+      reviewRequests: [failing, green],
+      inFlight: [],
+      standaloneRuns: [],
+      recentlyResolved: [],
+      rateLimit: null,
+      polledAt: "2026-01-01T00:00:00.000Z",
+    });
+    render(<TrayPopover />);
+    expect(screen.getAllByText("Checks failing")).toHaveLength(1);
+    // The row's dot rolls up every check, so it agrees with the pill.
+    expect(screen.getAllByLabelText("Checks failing")).toHaveLength(1);
+    expect(screen.getAllByLabelText("Checks passing")).toHaveLength(1);
+  });
+});

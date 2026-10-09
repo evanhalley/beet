@@ -4,8 +4,13 @@
 //! rule *overwrite* the running score by design (verbatim from PRZ) — do not
 //! make them additive.
 
-use crate::poller::types::ActionableItem;
+use crate::poller::types::{ActionableItem, ActionableItemPr};
 use chrono::{DateTime, Utc};
+
+/// Score delta for a PR with at least one failing check. Zero until scoring
+/// weights become user-configurable (#45); the label on Review Requests rows
+/// carries the signal in the meantime.
+pub const CHECKS_FAILING_WEIGHT: i64 = 0;
 
 /// Whole-day difference `now - timestamp`, truncated toward zero — the
 /// equivalent of dayjs `.diff(ts, "days")`. Unparseable timestamps yield 0.
@@ -14,6 +19,19 @@ fn days_since(timestamp: &str, now: DateTime<Utc>) -> i64 {
         Ok(ts) => now.signed_duration_since(ts.with_timezone(&Utc)).num_days(),
         Err(_) => 0,
     }
+}
+
+/// Any per-commit check run or attached workflow run concluded `failure`.
+/// Mirrors the frontend's `itemHasFailingChecks`.
+fn has_failing_checks(pr: &ActionableItemPr) -> bool {
+    let failed = |c: &Option<String>| c.as_deref() == Some("failure");
+    pr.check_runs
+        .as_deref()
+        .is_some_and(|runs| runs.iter().any(|r| failed(&r.conclusion)))
+        || pr
+            .associated_runs
+            .as_deref()
+            .is_some_and(|runs| runs.iter().any(|r| failed(&r.conclusion)))
 }
 
 pub fn score_pull_requests(
@@ -57,6 +75,9 @@ pub fn score_pull_requests_at(
         }
         if pr.deletions > 250 {
             score -= 1;
+        }
+        if has_failing_checks(pr) {
+            score += CHECKS_FAILING_WEIGHT;
         }
 
         if days_since(&updated_at, now) > 10 {
