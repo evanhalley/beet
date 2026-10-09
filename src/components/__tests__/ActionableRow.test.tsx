@@ -202,6 +202,21 @@ describe("ActionableRow checks-failing badge", () => {
     expect(screen.getByText("Checks failing")).toBeInTheDocument();
   });
 
+  test("renders last, after the other review pills", () => {
+    const item = prItem("pr:acme/repo#42");
+    item.pr!.checkRuns = [run("failure")];
+    item.pr!.isAuthorOnMyTeam = true;
+    item.pr!.isDraft = true;
+    render(<ActionableRow item={item} variant="review" />);
+    const pill = screen.getByText("Checks failing");
+    const row = pill.parentElement!;
+    expect(row.lastElementChild).toBe(pill);
+    expect(
+      screen.getByText("draft").compareDocumentPosition(pill) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   test("counts a failing associated workflow run", () => {
     const item = prItem("pr:acme/repo#42");
     item.pr!.associatedRuns = [

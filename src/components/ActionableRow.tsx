@@ -229,9 +229,6 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             reason && <ReasonBadge reason={reason} />
           ) : variant === "review" ? (
             <>
-              {itemHasFailingChecks(item) && (
-                <ReasonBadge reason="checks_failing" />
-              )}
               {isSuppressed && <Pill tone="neutral">suppressed</Pill>}
               {pr.isAuthorOnMyTeam && <Pill tone="accent">team</Pill>}
               {isCodeOwner(pr) && <Pill tone="accent">owner</Pill>}
@@ -258,6 +255,9 @@ export function ActionableRow({ item, variant = "review" }: ActionableRowProps) 
             </Pill>
           )}
           {pr.taskUrls.length > 0 && <TaskChips urls={pr.taskUrls} />}
+          {variant === "review" && itemHasFailingChecks(item) && (
+            <ReasonBadge reason="checks_failing" />
+          )}
         </div>
         <div
           style={{

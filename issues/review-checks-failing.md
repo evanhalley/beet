@@ -16,8 +16,8 @@ Knowing a review request is red matters for triage. It is often a sign to wait f
 ### Label
 
 - "Failing" uses the existing `itemHasFailingChecks` predicate (the same one the sidebar **Failing only** filter uses): any `pr.checkRuns[].conclusion === "failure"` or `pr.associatedRuns[].conclusion === "failure"`.
-- Main window: the `review` variant of `ActionableRow` renders `<ReasonBadge reason="checks_failing" />` ahead of the team / owner / draft pills.
-- Tray: `TrayReviewRow` renders the same pill, and tray PR rows roll their `CheckDot` up across all checks instead of reading `checkRuns[0]`.
+- Main window: the `review` variant of `ActionableRow` renders `<ReasonBadge reason="checks_failing" />` as the last pill on the row, after team / owner / draft / AI / approvals / task chips.
+- Tray: `TrayReviewRow` renders the same pill (also last), and tray PR rows roll their `CheckDot` up across all checks instead of reading `checkRuns[0]`.
 - **Not changed:** Needs Action Now membership, the tray badge count, and failing-checks notifications stay limited to PRs I author (SPECS §5/§10 notification budget). A failing review request gets the label in Review Requests; it does not get promoted into Needs Action Now.
 
 ### Score

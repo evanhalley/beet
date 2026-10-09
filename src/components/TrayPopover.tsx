@@ -622,9 +622,6 @@ function TrayReviewRow({ item }: { item: ActionableItem }) {
             #{pr.number}
           </span>
           <BranchWithCopy target={prBranchTarget(pr)} />
-          {itemHasFailingChecks(item) && (
-            <ReasonBadge reason="checks_failing" />
-          )}
           {pr.isAuthorOnMyTeam && (
             <Pill tone="accent" soft>
               team
@@ -651,6 +648,9 @@ function TrayReviewRow({ item }: { item: ActionableItem }) {
           )}
           {pr.taskUrls.length > 0 && (
             <TaskChips urls={pr.taskUrls} max={2} />
+          )}
+          {itemHasFailingChecks(item) && (
+            <ReasonBadge reason="checks_failing" />
           )}
         </div>
         <div
