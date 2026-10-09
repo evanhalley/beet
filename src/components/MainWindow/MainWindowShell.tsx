@@ -17,6 +17,12 @@ import { DetailPane } from "./DetailPane";
 import { TitleBar } from "./TitleBar";
 import { Splitter } from "./Splitter";
 import { SearchPalette } from "@/components/SearchPalette";
+import {
+  DETAIL_WIDTH_DEFAULT,
+  DETAIL_WIDTH_MIN,
+  clampDetailWidth,
+  maxDetailWidth,
+} from "@/lib/paneWidth";
 
 export interface MainWindowShellProps {
   onOpenSettings: () => void;
@@ -26,18 +32,10 @@ export interface MainWindowShellProps {
 }
 
 const DETAIL_WIDTH_KEY = "beet.detailWidth";
-const DETAIL_WIDTH_DEFAULT = 380;
-const DETAIL_WIDTH_MIN = 280;
-const DETAIL_WIDTH_MAX = 720;
 
 const SIDEBAR_COLLAPSED_KEY = "beet.sidebarCollapsed";
 const SIDEBAR_WIDTH_EXPANDED = 200;
 const SIDEBAR_WIDTH_COLLAPSED = 44;
-
-function clampDetailWidth(w: number): number {
-  if (!Number.isFinite(w)) return DETAIL_WIDTH_DEFAULT;
-  return Math.min(DETAIL_WIDTH_MAX, Math.max(DETAIL_WIDTH_MIN, Math.round(w)));
-}
 
 // Scroll a list section to the top of the ListPane.
 //
@@ -174,7 +172,10 @@ export function MainWindowShell({
   const gridRef = useRef<HTMLDivElement | null>(null);
   const searchButtonRef = useRef<HTMLButtonElement | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  // The user's preferred detail width (persisted). What actually renders is
+  // this clamped to the room the grid has right now — see paneWidth.ts.
   const [detailWidth, setDetailWidth] = useState<number>(DETAIL_WIDTH_DEFAULT);
+  const [gridWidth, setGridWidth] = useState<number>(0);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
 
   // Global ⌘K toggles the search palette. Ignore when focus is in an unrelated
@@ -229,16 +230,47 @@ export function MainWindowShell({
     ? SIDEBAR_WIDTH_COLLAPSED
     : SIDEBAR_WIDTH_EXPANDED;
 
-  const onResize = useCallback((clientX: number) => {
+  // Track the grid's width so the detail pane's ceiling follows window
+  // resizes and sidebar collapse/expand, not just splitter drags.
+  useEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;
-    const rect = grid.getBoundingClientRect();
-    const next = clampDetailWidth(rect.right - clientX);
-    setDetailWidth(next);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(DETAIL_WIDTH_KEY, String(next));
+    const measure = () => setGridWidth(grid.getBoundingClientRect().width);
+    measure();
+    if (typeof ResizeObserver !== "undefined") {
+      const ro = new ResizeObserver(measure);
+      ro.observe(grid);
+      return () => ro.disconnect();
     }
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
   }, []);
+
+  const commitDetailWidth = useCallback((w: number) => {
+    const grid = gridRef.current;
+    const next = clampDetailWidth(w, grid?.getBoundingClientRect().width ?? 0);
+    setDetailWidth(next);
+    window.localStorage.setItem(DETAIL_WIDTH_KEY, String(next));
+  }, []);
+
+  const onResize = useCallback(
+    (clientX: number) => {
+      const grid = gridRef.current;
+      if (!grid) return;
+      commitDetailWidth(grid.getBoundingClientRect().right - clientX);
+    },
+    [commitDetailWidth],
+  );
+
+  const renderedDetailWidth = clampDetailWidth(detailWidth, gridWidth);
+  const onStep = useCallback(
+    (delta: number) => commitDetailWidth(renderedDetailWidth + delta),
+    [commitDetailWidth, renderedDetailWidth],
+  );
+  const onResetDetailWidth = useCallback(
+    () => commitDetailWidth(DETAIL_WIDTH_DEFAULT),
+    [commitDetailWidth],
+  );
 
   return (
     <div
@@ -283,7 +315,7 @@ export function MainWindowShell({
           style={{
             flex: 1,
             display: "grid",
-            gridTemplateColumns: `1fr 1px ${detailWidth}px`,
+            gridTemplateColumns: `minmax(0, 1fr) 1px ${renderedDetailWidth}px`,
             // Constrain the single implicit row so it can shrink below its
             // content size — otherwise an `auto` row grows to fit ListPane /
             // DetailPane, their `overflow: auto` never engages, and the
@@ -293,7 +325,15 @@ export function MainWindowShell({
           }}
         >
           <ListPane />
-          <Splitter onResize={onResize} />
+          <Splitter
+            onResize={onResize}
+            onStep={onStep}
+            onSetWidth={commitDetailWidth}
+            onReset={onResetDetailWidth}
+            value={renderedDetailWidth}
+            min={DETAIL_WIDTH_MIN}
+            max={maxDetailWidth(gridWidth)}
+          />
           <DetailPane item={selected} />
         </div>
       </div>
