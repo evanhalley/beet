@@ -62,7 +62,7 @@ Score is computed only for review-request items. Other sections sort by `updated
 +2 I've commented             +2 I've reviewed
 −100 I've approved (demote/hide unless showAll)
 −1 additions > 250            −1 deletions > 250
-−1 not updated in > 10 days
+−1 not updated in > 10 days   +0 any check failing (placeholder)
 =0  created > 60d AND not updated in > 60d  (stale, drop)
 −5 draft                      −10 author in penalizedBots
 ```

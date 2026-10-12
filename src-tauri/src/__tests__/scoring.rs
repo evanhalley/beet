@@ -1,5 +1,8 @@
 use super::*;
-use crate::poller::types::{ActionableItemPr, ActionableKind, AiAssist, AiSource, PrLifecycle};
+use crate::poller::types::{
+    ActionableItemPr, ActionableKind, AiAssist, AiSource, AssociatedRun, CheckRunSummary,
+    PrLifecycle,
+};
 use chrono::Duration;
 
 fn make_item(id: &str, now: DateTime<Utc>) -> ActionableItem {
@@ -159,4 +162,63 @@ fn ai_assisted_prs_score_like_any_other() {
     }
     let result = score_pull_requests_at(vec![item], true, &[], now);
     assert_eq!(result[0].pr.as_ref().unwrap().score, 3);
+}
+
+fn check(conclusion: Option<&str>) -> CheckRunSummary {
+    CheckRunSummary {
+        name: "ci".to_string(),
+        status: Some(
+            if conclusion.is_some() {
+                "completed"
+            } else {
+                "in_progress"
+            }
+            .to_string(),
+        ),
+        conclusion: conclusion.map(str::to_string),
+        details_url: None,
+    }
+}
+
+#[test]
+fn failing_checks_do_not_move_the_score_yet() {
+    // CHECKS_FAILING_WEIGHT is a 0 placeholder until weights are configurable
+    // (#45): a red review request scores exactly like a green one.
+    let now = Utc::now();
+    let mut item = make_item("pr:foo/bar#1", now);
+    {
+        let pr = item.pr.as_mut().unwrap();
+        pr.is_review_requested_from_me = true;
+        pr.check_runs = Some(vec![check(Some("success")), check(Some("failure"))]);
+    }
+    assert!(has_failing_checks(item.pr.as_ref().unwrap()));
+    let result = score_pull_requests_at(vec![item], true, &[], now);
+    assert_eq!(result[0].pr.as_ref().unwrap().score, 3);
+}
+
+#[test]
+fn failing_associated_run_counts_as_failing_checks() {
+    let mut item = make_item("pr:foo/bar#1", Utc::now());
+    let pr = item.pr.as_mut().unwrap();
+    pr.associated_runs = Some(vec![AssociatedRun {
+        workflow_name: "deploy".to_string(),
+        status: "completed".to_string(),
+        conclusion: Some("failure".to_string()),
+        run_url: "https://github.com/foo/bar/actions/runs/1".to_string(),
+        completed_at: None,
+    }]);
+    assert!(has_failing_checks(pr));
+}
+
+#[test]
+fn green_pending_or_missing_checks_are_not_failing() {
+    let mut item = make_item("pr:foo/bar#1", Utc::now());
+    let pr = item.pr.as_mut().unwrap();
+    assert!(!has_failing_checks(pr));
+    pr.check_runs = Some(vec![
+        check(Some("success")),
+        check(None),
+        check(Some("cancelled")),
+    ]);
+    assert!(!has_failing_checks(pr));
 }

@@ -1,4 +1,6 @@
 import { Check, X } from "lucide-react";
+import { itemHasFailingChecks, itemHasPendingChecks } from "@/lib/filters";
+import type { ActionableItem } from "@/lib/types";
 
 export type CheckDotState = "success" | "failure" | "pending" | "neutral";
 
@@ -70,4 +72,14 @@ export function deriveCheckDotState(
   if (conclusion === "failure") return "failure";
   if (status === "in_progress") return "pending";
   return "neutral";
+}
+
+// Roll a PR's checks up into one dot: any failure wins, then anything still
+// running, else the first check's verdict. Keeps the dot in agreement with the
+// "Checks failing" pill, which also looks at every check (#63).
+export function deriveItemCheckDotState(item: ActionableItem): CheckDotState {
+  if (itemHasFailingChecks(item)) return "failure";
+  if (itemHasPendingChecks(item)) return "pending";
+  const first = item.pr?.checkRuns?.[0];
+  return deriveCheckDotState(first?.status, first?.conclusion);
 }

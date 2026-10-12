@@ -19,6 +19,7 @@ import {
   selectShowAllReviews,
 } from "@/lib/store";
 import { prBranchTarget } from "@/lib/branch";
+import { itemHasFailingChecks } from "@/lib/filters";
 import { openInBrowser } from "@/lib/openInBrowser";
 import type { ActionableItem } from "@/lib/types";
 import { BeetMark } from "./BeetMark";
@@ -28,7 +29,11 @@ import { Pill } from "./Pill";
 import { describeAiAssist } from "@/lib/aiAssist";
 import { isCodeOwner } from "@/lib/codeOwnership";
 import { ScoreBar } from "./ScoreBar";
-import { CheckDot, deriveCheckDotState } from "./CheckDot";
+import {
+  CheckDot,
+  deriveCheckDotState,
+  deriveItemCheckDotState,
+} from "./CheckDot";
 import { Lifecycle } from "./Lifecycle";
 import { TaskChips } from "./TaskChips";
 import { ReasonBadge } from "./ReasonBadge";
@@ -590,10 +595,7 @@ function TrayNeedsRow({ item }: { item: ActionableItem }) {
 function TrayReviewRow({ item }: { item: ActionableItem }) {
   const pr = item.pr;
   if (!pr) return null;
-  const checkState = deriveCheckDotState(
-    pr.checkRuns?.[0]?.status,
-    pr.checkRuns?.[0]?.conclusion,
-  );
+  const checkState = deriveItemCheckDotState(item);
 
   return (
     <TrayRowWrapper item={item}>
@@ -647,6 +649,9 @@ function TrayReviewRow({ item }: { item: ActionableItem }) {
           {pr.taskUrls.length > 0 && (
             <TaskChips urls={pr.taskUrls} max={2} />
           )}
+          {itemHasFailingChecks(item) && (
+            <ReasonBadge reason="checks_failing" />
+          )}
         </div>
         <div
           style={{
@@ -672,10 +677,7 @@ function TrayInflightRow({ item }: { item: ActionableItem }) {
   const pr = item.pr;
   if (!pr) return null;
 
-  const checkState = deriveCheckDotState(
-    pr.checkRuns?.[0]?.status,
-    pr.checkRuns?.[0]?.conclusion,
-  );
+  const checkState = deriveItemCheckDotState(item);
 
   return (
     <TrayRowWrapper item={item}>

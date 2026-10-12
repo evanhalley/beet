@@ -1,7 +1,12 @@
 import { describe, test, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { CheckDot, deriveCheckDotState } from "../CheckDot";
+import {
+  CheckDot,
+  deriveCheckDotState,
+  deriveItemCheckDotState,
+} from "../CheckDot";
+import type { ActionableItem } from "@/lib/types";
 
 describe("CheckDot", () => {
   test("renders each state with its title for screen readers", () => {
@@ -26,5 +31,26 @@ describe("deriveCheckDotState", () => {
     // the design specifically does NOT promote cancelled/timed_out to failure.
     expect(deriveCheckDotState("completed", "cancelled")).toBe("neutral");
     expect(deriveCheckDotState("completed", "neutral")).toBe("neutral");
+  });
+});
+
+describe("deriveItemCheckDotState", () => {
+  const item = (checkRuns: unknown[]) =>
+    ({ pr: { checkRuns } }) as unknown as ActionableItem;
+  const ok = { name: "lint", status: "completed", conclusion: "success" };
+  const bad = { name: "test", status: "completed", conclusion: "failure" };
+  const running = { name: "e2e", status: "in_progress" };
+
+  test("any failing check wins, wherever it sits", () => {
+    expect(deriveItemCheckDotState(item([ok, running, bad]))).toBe("failure");
+  });
+
+  test("a running check beats a passing first check", () => {
+    expect(deriveItemCheckDotState(item([ok, running]))).toBe("pending");
+  });
+
+  test("falls back to the first check, or neutral with none", () => {
+    expect(deriveItemCheckDotState(item([ok]))).toBe("success");
+    expect(deriveItemCheckDotState(item([]))).toBe("neutral");
   });
 });
